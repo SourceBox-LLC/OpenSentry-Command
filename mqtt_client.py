@@ -4,16 +4,33 @@ Handles communication with camera nodes via MQTT broker.
 """
 import os
 import time
+import hashlib
 import paho.mqtt.client as mqtt
 
 from camera_registry import CAMERAS, cameras_lock
 
+
+def derive_credential(secret: str, service: str) -> str:
+    """Derive a credential from a secret and service name using SHA256"""
+    input_str = f"{secret}:{service}"
+    hash_bytes = hashlib.sha256(input_str.encode()).hexdigest()
+    return hash_bytes[:32]  # First 32 chars
+
+
 # MQTT Configuration
 MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
-MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "opensentry")
-MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "opensentry")
 MQTT_CLIENT_ID = "opensentry_command_center"
+
+# Credential derivation: use OPENSENTRY_SECRET if set
+OPENSENTRY_SECRET = os.environ.get("OPENSENTRY_SECRET", "")
+if OPENSENTRY_SECRET:
+    print("[MQTT] Using derived credentials from OPENSENTRY_SECRET")
+    MQTT_USERNAME = "opensentry"
+    MQTT_PASSWORD = derive_credential(OPENSENTRY_SECRET, "mqtt")
+else:
+    MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "opensentry")
+    MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "opensentry")
 
 # MQTT Client instance
 _client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID)

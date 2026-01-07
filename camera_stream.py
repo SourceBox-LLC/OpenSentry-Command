@@ -5,6 +5,7 @@ import cv2
 import threading
 import time
 import os
+import hashlib
 from urllib.parse import urlparse, urlunparse
 
 from camera_registry import CAMERAS, cameras_lock
@@ -12,9 +13,24 @@ from camera_registry import CAMERAS, cameras_lock
 # Force RTSP to use TCP (more stable than UDP)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
 
+
+def derive_credential(secret: str, service: str) -> str:
+    """Derive a credential from a secret and service name using SHA256"""
+    input_str = f"{secret}:{service}"
+    hash_bytes = hashlib.sha256(input_str.encode()).hexdigest()
+    return hash_bytes[:32]  # First 32 chars
+
+
 # RTSP authentication credentials
-RTSP_USERNAME = os.environ.get("RTSP_USERNAME", "opensentry")
-RTSP_PASSWORD = os.environ.get("RTSP_PASSWORD", "opensentry")
+# Use OPENSENTRY_SECRET if set, otherwise fall back to individual credentials
+OPENSENTRY_SECRET = os.environ.get("OPENSENTRY_SECRET", "")
+if OPENSENTRY_SECRET:
+    print("[RTSP] Using derived credentials from OPENSENTRY_SECRET")
+    RTSP_USERNAME = "opensentry"
+    RTSP_PASSWORD = derive_credential(OPENSENTRY_SECRET, "rtsp")
+else:
+    RTSP_USERNAME = os.environ.get("RTSP_USERNAME", "opensentry")
+    RTSP_PASSWORD = os.environ.get("RTSP_PASSWORD", "opensentry")
 
 
 def add_rtsp_credentials(url: str) -> str:

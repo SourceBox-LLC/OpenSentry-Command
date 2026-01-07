@@ -15,6 +15,9 @@ services:
       - SECRET_KEY=${SECRET_KEY:-}
       - MQTT_BROKER=${MQTT_BROKER:-localhost}
       - MQTT_PORT=${MQTT_PORT:-1883}
+      # Single secret for all credentials (recommended)
+      - OPENSENTRY_SECRET=${OPENSENTRY_SECRET:-}
+      # Legacy individual credentials (used if OPENSENTRY_SECRET not set)
       - MQTT_USERNAME=${MQTT_USERNAME:-opensentry}
       - MQTT_PASSWORD=${MQTT_PASSWORD:-opensentry}
       - RTSP_USERNAME=${RTSP_USERNAME:-opensentry}
