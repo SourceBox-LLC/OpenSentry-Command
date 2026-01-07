@@ -103,28 +103,23 @@ pip install -r requirements.txt
 docker compose up --build
 ```
 
-### 2. Configure (Optional)
+### 2. Configure (Recommended)
 
-Create a `.env` file to customize credentials:
+Create a `.env` file with a single shared secret:
 
 ```bash
 # Web UI login
 OPENSENTRY_USERNAME=admin
 OPENSENTRY_PASSWORD=your_secure_password
-SECRET_KEY=your-secret-key
 
-# MQTT authentication (must match Node)
-MQTT_USERNAME=opensentry
-MQTT_PASSWORD=your_mqtt_password
-
-# RTSP authentication (must match Node)
-RTSP_USERNAME=opensentry
-RTSP_PASSWORD=your_rtsp_password
+# Single secret for MQTT/RTSP (use same value on all Nodes)
+# Generate: python -c "import secrets; print(secrets.token_hex(32))"
+OPENSENTRY_SECRET=your-generated-64-char-secret
 ```
 
 The web interface will be available at `http://localhost:5000`
 
-**Default credentials (all services):** `opensentry` / `opensentry`
+**Default Web UI credentials:** `admin` / `opensentry`
 
 ## Usage (Native)
 
@@ -212,8 +207,24 @@ OpenSentry Command Center includes multiple layers of security:
 | Layer | Protection | Default Credentials |
 |-------|-----------|---------------------|
 | **Web UI** | Login required + rate limiting | `admin` / `opensentry` |
-| **MQTT** | Username/password authentication | `opensentry` / `opensentry` |
-| **RTSP** | Username/password authentication | `opensentry` / `opensentry` |
+| **MQTT** | Username/password authentication | Derived from secret |
+| **RTSP** | Username/password authentication | Derived from secret |
+
+### Single Secret Mode (Recommended)
+
+Instead of managing multiple passwords, set ONE secret that derives all internal credentials:
+
+```bash
+# Generate a secret
+python -c "import secrets; print(secrets.token_hex(32))"
+
+# Add to .env on Command Center AND all Nodes
+OPENSENTRY_SECRET=your-generated-64-char-secret
+```
+
+The system automatically derives MQTT and RTSP passwords using SHA256:
+- `MQTT password = SHA256(secret + ":mqtt")[:32]`
+- `RTSP password = SHA256(secret + ":rtsp")[:32]`
 
 ### Rate Limiting
 
@@ -221,9 +232,17 @@ OpenSentry Command Center includes multiple layers of security:
 - Attempts are tracked per IP address
 - Protects against brute force attacks
 
-### Configuration
+### Legacy Mode
 
-All credentials can be customized via environment variables or `.env` file. **Change defaults in production!**
+If `OPENSENTRY_SECRET` is not set, falls back to individual credentials:
+```bash
+MQTT_USERNAME=opensentry
+MQTT_PASSWORD=your_mqtt_password
+RTSP_USERNAME=opensentry
+RTSP_PASSWORD=your_rtsp_password
+```
+
+**Change defaults in production!**
 
 ## Companion Project
 
