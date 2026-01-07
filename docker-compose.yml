@@ -15,6 +15,10 @@ services:
       - SECRET_KEY=${SECRET_KEY:-}
       - MQTT_BROKER=${MQTT_BROKER:-localhost}
       - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_USERNAME=${MQTT_USERNAME:-opensentry}
+      - MQTT_PASSWORD=${MQTT_PASSWORD:-opensentry}
+      - RTSP_USERNAME=${RTSP_USERNAME:-opensentry}
+      - RTSP_PASSWORD=${RTSP_PASSWORD:-opensentry}
     
     # Port mapping
     ports:

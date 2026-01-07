@@ -16,7 +16,8 @@ A web-based command center for monitoring and controlling OpenSentry camera node
 - **MQTT Control** - Send start/stop/shutdown commands to camera nodes
 - **Real-Time Streaming** - View live video feeds from multiple cameras
 - **Status Monitoring** - Track camera status with automatic updates
-- **Fallback Discovery** - MQTT-based discovery when mDNS is unavailable
+- **Secure by Default** - Web login, MQTT auth, RTSP auth, and rate limiting
+- **Docker Ready** - Single command deployment with official uv image
 
 ## Architecture
 
@@ -107,14 +108,23 @@ docker compose up --build
 Create a `.env` file to customize credentials:
 
 ```bash
+# Web UI login
 OPENSENTRY_USERNAME=admin
 OPENSENTRY_PASSWORD=your_secure_password
 SECRET_KEY=your-secret-key
+
+# MQTT authentication (must match Node)
+MQTT_USERNAME=opensentry
+MQTT_PASSWORD=your_mqtt_password
+
+# RTSP authentication (must match Node)
+RTSP_USERNAME=opensentry
+RTSP_PASSWORD=your_rtsp_password
 ```
 
 The web interface will be available at `http://localhost:5000`
 
-**Default credentials:** `admin` / `opensentry`
+**Default credentials (all services):** `opensentry` / `opensentry`
 
 ## Usage (Native)
 
@@ -195,13 +205,33 @@ MQTT_CLIENT_ID = "opensentry_command_center"
 MDNS_SERVICE_TYPE = "_opensentry._tcp.local."
 ```
 
+## Security
+
+OpenSentry Command Center includes multiple layers of security:
+
+| Layer | Protection | Default Credentials |
+|-------|-----------|---------------------|
+| **Web UI** | Login required + rate limiting | `admin` / `opensentry` |
+| **MQTT** | Username/password authentication | `opensentry` / `opensentry` |
+| **RTSP** | Username/password authentication | `opensentry` / `opensentry` |
+
+### Rate Limiting
+
+- **5 failed login attempts** triggers a 5-minute lockout
+- Attempts are tracked per IP address
+- Protects against brute force attacks
+
+### Configuration
+
+All credentials can be customized via environment variables or `.env` file. **Change defaults in production!**
+
 ## Companion Project
 
 This Command Center works with the **OpenSentry Node** (C++ camera node) which:
 - Captures video from USB cameras
-- Streams via RTSP (requires MediaMTX)
+- Streams via RTSP (MediaMTX with authentication)
 - Broadcasts presence via mDNS (Avahi)
-- Receives commands via MQTT
+- Receives commands via MQTT (authenticated)
 
 ## Screenshots
 

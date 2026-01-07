@@ -86,6 +86,13 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     
+    # Check if IP is rate limited before processing
+    ip = auth.get_client_ip()
+    limited, remaining = auth.is_rate_limited(ip)
+    if limited:
+        flash(f'Too many failed attempts. Try again in {remaining} seconds.', 'error')
+        return render_template('login.html')
+    
     if request.method == 'POST':
         username = request.form.get('username', '')
         password = request.form.get('password', '')
@@ -96,7 +103,12 @@ def login():
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
         else:
-            flash('Invalid username or password', 'error')
+            # Check if now rate limited after this attempt
+            limited, remaining = auth.is_rate_limited(ip)
+            if limited:
+                flash(f'Account locked for {remaining} seconds due to too many failed attempts.', 'error')
+            else:
+                flash('Invalid username or password', 'error')
     
     return render_template('login.html')
 

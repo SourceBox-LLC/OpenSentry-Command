@@ -5,11 +5,28 @@ import cv2
 import threading
 import time
 import os
+from urllib.parse import urlparse, urlunparse
 
 from camera_registry import CAMERAS, cameras_lock
 
 # Force RTSP to use TCP (more stable than UDP)
 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+
+# RTSP authentication credentials
+RTSP_USERNAME = os.environ.get("RTSP_USERNAME", "opensentry")
+RTSP_PASSWORD = os.environ.get("RTSP_PASSWORD", "opensentry")
+
+
+def add_rtsp_credentials(url: str) -> str:
+    """Add authentication credentials to RTSP URL if not already present"""
+    parsed = urlparse(url)
+    # Only add credentials if not already present
+    if parsed.username is None and RTSP_USERNAME and RTSP_PASSWORD:
+        netloc = f"{RTSP_USERNAME}:{RTSP_PASSWORD}@{parsed.hostname}"
+        if parsed.port:
+            netloc += f":{parsed.port}"
+        return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+    return url
 
 
 class CameraStream:
@@ -17,7 +34,7 @@ class CameraStream:
     
     def __init__(self, camera_id: str, url: str):
         self.camera_id = camera_id
-        self.url = url
+        self.url = add_rtsp_credentials(url)
         self.frame = None
         self.frame_lock = threading.Lock()
         self.running = False

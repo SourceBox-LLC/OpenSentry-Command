@@ -2,18 +2,22 @@
 MQTT client for OpenSentry Command Center.
 Handles communication with camera nodes via MQTT broker.
 """
+import os
 import time
 import paho.mqtt.client as mqtt
 
 from camera_registry import CAMERAS, cameras_lock
 
 # MQTT Configuration
-MQTT_BROKER = "localhost"
-MQTT_PORT = 1883
+MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
+MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "opensentry")
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "opensentry")
 MQTT_CLIENT_ID = "opensentry_command_center"
 
 # MQTT Client instance
 _client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID)
+_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
 
 def _on_connect(client, userdata, flags, reason_code, properties):
