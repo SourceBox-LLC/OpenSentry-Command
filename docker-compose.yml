@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  opensentry-command:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opensentry-command-center
+    restart: unless-stopped
+    
+    # Environment configuration
+    environment:
+      - OPENSENTRY_USERNAME=${OPENSENTRY_USERNAME:-admin}
+      - OPENSENTRY_PASSWORD=${OPENSENTRY_PASSWORD:-opensentry}
+      - SECRET_KEY=${SECRET_KEY:-}
+      - MQTT_BROKER=${MQTT_BROKER:-localhost}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+    
+    # Port mapping
+    ports:
+      - "5000:5000"
+    
+    # Host network mode required for mDNS discovery
+    # This allows the container to discover camera nodes on the local network
+    network_mode: host
+    
+    # Volume for persistent data (optional)
+    volumes:
+      - ./data:/app/data
