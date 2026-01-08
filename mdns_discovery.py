@@ -98,11 +98,11 @@ class OpenSentryServiceListener(ServiceListener):
         # Get initial status from TXT records if available
         initial_status = properties.get('status', 'discovered')
         
-        print(f"[mDNS] Registering camera: {camera_id}")
-        print(f"       Name: {camera_name}")
-        print(f"       IP: {ip_address}:{info.port}")
-        print(f"       RTSP: {rtsp_url}")
-        print(f"       Status: {initial_status}")
+        print(f"[mDNS] Registering camera: {camera_id}", flush=True)
+        print(f"       Name: {camera_name}", flush=True)
+        print(f"       IP: {ip_address}:{info.port}", flush=True)
+        print(f"       RTSP: {rtsp_url}", flush=True)
+        print(f"       Status: {initial_status}", flush=True)
         
         with cameras_lock:
             # Add to camera registry
@@ -161,7 +161,7 @@ def start_discovery():
     _listener = OpenSentryServiceListener()
     _browser = ServiceBrowser(_zeroconf, MDNS_SERVICE_TYPE, _listener)
     
-    print("[mDNS] Discovery started, listening for OpenSentry nodes...")
+    print("[mDNS] Discovery started, listening for OpenSentry nodes...", flush=True)
 
 
 def stop_discovery():

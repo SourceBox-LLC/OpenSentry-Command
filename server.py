@@ -136,6 +136,9 @@ def video_feed(camera_id):
 @login_required
 def get_cameras():
     """Get all cameras with their current status"""
+    # Debug: log camera count
+    if CAMERAS:
+        print(f"[API] Returning {len(CAMERAS)} cameras: {list(CAMERAS.keys())}")
     return jsonify(CAMERAS)
 
 
