@@ -31,7 +31,7 @@
                     <span class="status-dot" id="nodes-dot"></span>
                     <span id="nodes-count">0 Nodes Online</span>
                 </div>
-                <a href="{{ url_for('logout') }}" class="logout-btn" title="Logout">
+                <a href="{{ url_for('main.logout') }}" class="logout-btn" title="Logout">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                         <polyline points="16 17 21 12 16 7"/>
@@ -98,7 +98,7 @@
                         <div class="loading-spinner"></div>
                         <span>Connecting to stream...</span>
                     </div>
-                    <img class="camera-feed" id="feed-{{ camera_id }}" data-src="{{ url_for('video_feed', camera_id=camera_id) }}" alt="{{ camera_info.name }}">
+                    <img class="camera-feed" id="feed-{{ camera_id }}" data-src="{{ url_for('main.video_feed', camera_id=camera_id) }}" alt="{{ camera_info.name }}">
                     <div class="feed-overlay" id="feed-overlay-{{ camera_id }}">
                         <span class="feed-tag live">LIVE</span>
                         <span class="feed-tag">HD</span>

@@ -1,40 +1,28 @@
 """
-Authentication module for OpenSentry Command Center.
+Authentication handlers for OpenSentry Command Center.
 Uses Flask-Login with environment variable credentials.
 Includes rate limiting to prevent brute force attacks.
 Includes session timeout for security.
 """
-import os
 import time
-from datetime import timedelta
-from functools import wraps
 from collections import defaultdict
 
-from flask import redirect, url_for, session, request
+from flask import request
 from flask_login import LoginManager, UserMixin, current_user
-from werkzeug.security import check_password_hash, generate_password_hash
+
+from ..config import Config
 
 # Initialize Flask-Login
 login_manager = LoginManager()
-login_manager.login_view = 'login'
+login_manager.login_view = 'main.login'
 login_manager.login_message = 'Please log in to access the Command Center.'
 login_manager.login_message_category = 'info'
 
-# Default credentials (override with environment variables)
-DEFAULT_USERNAME = 'admin'
-DEFAULT_PASSWORD = 'opensentry'
-
-# Rate limiting configuration
-MAX_FAILED_ATTEMPTS = 5  # Lock after 5 failed attempts
-LOCKOUT_DURATION = 300   # 5 minutes lockout
-ATTEMPT_WINDOW = 900     # Track attempts within 15 minute window
-
-# Session timeout configuration (in minutes)
-# Default: 30 minutes, configurable via SESSION_TIMEOUT env var
-SESSION_TIMEOUT_MINUTES = int(os.environ.get('SESSION_TIMEOUT', '30'))
-
-# Track failed login attempts: {ip: [(timestamp, ...], ...}
+# Track failed login attempts: {ip: [timestamps]}
 _failed_attempts = defaultdict(list)
+
+# In-memory user store (single admin user)
+_user = None
 
 
 class User(UserMixin):
@@ -44,42 +32,20 @@ class User(UserMixin):
         self.username = username
 
 
-# In-memory user store (single admin user)
-_user = None
-
-
-def get_credentials():
-    """Get credentials from environment variables or use defaults"""
-    username = os.environ.get('OPENSENTRY_USERNAME', DEFAULT_USERNAME)
-    password = os.environ.get('OPENSENTRY_PASSWORD', DEFAULT_PASSWORD)
-    return username, password
-
-
-def init_app(app):
+def init_auth(app):
     """Initialize authentication for the Flask app"""
-    # Set secret key from environment or use a default (change in production!)
-    secret_key = os.environ.get('SECRET_KEY')
-    if not secret_key:
-        # Generate a stable default key based on credentials (not ideal for production)
-        import hashlib
-        username, password = get_credentials()
-        secret_key = hashlib.sha256(f"opensentry-{username}-{password}".encode()).hexdigest()
-    app.secret_key = secret_key
-    
-    # Configure session timeout
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
-    app.config['SESSION_REFRESH_EACH_REQUEST'] = True  # Reset timeout on activity
+    # Set secret key
+    app.secret_key = Config.init_secret_key()
     
     # Initialize Flask-Login
     login_manager.init_app(app)
     
     # Create the admin user
     global _user
-    username, _ = get_credentials()
-    _user = User('1', username)
+    _user = User('1', Config.OPENSENTRY_USERNAME)
     
-    print(f"[Auth] Authentication enabled for user: {username}")
-    print(f"[Auth] Session timeout: {SESSION_TIMEOUT_MINUTES} minutes")
+    print(f"[Auth] Authentication enabled for user: {Config.OPENSENTRY_USERNAME}")
+    print(f"[Auth] Session timeout: {Config.SESSION_TIMEOUT_MINUTES} minutes")
 
 
 @login_manager.user_loader
@@ -95,7 +61,7 @@ def _clean_old_attempts(ip: str):
     current_time = time.time()
     _failed_attempts[ip] = [
         t for t in _failed_attempts[ip] 
-        if current_time - t < ATTEMPT_WINDOW
+        if current_time - t < Config.ATTEMPT_WINDOW
     ]
 
 
@@ -103,7 +69,7 @@ def _record_failed_attempt(ip: str):
     """Record a failed login attempt"""
     _failed_attempts[ip].append(time.time())
     _clean_old_attempts(ip)
-    print(f"[Auth] Failed login attempt from {ip} ({len(_failed_attempts[ip])}/{MAX_FAILED_ATTEMPTS})")
+    print(f"[Auth] Failed login attempt from {ip} ({len(_failed_attempts[ip])}/{Config.MAX_FAILED_ATTEMPTS})")
 
 
 def _clear_failed_attempts(ip: str):
@@ -120,16 +86,14 @@ def is_rate_limited(ip: str) -> tuple[bool, int]:
     _clean_old_attempts(ip)
     attempts = _failed_attempts.get(ip, [])
     
-    if len(attempts) >= MAX_FAILED_ATTEMPTS:
-        # Check if still in lockout period
+    if len(attempts) >= Config.MAX_FAILED_ATTEMPTS:
         latest_attempt = max(attempts)
         time_since_lockout = time.time() - latest_attempt
         
-        if time_since_lockout < LOCKOUT_DURATION:
-            remaining = int(LOCKOUT_DURATION - time_since_lockout)
+        if time_since_lockout < Config.LOCKOUT_DURATION:
+            remaining = int(Config.LOCKOUT_DURATION - time_since_lockout)
             return True, remaining
         else:
-            # Lockout expired, clear attempts
             _clear_failed_attempts(ip)
     
     return False, 0
@@ -137,7 +101,6 @@ def is_rate_limited(ip: str) -> tuple[bool, int]:
 
 def get_client_ip() -> str:
     """Get the client IP address, handling proxies"""
-    # Check for proxy headers
     if request.headers.get('X-Forwarded-For'):
         return request.headers.get('X-Forwarded-For').split(',')[0].strip()
     elif request.headers.get('X-Real-IP'):
@@ -145,7 +108,7 @@ def get_client_ip() -> str:
     return request.remote_addr or '127.0.0.1'
 
 
-def authenticate(username, password):
+def authenticate(username: str, password: str):
     """Authenticate a user with username and password (with rate limiting)"""
     ip = get_client_ip()
     
@@ -155,14 +118,11 @@ def authenticate(username, password):
         print(f"[Auth] Rate limited login attempt from {ip} ({remaining}s remaining)")
         return None
     
-    valid_username, valid_password = get_credentials()
-    
-    if username == valid_username and password == valid_password:
+    if username == Config.OPENSENTRY_USERNAME and password == Config.OPENSENTRY_PASSWORD:
         _clear_failed_attempts(ip)
         print(f"[Auth] Successful login from {ip}")
         return _user
     
-    # Record failed attempt
     _record_failed_attempt(ip)
     return None
 

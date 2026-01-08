@@ -6,11 +6,9 @@ import socket
 import time
 from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
-from camera_registry import CAMERAS, cameras_lock, camera_streams
-from camera_stream import CameraStream
-
-# mDNS Configuration
-MDNS_SERVICE_TYPE = "_opensentry._tcp.local."
+from ..models.camera import CAMERAS, cameras_lock, camera_streams
+from ..config import Config
+from .camera import CameraStream
 
 # mDNS browser instances
 _zeroconf = None
@@ -37,7 +35,7 @@ class OpenSentryServiceListener(ServiceListener):
         self._unregister_node(name)
     
     def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
-        """Called when a service is updated (e.g., status change)"""
+        """Called when a service is updated"""
         info = zc.get_service_info(type_, name)
         if info:
             self._update_node_status(name, info)
@@ -60,42 +58,34 @@ class OpenSentryServiceListener(ServiceListener):
         
         with cameras_lock:
             if camera_id in CAMERAS:
-                # Only log if status actually changed
                 if CAMERAS[camera_id].get('status') != new_status:
                     print(f"[mDNS] {camera_id} status: {new_status}")
                 CAMERAS[camera_id]['status'] = new_status
                 CAMERAS[camera_id]['last_seen'] = time.time()
             else:
-                # Not registered yet, do full registration
                 self._register_node(name, info)
     
     def _register_node(self, name: str, info) -> None:
         """Register a discovered node as a camera"""
         properties = self._extract_properties(info)
         
-        # Get IP address
         ip_address = None
         if info.addresses:
             ip_address = socket.inet_ntoa(info.addresses[0])
         
-        # Extract camera info from TXT records or generate defaults
         camera_id = properties.get('camera_id', name.split('.')[0])
         camera_name = properties.get('name', f"Camera {camera_id}")
         
-        # Check if full rtsp_url is provided, otherwise build from parts
         rtsp_url = properties.get('rtsp_url', None)
         if rtsp_url:
-            # Replace localhost with actual IP if needed
             rtsp_url = rtsp_url.replace('localhost', ip_address).replace('127.0.0.1', ip_address)
         else:
-            # Build from individual fields
             rtsp_port = properties.get('rtsp_port', '8554')
             rtsp_path = properties.get('rtsp_path', camera_id)
             if not rtsp_path.startswith('/'):
                 rtsp_path = '/' + rtsp_path
             rtsp_url = f"rtsp://{ip_address}:{rtsp_port}{rtsp_path}"
         
-        # Get initial status from TXT records if available
         initial_status = properties.get('status', 'discovered')
         
         print(f"[mDNS] Registering camera: {camera_id}", flush=True)
@@ -105,7 +95,6 @@ class OpenSentryServiceListener(ServiceListener):
         print(f"       Status: {initial_status}", flush=True)
         
         with cameras_lock:
-            # Add to camera registry
             CAMERAS[camera_id] = {
                 'name': camera_name,
                 'url': rtsp_url,
@@ -117,13 +106,11 @@ class OpenSentryServiceListener(ServiceListener):
                 'discovered_via': 'mdns'
             }
             
-            # Start capture stream if not already running
             if camera_id not in camera_streams:
                 stream = CameraStream(camera_id, rtsp_url)
                 camera_streams[camera_id] = stream
                 stream.start()
             else:
-                # Update URL if changed (compare original URLs, not credentialed ones)
                 if camera_streams[camera_id].original_url != rtsp_url:
                     camera_streams[camera_id].stop()
                     stream = CameraStream(camera_id, rtsp_url)
@@ -133,7 +120,6 @@ class OpenSentryServiceListener(ServiceListener):
     def _unregister_node(self, name: str) -> None:
         """Unregister a node when it goes offline"""
         with cameras_lock:
-            # Find camera by mDNS name
             camera_id_to_remove = None
             for camera_id, camera_info in CAMERAS.items():
                 if camera_info.get('mdns_name') == name:
@@ -141,12 +127,10 @@ class OpenSentryServiceListener(ServiceListener):
                     break
             
             if camera_id_to_remove:
-                # Stop capture stream
                 if camera_id_to_remove in camera_streams:
                     camera_streams[camera_id_to_remove].stop()
                     del camera_streams[camera_id_to_remove]
                 
-                # Mark as offline
                 CAMERAS[camera_id_to_remove]['status'] = 'offline'
                 print(f"[mDNS] Camera {camera_id_to_remove} marked offline")
 
@@ -155,11 +139,11 @@ def start_discovery():
     """Start mDNS service discovery for OpenSentry nodes"""
     global _zeroconf, _browser, _listener
     
-    print(f"[mDNS] Starting discovery for {MDNS_SERVICE_TYPE}")
+    print(f"[mDNS] Starting discovery for {Config.MDNS_SERVICE_TYPE}")
     
     _zeroconf = Zeroconf()
     _listener = OpenSentryServiceListener()
-    _browser = ServiceBrowser(_zeroconf, MDNS_SERVICE_TYPE, _listener)
+    _browser = ServiceBrowser(_zeroconf, Config.MDNS_SERVICE_TYPE, _listener)
     
     print("[mDNS] Discovery started, listening for OpenSentry nodes...", flush=True)
 

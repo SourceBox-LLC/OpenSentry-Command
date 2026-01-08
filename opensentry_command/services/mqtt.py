@@ -2,49 +2,42 @@
 MQTT client for OpenSentry Command Center.
 Handles communication with camera nodes via MQTT broker.
 """
-import os
 import time
 import hashlib
 import paho.mqtt.client as mqtt
 
-from camera_registry import CAMERAS, cameras_lock
+from ..models.camera import CAMERAS, cameras_lock
+from ..config import Config
 
 
 def derive_credential(secret: str, service: str) -> str:
     """Derive a credential from a secret and service name using SHA256"""
     input_str = f"{secret}:{service}"
     hash_bytes = hashlib.sha256(input_str.encode()).hexdigest()
-    return hash_bytes[:32]  # First 32 chars
+    return hash_bytes[:32]
 
 
-# MQTT Configuration
-MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
-MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
-MQTT_CLIENT_ID = "opensentry_command_center"
+def _get_mqtt_credentials():
+    """Get MQTT credentials (derived or legacy)"""
+    if Config.OPENSENTRY_SECRET:
+        print("[MQTT] Using derived credentials from OPENSENTRY_SECRET")
+        return "opensentry", derive_credential(Config.OPENSENTRY_SECRET, "mqtt")
+    else:
+        return Config.MQTT_USERNAME, Config.MQTT_PASSWORD
 
-# Credential derivation: use OPENSENTRY_SECRET if set
-OPENSENTRY_SECRET = os.environ.get("OPENSENTRY_SECRET", "")
-if OPENSENTRY_SECRET:
-    print("[MQTT] Using derived credentials from OPENSENTRY_SECRET")
-    MQTT_USERNAME = "opensentry"
-    MQTT_PASSWORD = derive_credential(OPENSENTRY_SECRET, "mqtt")
-else:
-    MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "opensentry")
-    MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "opensentry")
+
+MQTT_USERNAME, MQTT_PASSWORD = _get_mqtt_credentials()
 
 # MQTT Client instance
-_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=MQTT_CLIENT_ID)
+_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=Config.MQTT_CLIENT_ID)
 _client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
 
 def _on_connect(client, userdata, flags, reason_code, properties):
     """Called when connected to MQTT broker"""
     print(f"[MQTT] Connected with result code {reason_code}")
-    # Subscribe to all camera status topics
     client.subscribe("opensentry/+/status")
     print("[MQTT] Subscribed to opensentry/+/status")
-
-
 
 
 def _on_message(client, userdata, msg):
@@ -52,13 +45,10 @@ def _on_message(client, userdata, msg):
     topic = msg.topic
     payload = msg.payload.decode('utf-8')
     
-    # Parse topic: opensentry/<camera_id>/status
     parts = topic.split('/')
     if len(parts) == 3 and parts[0] == 'opensentry' and parts[2] == 'status':
         camera_id = parts[1]
         
-        # Only update status if camera is already registered via mDNS
-        # MQTT is used for status updates and commands, not discovery
         if camera_id in CAMERAS:
             CAMERAS[camera_id]['status'] = payload
             CAMERAS[camera_id]['last_seen'] = time.time()
@@ -80,13 +70,12 @@ def start():
     """Start MQTT client in background thread with auto-reconnect"""
     _client.reconnect_delay_set(min_delay=1, max_delay=30)
     try:
-        _client.connect(MQTT_BROKER, MQTT_PORT, 60)
+        _client.connect(Config.MQTT_BROKER, Config.MQTT_PORT, 60)
         _client.loop_start()
         print("[MQTT] Client started")
     except Exception as e:
         print(f"[MQTT] Initial connection failed: {e}")
         print("[MQTT] Will retry in background...")
-        # Start loop anyway - it will auto-reconnect
         _client.loop_start()
 
 

@@ -1,5 +1,5 @@
 """
-Shared camera registry and state management for OpenSentry Command Center.
+Camera registry and state management for OpenSentry Command Center.
 """
 import threading
 
