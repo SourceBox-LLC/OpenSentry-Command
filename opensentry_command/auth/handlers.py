@@ -3,6 +3,7 @@ Authentication handlers for OpenSentry Command Center.
 Uses Flask-Login with environment variable credentials.
 Includes rate limiting to prevent brute force attacks.
 Includes session timeout for security.
+Includes audit logging for security events.
 """
 import time
 from collections import defaultdict
@@ -11,6 +12,7 @@ from flask import request
 from flask_login import LoginManager, UserMixin, current_user
 
 from ..config import Config
+from ..security import audit_log, is_using_default_credentials
 
 # Initialize Flask-Login
 login_manager = LoginManager()
@@ -24,6 +26,9 @@ _failed_attempts = defaultdict(list)
 # In-memory user store (single admin user)
 _user = None
 
+# Flag for default credentials warning
+_using_default_credentials = False
+
 
 class User(UserMixin):
     """Simple user class for Flask-Login"""
@@ -34,8 +39,7 @@ class User(UserMixin):
 
 def init_auth(app):
     """Initialize authentication for the Flask app"""
-    # Set secret key
-    app.secret_key = Config.init_secret_key()
+    global _using_default_credentials
     
     # Initialize Flask-Login
     login_manager.init_app(app)
@@ -43,6 +47,22 @@ def init_auth(app):
     # Create the admin user
     global _user
     _user = User('1', Config.OPENSENTRY_USERNAME)
+    
+    # Check for default credentials
+    _using_default_credentials = is_using_default_credentials(
+        Config.OPENSENTRY_USERNAME, 
+        Config.OPENSENTRY_PASSWORD
+    )
+    
+    if _using_default_credentials:
+        print("\n" + "=" * 70)
+        print("⚠️  WARNING: DEFAULT CREDENTIALS DETECTED!")
+        print("=" * 70)
+        print("You are using default username/password.")
+        print("This is a SECURITY RISK. Please change your credentials in .env:")
+        print("  OPENSENTRY_USERNAME=your_username")
+        print("  OPENSENTRY_PASSWORD=your_secure_password")
+        print("=" * 70 + "\n")
     
     print(f"[Auth] Authentication enabled for user: {Config.OPENSENTRY_USERNAME}")
     print(f"[Auth] Session timeout: {Config.SESSION_TIMEOUT_MINUTES} minutes")
@@ -115,16 +135,29 @@ def authenticate(username: str, password: str):
     # Check rate limiting
     limited, remaining = is_rate_limited(ip)
     if limited:
-        print(f"[Auth] Rate limited login attempt from {ip} ({remaining}s remaining)")
+        audit_log('LOGIN_RATE_LIMITED', ip, username, f'Locked out for {remaining}s')
         return None
     
     if username == Config.OPENSENTRY_USERNAME and password == Config.OPENSENTRY_PASSWORD:
         _clear_failed_attempts(ip)
-        print(f"[Auth] Successful login from {ip}")
+        audit_log('LOGIN_SUCCESS', ip, username, 'Authentication successful')
         return _user
     
     _record_failed_attempt(ip)
+    attempts = len(_failed_attempts.get(ip, []))
+    audit_log('LOGIN_FAILURE', ip, username, f'Invalid credentials (attempt {attempts}/{Config.MAX_FAILED_ATTEMPTS})')
     return None
+
+
+def is_using_defaults() -> bool:
+    """Check if system is using default credentials"""
+    return _using_default_credentials
+
+
+def log_logout(username: str):
+    """Log a logout event"""
+    ip = get_client_ip()
+    audit_log('LOGOUT', ip, username, 'User logged out')
 
 
 def is_authenticated():

@@ -7,5 +7,8 @@ from .handlers import (
     authenticate,
     is_rate_limited,
     get_client_ip,
+    is_authenticated,
+    is_using_defaults,
+    log_logout,
     User
 )

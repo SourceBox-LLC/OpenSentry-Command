@@ -7,6 +7,12 @@ import atexit
 from flask import Flask
 
 from .config import Config
+from .security import (
+    add_security_headers,
+    generate_csrf_token,
+    configure_session_security,
+    generate_secret_key
+)
 
 
 def create_app(config_class=Config):
@@ -17,6 +23,19 @@ def create_app(config_class=Config):
     
     # Load configuration
     app.config.from_object(config_class)
+    
+    # Generate proper secret key if not set
+    if not app.config.get('SECRET_KEY'):
+        app.config['SECRET_KEY'] = generate_secret_key()
+    
+    # Configure session security
+    configure_session_security(app)
+    
+    # Add security headers to all responses
+    app.after_request(add_security_headers)
+    
+    # Make CSRF token available in all templates
+    app.jinja_env.globals['csrf_token'] = generate_csrf_token
     
     # Initialize extensions
     from .auth import init_auth

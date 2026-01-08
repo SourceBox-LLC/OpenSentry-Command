@@ -24,6 +24,10 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
+
+# Security files (never commit!)
+.secret_key
 
 # Docker data volume
 data/

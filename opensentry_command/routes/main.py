@@ -10,7 +10,8 @@ from flask import Blueprint, render_template, Response, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
 
 from ..models.camera import CAMERAS, camera_streams
-from ..auth import authenticate, is_rate_limited, get_client_ip
+from ..auth import authenticate, is_rate_limited, get_client_ip, is_using_defaults, log_logout
+from ..security import validate_csrf_token, audit_log
 
 main_bp = Blueprint('main', __name__)
 
@@ -76,6 +77,12 @@ def login():
         return render_template('login.html')
     
     if request.method == 'POST':
+        # Validate CSRF token
+        if not validate_csrf_token():
+            audit_log('CSRF_FAILURE', ip, '-', 'Invalid CSRF token on login')
+            flash('Security validation failed. Please try again.', 'error')
+            return render_template('login.html')
+        
         username = request.form.get('username', '')
         password = request.form.get('password', '')
         
@@ -83,6 +90,11 @@ def login():
         if user:
             login_user(user)
             session.permanent = True
+            
+            # Warn about default credentials after successful login
+            if is_using_defaults():
+                flash('⚠️ Security Warning: You are using default credentials. Please change them in your .env file!', 'error')
+            
             next_page = request.args.get('next')
             return redirect(next_page or url_for('main.index'))
         else:
@@ -99,6 +111,8 @@ def login():
 @login_required
 def logout():
     """Logout and redirect to login page"""
+    username = current_user.username if current_user else 'unknown'
+    log_logout(username)
     logout_user()
     flash('You have been logged out', 'info')
     return redirect(url_for('main.login'))
