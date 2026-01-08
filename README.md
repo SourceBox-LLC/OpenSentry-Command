@@ -8,14 +8,16 @@
 
 ### Step 1: Install Docker
 
-**Windows/Mac:** [Download Docker Desktop](https://www.docker.com/products/docker-desktop)
-
 **Linux:**
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 ```
 Then log out and back in.
+
+**Mac:** [Download Docker Desktop](https://www.docker.com/products/docker-desktop)
+
+**Windows:** See [Windows Setup (WSL)](#-windows-setup-wsl) below.
 
 ---
 
@@ -171,6 +173,49 @@ SESSION_TIMEOUT=30
 ```
 
 After changes: `docker compose down && docker compose up -d`
+
+---
+
+## 🪟 Windows Setup (WSL)
+
+Windows users can run OpenSentry using WSL (Windows Subsystem for Linux).
+
+### Step 1: Install WSL
+
+Open **PowerShell as Administrator** and run:
+
+```powershell
+wsl --install
+```
+
+Restart your computer when prompted.
+
+### Step 2: Set Up Ubuntu
+
+After restart, Ubuntu will open automatically. Create a username and password when asked.
+
+### Step 3: Install Docker in WSL
+
+In the Ubuntu terminal:
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+```
+
+Close and reopen Ubuntu.
+
+### Step 4: Follow Quick Start
+
+Now follow **Steps 2-6** from the [Quick Start](#-quick-start) section above.
+
+```bash
+git clone https://github.com/SourceBox-LLC/OpenSentry-Command.git
+cd OpenSentry-Command
+chmod +x setup.sh && ./setup.sh
+```
+
+**Access the dashboard at http://localhost:5000** from your Windows browser.
 
 ---
 
