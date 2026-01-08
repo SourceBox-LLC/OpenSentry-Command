@@ -123,8 +123,8 @@ class OpenSentryServiceListener(ServiceListener):
                 camera_streams[camera_id] = stream
                 stream.start()
             else:
-                # Update URL if changed
-                if camera_streams[camera_id].url != rtsp_url:
+                # Update URL if changed (compare original URLs, not credentialed ones)
+                if camera_streams[camera_id].original_url != rtsp_url:
                     camera_streams[camera_id].stop()
                     stream = CameraStream(camera_id, rtsp_url)
                     camera_streams[camera_id] = stream

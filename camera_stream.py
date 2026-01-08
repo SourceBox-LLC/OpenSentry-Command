@@ -31,6 +31,7 @@ if OPENSENTRY_SECRET:
 else:
     RTSP_USERNAME = os.environ.get("RTSP_USERNAME", "opensentry")
     RTSP_PASSWORD = os.environ.get("RTSP_PASSWORD", "opensentry")
+    print(f"[RTSP] Using legacy credentials: {RTSP_USERNAME}/{'*' * len(RTSP_PASSWORD)}")
 
 
 def add_rtsp_credentials(url: str) -> str:
@@ -50,7 +51,11 @@ class CameraStream:
     
     def __init__(self, camera_id: str, url: str):
         self.camera_id = camera_id
-        self.url = add_rtsp_credentials(url)
+        self.original_url = url  # Store original URL for comparison
+        self.url = add_rtsp_credentials(url)  # URL with credentials for actual connection
+        # Debug: show URL with masked password
+        masked_url = self.url.replace(f":{RTSP_PASSWORD}@", ":****@") if RTSP_PASSWORD else self.url
+        print(f"[Camera {camera_id}] RTSP URL: {masked_url}")
         self.frame = None
         self.frame_lock = threading.Lock()
         self.running = False
