@@ -6,7 +6,7 @@
 
 ## 🚀 Quick Start
 
-### 1. Install Docker
+### Step 1: Install Docker
 
 **Windows/Mac:** [Download Docker Desktop](https://www.docker.com/products/docker-desktop)
 
@@ -14,22 +14,86 @@
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
-# Log out and back in
 ```
+Then log out and back in.
 
-### 2. Download & Run
+---
+
+### Step 2: Download the Project
 
 ```bash
 git clone https://github.com/SourceBox-LLC/OpenSentry-Command.git
 cd OpenSentry-Command
+```
+
+---
+
+### Step 3: Run Setup
+
+```bash
 chmod +x setup.sh && ./setup.sh
 ```
 
-### 3. Open Dashboard
+You'll see:
+```
+╔═══════════════════════════════════════════════════════════════╗
+║         OpenSentry Command Center - Quick Setup               ║
+╚═══════════════════════════════════════════════════════════════╝
 
-Go to **http://localhost:5000** and log in.
+✅ Docker found
+```
 
-**Done!** 🎉 Your cameras will appear automatically.
+---
+
+### Step 4: Choose Username & Password
+
+The setup will ask you to create login credentials:
+
+```
+📝 Let's configure your Command Center...
+
+Choose a username [admin]: admin
+Choose a password (min 8 chars): ********
+```
+
+---
+
+### Step 5: Save Your Security Secret
+
+A secret key is generated automatically. **Copy this - you'll need it for camera nodes!**
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  IMPORTANT: Copy this secret to your Camera Nodes!            ║
+╠═══════════════════════════════════════════════════════════════╣
+║  OPENSENTRY_SECRET=7de776c167242fbf10da85c3d182a9fb...        ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+### Step 6: Done!
+
+The Command Center starts automatically:
+
+```
+🚀 Starting Command Center...
+
+╔═══════════════════════════════════════════════════════════════╗
+║                    Setup Complete!                            ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Dashboard:  http://localhost:5000                            ║
+║  Username:   admin                                            ║
+║  Password:   ********                                         ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Commands:                                                    ║
+║    View logs:    docker compose logs -f                       ║
+║    Stop:         docker compose down                          ║
+║    Restart:      docker compose restart                       ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+**Open http://localhost:5000** and log in. 🎉
 
 ---
 
