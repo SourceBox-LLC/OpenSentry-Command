@@ -1,35 +1,15 @@
+# OpenSentry Command Center
+# Quick Start: docker compose up --build
+# Dashboard: http://localhost:5000
+
 services:
   opensentry-command:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: opensentry-command-center
     restart: unless-stopped
-    
-    # Environment configuration
-    environment:
-      - OPENSENTRY_USERNAME=${OPENSENTRY_USERNAME:-admin}
-      - OPENSENTRY_PASSWORD=${OPENSENTRY_PASSWORD:-opensentry}
-      - SECRET_KEY=${SECRET_KEY:-}
-      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-30}
-      - MQTT_BROKER=${MQTT_BROKER:-localhost}
-      - MQTT_PORT=${MQTT_PORT:-1883}
-      # Single secret for all credentials (recommended)
-      - OPENSENTRY_SECRET=${OPENSENTRY_SECRET:-}
-      # Legacy individual credentials (used if OPENSENTRY_SECRET not set)
-      - MQTT_USERNAME=${MQTT_USERNAME:-opensentry}
-      - MQTT_PASSWORD=${MQTT_PASSWORD:-opensentry}
-      - RTSP_USERNAME=${RTSP_USERNAME:-opensentry}
-      - RTSP_PASSWORD=${RTSP_PASSWORD:-opensentry}
-    
-    # Port mapping
-    ports:
-      - "5000:5000"
-    
-    # Host network mode required for mDNS discovery
-    # This allows the container to discover camera nodes on the local network
     network_mode: host
-    
-    # Volume for persistent data (optional)
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs

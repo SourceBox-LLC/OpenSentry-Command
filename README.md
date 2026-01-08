@@ -69,35 +69,36 @@ sudo usermod -aG docker $USER
 
 ---
 
-## 🚀 Quick Start Guide (5 Minutes)
+## 🚀 Quick Start Guide (2 Minutes)
 
 ### Step 1: Download the Project
 
-**Option A - If you have Git:**
 ```bash
 git clone https://github.com/SourceBox-LLC/OpenSentry-Command.git
 cd OpenSentry-Command
 ```
 
-**Option B - Download ZIP:**
-1. Click the green "Code" button on GitHub
-2. Click "Download ZIP"
-3. Unzip the folder
-4. Open a terminal/command prompt in that folder
-
-### Step 2: Start the Command Center
-
-Run this single command:
+### Step 2: Run the Setup Script
 
 ```bash
-docker compose up --build
+chmod +x setup.sh
+./setup.sh
 ```
 
-**What you'll see:**
+**That's it!** The script will:
+- Ask you for a username and password
+- Generate a security secret automatically
+- Start the Command Center
+
+### What You'll See
+
 ```
-[+] Running 1/1
- ✔ Container opensentry-command  Started
-[Flask] Starting web server on http://0.0.0.0:5000
+╔═══════════════════════════════════════════════════════════════╗
+║                    Setup Complete!                            ║
+╠═══════════════════════════════════════════════════════════════╣
+║  Dashboard:  http://localhost:5000                            ║
+║  Username:   admin                                            ║
+╚═══════════════════════════════════════════════════════════════╝
 [mDNS] Discovery started, listening for OpenSentry nodes...
 [MQTT] Client started
 ```
