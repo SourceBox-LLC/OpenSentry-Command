@@ -9,7 +9,7 @@ import time
 
 import cv2
 import numpy as np
-from flask import Flask, render_template, Response, jsonify, request, redirect, url_for, flash
+from flask import Flask, render_template, Response, jsonify, request, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, login_required, current_user
 from dotenv import load_dotenv
 
@@ -100,6 +100,7 @@ def login():
         user = auth.authenticate(username, password)
         if user:
             login_user(user)
+            session.permanent = True  # Enable session timeout
             next_page = request.args.get('next')
             return redirect(next_page or url_for('index'))
         else:

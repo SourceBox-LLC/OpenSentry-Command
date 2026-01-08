@@ -2,9 +2,11 @@
 Authentication module for OpenSentry Command Center.
 Uses Flask-Login with environment variable credentials.
 Includes rate limiting to prevent brute force attacks.
+Includes session timeout for security.
 """
 import os
 import time
+from datetime import timedelta
 from functools import wraps
 from collections import defaultdict
 
@@ -26,6 +28,10 @@ DEFAULT_PASSWORD = 'opensentry'
 MAX_FAILED_ATTEMPTS = 5  # Lock after 5 failed attempts
 LOCKOUT_DURATION = 300   # 5 minutes lockout
 ATTEMPT_WINDOW = 900     # Track attempts within 15 minute window
+
+# Session timeout configuration (in minutes)
+# Default: 30 minutes, configurable via SESSION_TIMEOUT env var
+SESSION_TIMEOUT_MINUTES = int(os.environ.get('SESSION_TIMEOUT', '30'))
 
 # Track failed login attempts: {ip: [(timestamp, ...], ...}
 _failed_attempts = defaultdict(list)
@@ -60,6 +66,10 @@ def init_app(app):
         secret_key = hashlib.sha256(f"opensentry-{username}-{password}".encode()).hexdigest()
     app.secret_key = secret_key
     
+    # Configure session timeout
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
+    app.config['SESSION_REFRESH_EACH_REQUEST'] = True  # Reset timeout on activity
+    
     # Initialize Flask-Login
     login_manager.init_app(app)
     
@@ -69,6 +79,7 @@ def init_app(app):
     _user = User('1', username)
     
     print(f"[Auth] Authentication enabled for user: {username}")
+    print(f"[Auth] Session timeout: {SESSION_TIMEOUT_MINUTES} minutes")
 
 
 @login_manager.user_loader

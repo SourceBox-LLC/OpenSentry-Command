@@ -11,6 +11,7 @@ services:
       - OPENSENTRY_USERNAME=${OPENSENTRY_USERNAME:-admin}
       - OPENSENTRY_PASSWORD=${OPENSENTRY_PASSWORD:-opensentry}
       - SECRET_KEY=${SECRET_KEY:-}
+      - SESSION_TIMEOUT=${SESSION_TIMEOUT:-30}
       - MQTT_BROKER=${MQTT_BROKER:-localhost}
       - MQTT_PORT=${MQTT_PORT:-1883}
       # Single secret for all credentials (recommended)
