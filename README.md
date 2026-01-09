@@ -149,6 +149,46 @@ chmod +x teardown.sh && ./teardown.sh
 
 ---
 
+## 🌐 Remote Access (Tailscale)
+
+Access your Command Center from anywhere using [Tailscale](https://tailscale.com) - a free, secure VPN.
+
+### Setup
+
+1. **Install Tailscale on your server:**
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up
+   ```
+
+2. **Install Tailscale on your phone/laptop:**
+   - Download from [tailscale.com/download](https://tailscale.com/download)
+   - Sign in with the same account
+
+3. **Get your server's Tailscale IP:**
+   ```bash
+   tailscale ip -4
+   # Example: 100.64.0.1
+   ```
+
+4. **Access from anywhere:**
+   ```
+   https://YOUR_TAILSCALE_IP:5000
+   ```
+
+### Why Tailscale?
+
+| Benefit | Description |
+|---------|-------------|
+| **No port forwarding** | Works behind any firewall/NAT |
+| **End-to-end encrypted** | WireGuard-based VPN |
+| **Free for personal use** | Up to 100 devices |
+| **No public IP exposure** | Your server stays hidden |
+
+> **Note:** Your browser will still show a certificate warning since the cert is for `localhost`. Click through to proceed - the connection is still encrypted.
+
+---
+
 ## ❓ Troubleshooting
 
 | Problem | Solution |
