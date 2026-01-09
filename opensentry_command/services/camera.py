@@ -11,8 +11,9 @@ from urllib.parse import urlparse, urlunparse
 from ..models.camera import CAMERAS, cameras_lock
 from ..config import Config
 
-# Force RTSP to use TCP (more stable than UDP)
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+# Force RTSP to use TCP and accept self-signed certs for RTSPS
+# tls_verify=0 allows self-signed certificates
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|rtsp_flags;prefer_tcp|tls_verify;0"
 
 
 def derive_credential(secret: str, service: str) -> str:

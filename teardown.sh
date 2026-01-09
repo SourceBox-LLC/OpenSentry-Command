@@ -39,6 +39,16 @@ if [ "$remove_data" = "y" ] || [ "$remove_data" = "Y" ]; then
 fi
 
 echo ""
+read -p "Remove SSL certificates? (y/N): " remove_certs
+if [ "$remove_certs" = "y" ] || [ "$remove_certs" = "Y" ]; then
+    rm -rf ./certs
+    # Also remove from system trust store
+    sudo rm -f /usr/local/share/ca-certificates/opensentry.crt 2>/dev/null
+    sudo update-ca-certificates >/dev/null 2>&1 || true
+    echo "✅ SSL certificates removed"
+fi
+
+echo ""
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║                  Teardown Complete!                           ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"

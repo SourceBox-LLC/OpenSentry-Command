@@ -80,18 +80,23 @@ class OpenSentryServiceListener(ServiceListener):
         if rtsp_url:
             rtsp_url = rtsp_url.replace('localhost', ip_address).replace('127.0.0.1', ip_address)
         else:
-            rtsp_port = properties.get('rtsp_port', '8554')
+            # Use RTSPS (encrypted) on port 8322
+            rtsps_port = properties.get('rtsps_port', '8322')
             rtsp_path = properties.get('rtsp_path', camera_id)
             if not rtsp_path.startswith('/'):
                 rtsp_path = '/' + rtsp_path
-            rtsp_url = f"rtsp://{ip_address}:{rtsp_port}{rtsp_path}"
+            rtsp_url = f"rtsps://{ip_address}:{rtsps_port}{rtsp_path}"
         
         initial_status = properties.get('status', 'discovered')
+        
+        mqtt_port = properties.get('mqtt_port', '8883')
+        mqtt_tls = properties.get('mqtt_tls', 'true')
         
         print(f"[mDNS] Registering camera: {camera_id}", flush=True)
         print(f"       Name: {camera_name}", flush=True)
         print(f"       IP: {ip_address}:{info.port}", flush=True)
-        print(f"       RTSP: {rtsp_url}", flush=True)
+        print(f"       RTSPS: {rtsp_url} (encrypted)", flush=True)
+        print(f"       MQTT: port {mqtt_port} (TLS: {mqtt_tls})", flush=True)
         print(f"       Status: {initial_status}", flush=True)
         
         with cameras_lock:

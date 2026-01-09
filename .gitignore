@@ -29,5 +29,8 @@ logs/
 # Security files (never commit!)
 .secret_key
 
+# SSL certificates (generated locally)
+certs/
+
 # Docker data volume
 data/

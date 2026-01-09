@@ -13,4 +13,5 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./certs:/app/certs
       - ./.env:/app/.env

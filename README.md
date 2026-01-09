@@ -2,6 +2,8 @@
 
 **View and control all your security cameras from one dashboard.**
 
+**🔒 Fully Encrypted:** HTTPS web UI, RTSPS video streams, MQTT over TLS
+
 ---
 
 ## 🚀 Quick Start
@@ -70,7 +72,7 @@ The Command Center starts automatically:
 ╔═══════════════════════════════════════════════════════════════╗
 ║                    Setup Complete!                            ║
 ╠═══════════════════════════════════════════════════════════════╣
-║  Dashboard:  http://localhost:5000                            ║
+║  Dashboard:  https://localhost:5000                           ║
 ║  Username:   admin                                            ║
 ║  Password:   ********                                         ║
 ╠═══════════════════════════════════════════════════════════════╣
@@ -81,7 +83,9 @@ The Command Center starts automatically:
 ╚═══════════════════════════════════════════════════════════════╝
 ```
 
-**Open http://localhost:5000** and log in. 🎉
+**Open https://localhost:5000** and log in. 🎉
+
+> **Note:** On first visit, your browser may show a certificate warning. This is normal for self-signed certificates. Click "Advanced" → "Proceed" to continue securely.
 
 ---
 
@@ -160,9 +164,43 @@ OPENSENTRY_SECRET=your-secret-key
 
 # Session timeout (minutes)
 SESSION_TIMEOUT=30
+
+# HTTPS (enabled by default)
+HTTPS_ENABLED=true
 ```
 
 After changes: `docker compose down && docker compose up -d`
+
+---
+
+## 🔒 Security Features
+
+OpenSentry implements enterprise-grade security:
+
+| Feature | Description |
+|---------|-------------|
+| **HTTPS** | Web UI encrypted with TLS on port 5000 |
+| **RTSPS** | Video streams encrypted on port 8322 |
+| **MQTT over TLS** | Control commands encrypted on port 8883 |
+| **Authentication** | Username/password with rate limiting |
+| **CSRF Protection** | Token-based protection on forms |
+| **Security Headers** | CSP, X-Frame-Options, etc. |
+| **Audit Logging** | Login attempts logged to `logs/audit.log` |
+| **Session Security** | Secure cookies, configurable timeout |
+
+### Certificate Trust
+
+The setup script offers to add the self-signed certificate to your system trust store:
+- **Chrome/Chromium:** Uses system store (auto-trusted)
+- **Firefox:** One-time "Accept the Risk" click required
+
+### Network Ports
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 5000 | HTTPS | Web dashboard |
+| 8322 | RTSPS | Encrypted video from cameras |
+| 8883 | MQTTS | Encrypted control commands |
 
 ---
 
@@ -205,7 +243,7 @@ cd OpenSentry-Command
 chmod +x setup.sh && ./setup.sh
 ```
 
-**Access the dashboard at http://localhost:5000** from your Windows browser.
+**Access the dashboard at https://localhost:5000** from your Windows browser.
 
 ---
 

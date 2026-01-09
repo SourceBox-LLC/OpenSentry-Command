@@ -2,6 +2,7 @@
 MQTT client for OpenSentry Command Center.
 Handles communication with camera nodes via MQTT broker.
 """
+import ssl
 import time
 import hashlib
 import paho.mqtt.client as mqtt
@@ -31,6 +32,15 @@ MQTT_USERNAME, MQTT_PASSWORD = _get_mqtt_credentials()
 # MQTT Client instance
 _client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=Config.MQTT_CLIENT_ID)
 _client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+# Configure TLS if enabled
+if Config.MQTT_USE_TLS:
+    # Create SSL context that accepts self-signed certificates
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE  # Accept self-signed certs
+    _client.tls_set_context(ssl_context)
+    print("[MQTT] 🔒 TLS encryption enabled")
 
 
 def _on_connect(client, userdata, flags, reason_code, properties):

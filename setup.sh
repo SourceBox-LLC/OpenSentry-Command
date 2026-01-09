@@ -29,7 +29,7 @@ if [ -f .env ]; then
         docker compose up --build -d
         echo ""
         echo "✅ Command Center is running!"
-        echo "   Dashboard: http://localhost:5000"
+        echo "   Dashboard: https://localhost:5000"
         echo "   Logs: docker compose logs -f"
         exit 0
     fi
@@ -59,6 +59,9 @@ echo ""
 echo "🔐 Generating security secret..."
 secret=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || openssl rand -hex 32)
 
+# Create certs directory
+mkdir -p certs
+
 # Create .env file
 cat > .env << EOF
 # OpenSentry Command Center Configuration
@@ -73,6 +76,9 @@ OPENSENTRY_SECRET=$secret
 
 # Session timeout in minutes
 SESSION_TIMEOUT=30
+
+# HTTPS (enabled by default for security)
+HTTPS_ENABLED=true
 EOF
 
 echo "✅ Configuration saved to .env"
@@ -82,11 +88,61 @@ echo ""
 echo "🚀 Starting Command Center..."
 docker compose up --build -d
 
+# Wait for certificate to be generated
+echo ""
+echo "⏳ Waiting for SSL certificate generation..."
+sleep 3
+
+# Check if cert exists and offer to trust it
+if [ -f "certs/server.crt" ]; then
+    echo "✅ SSL certificate generated"
+    echo ""
+    echo "🔒 To avoid browser security warnings, we can add the certificate"
+    echo "   to your system's trusted certificates. This requires sudo."
+    echo ""
+    read -p "   Trust the certificate? (Y/n): " trust_cert
+    trust_cert=${trust_cert:-y}
+    
+    if [ "$trust_cert" = "y" ] || [ "$trust_cert" = "Y" ]; then
+        echo ""
+        echo "🔐 Installing certificate (requires sudo)..."
+        
+        # Detect OS and install cert accordingly
+        if [ -d "/usr/local/share/ca-certificates" ]; then
+            # Debian/Ubuntu
+            sudo cp certs/server.crt /usr/local/share/ca-certificates/opensentry.crt
+            sudo update-ca-certificates >/dev/null 2>&1
+            echo "✅ Certificate trusted (system)"
+        elif [ -d "/etc/pki/ca-trust/source/anchors" ]; then
+            # RHEL/CentOS/Fedora
+            sudo cp certs/server.crt /etc/pki/ca-trust/source/anchors/opensentry.crt
+            sudo update-ca-trust >/dev/null 2>&1
+            echo "✅ Certificate trusted (system)"
+        else
+            echo "⚠️  Could not detect certificate store location"
+            echo "   You may still see browser warnings"
+        fi
+        
+        # Note: Chrome/Chromium use the system store, Firefox has its own
+        echo "✅ Certificate trusted (Chrome/Chromium)"
+        echo ""
+        echo "   ⚠️  Firefox uses its own certificate store."
+        echo "   On first visit, click 'Advanced' > 'Accept the Risk and Continue'"
+        echo "   This is a one-time action."
+        
+        echo ""
+        echo "   ℹ️  You may need to restart your browser for changes to take effect"
+    else
+        echo "   Skipping certificate trust"
+        echo "   You'll see a browser warning - click 'Advanced' > 'Proceed'"
+    fi
+fi
+
 echo ""
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║                    Setup Complete!                            ║"
 echo "╠═══════════════════════════════════════════════════════════════╣"
-echo "║  Dashboard:  http://localhost:5000                            ║"
+echo "║  Dashboard:  https://localhost:5000                           ║"
 echo "║  Username:   $username"
 echo "║  Password:   ********                                         ║"
 echo "╠═══════════════════════════════════════════════════════════════╣"

@@ -227,9 +227,14 @@ def _get_request_ip() -> str:
 def configure_session_security(app):
     """Configure secure session settings"""
     # Session cookie settings
-    app.config['SESSION_COOKIE_SECURE'] = os.environ.get('HTTPS_ENABLED', 'false').lower() == 'true'
+    https_enabled = os.environ.get('HTTPS_ENABLED', 'true').lower() == 'true'
+    app.config['SESSION_COOKIE_SECURE'] = https_enabled
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_NAME'] = 'opensentry_session'
     
+    if https_enabled:
+        print("[Security] 🔒 HTTPS mode: Secure cookies enabled")
+    else:
+        print("[Security] ⚠️  HTTP mode: Cookies not marked secure")
     print(f"[Security] Session cookies: HttpOnly=True, SameSite=Lax, Secure={app.config['SESSION_COOKIE_SECURE']}")

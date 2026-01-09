@@ -26,9 +26,10 @@ class Config:
     LOCKOUT_DURATION = 300  # 5 minutes
     ATTEMPT_WINDOW = 900    # 15 minutes
     
-    # MQTT
+    # MQTT (TLS on port 8883)
     MQTT_BROKER = os.environ.get('MQTT_BROKER', 'localhost')
-    MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
+    MQTT_PORT = int(os.environ.get('MQTT_PORT', '8883'))
+    MQTT_USE_TLS = os.environ.get('MQTT_USE_TLS', 'true').lower() == 'true'
     MQTT_CLIENT_ID = 'opensentry_command_center'
     MQTT_USERNAME = os.environ.get('MQTT_USERNAME', 'opensentry')
     MQTT_PASSWORD = os.environ.get('MQTT_PASSWORD', 'opensentry')
