@@ -1,15 +1,16 @@
 """
 Authentication handlers for OpenSentry Command Center.
-Uses Flask-Login with environment variable credentials.
+Uses Flask-Login with database-backed users.
 Includes rate limiting to prevent brute force attacks.
 Includes session timeout for security.
 Includes audit logging for security events.
 """
 import time
+from datetime import datetime
 from collections import defaultdict
 
 from flask import request
-from flask_login import LoginManager, UserMixin, current_user
+from flask_login import LoginManager, current_user
 
 from ..config import Config
 from ..security import audit_log, is_using_default_credentials
@@ -23,18 +24,8 @@ login_manager.login_message_category = 'info'
 # Track failed login attempts: {ip: [timestamps]}
 _failed_attempts = defaultdict(list)
 
-# In-memory user store (single admin user)
-_user = None
-
 # Flag for default credentials warning
 _using_default_credentials = False
-
-
-class User(UserMixin):
-    """Simple user class for Flask-Login"""
-    def __init__(self, user_id, username):
-        self.id = user_id
-        self.username = username
 
 
 def init_auth(app):
@@ -44,36 +35,35 @@ def init_auth(app):
     # Initialize Flask-Login
     login_manager.init_app(app)
     
-    # Create the admin user
-    global _user
-    _user = User('1', Config.OPENSENTRY_USERNAME)
+    # Import User model here to avoid circular imports
+    from ..models.database import User, db
     
-    # Check for default credentials
-    _using_default_credentials = is_using_default_credentials(
-        Config.OPENSENTRY_USERNAME, 
-        Config.OPENSENTRY_PASSWORD
-    )
-    
-    if _using_default_credentials:
-        print("\n" + "=" * 70)
-        print("⚠️  WARNING: DEFAULT CREDENTIALS DETECTED!")
-        print("=" * 70)
-        print("You are using default username/password.")
-        print("This is a SECURITY RISK. Please change your credentials in .env:")
-        print("  OPENSENTRY_USERNAME=your_username")
-        print("  OPENSENTRY_PASSWORD=your_secure_password")
-        print("=" * 70 + "\n")
-    
-    print(f"[Auth] Authentication enabled for user: {Config.OPENSENTRY_USERNAME}")
-    print(f"[Auth] Session timeout: {Config.SESSION_TIMEOUT_MINUTES} minutes")
+    with app.app_context():
+        # Get admin user count
+        admin_count = User.query.filter_by(role='admin').count()
+        total_users = User.query.count()
+        
+        # Check if default admin is using default password
+        admin = User.query.filter_by(username='admin').first()
+        if admin and admin.check_password('opensentry'):
+            _using_default_credentials = True
+            print("\n" + "=" * 70)
+            print("⚠️  WARNING: DEFAULT CREDENTIALS DETECTED!")
+            print("=" * 70)
+            print("The admin account is using the default password.")
+            print("This is a SECURITY RISK. Change it in Settings > User Management")
+            print("=" * 70 + "\n")
+        
+        print(f"[Auth] Database authentication enabled")
+        print(f"[Auth] Users: {total_users} total, {admin_count} admin(s)")
+        print(f"[Auth] Session timeout: {Config.SESSION_TIMEOUT_MINUTES} minutes")
 
 
 @login_manager.user_loader
 def load_user(user_id):
     """Load user by ID for Flask-Login"""
-    if _user and _user.id == user_id:
-        return _user
-    return None
+    from ..models.database import User
+    return User.query.get(int(user_id))
 
 
 def _clean_old_attempts(ip: str):
@@ -130,6 +120,8 @@ def get_client_ip() -> str:
 
 def authenticate(username: str, password: str):
     """Authenticate a user with username and password (with rate limiting)"""
+    from ..models.database import User, db
+    
     ip = get_client_ip()
     
     # Check rate limiting
@@ -138,10 +130,16 @@ def authenticate(username: str, password: str):
         audit_log('LOGIN_RATE_LIMITED', ip, username, f'Locked out for {remaining}s')
         return None
     
-    if username == Config.OPENSENTRY_USERNAME and password == Config.OPENSENTRY_PASSWORD:
+    # Look up user in database
+    user = User.query.filter_by(username=username).first()
+    
+    if user and user.is_active and user.check_password(password):
         _clear_failed_attempts(ip)
-        audit_log('LOGIN_SUCCESS', ip, username, 'Authentication successful')
-        return _user
+        # Update last login time
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+        audit_log('LOGIN_SUCCESS', ip, username, f'Authentication successful (role: {user.role})')
+        return user
     
     _record_failed_attempt(ip)
     attempts = len(_failed_attempts.get(ip, []))

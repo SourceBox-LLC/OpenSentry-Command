@@ -586,6 +586,37 @@ body {
     box-shadow: 0 6px 25px var(--accent-amber-glow);
 }
 
+.btn-snapshot {
+    background: var(--gradient-2);
+    color: #fff;
+    box-shadow: 0 4px 15px var(--accent-blue-glow);
+}
+
+.btn-snapshot:hover {
+    box-shadow: 0 6px 25px var(--accent-blue-glow);
+}
+
+.btn-record {
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(107, 114, 128, 0.4);
+}
+
+.btn-record:hover {
+    box-shadow: 0 6px 25px rgba(107, 114, 128, 0.4);
+}
+
+.btn-record.recording {
+    background: var(--gradient-4);
+    box-shadow: 0 4px 15px var(--accent-red-glow);
+    animation: pulse-record 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-record {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
 .btn-shutdown {
     background: var(--gradient-4);
     color: #fff;

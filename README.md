@@ -186,11 +186,12 @@ OpenSentry implements enterprise-grade security:
 | **HTTPS** | Web UI encrypted with TLS on port 5000 |
 | **RTSPS** | Video streams encrypted on port 8322 |
 | **MQTT over TLS** | Control commands encrypted on port 8883 |
-| **Authentication** | Username/password with rate limiting |
+| **Authentication** | Multi-user with roles (admin/viewer) |
 | **CSRF Protection** | Token-based protection on forms |
 | **Security Headers** | CSP, X-Frame-Options, etc. |
-| **Audit Logging** | Login attempts logged to `logs/audit.log` |
+| **Audit Logging** | All events stored in encrypted database |
 | **Session Security** | Secure cookies, configurable timeout |
+| **Media Storage** | Snapshots & recordings stored as encrypted DB blobs |
 
 ### Certificate Trust
 
@@ -209,6 +210,20 @@ The setup script offers to add the self-signed certificate to your system trust 
 | 5000 | HTTPS | Web dashboard |
 | 8322 | RTSPS | Encrypted video from cameras |
 | 8883 | MQTTS | Encrypted control commands |
+
+### Data Storage
+
+All data is stored in a single SQLite database (`data/opensentry.db`):
+
+| Data | Storage |
+|------|---------|
+| **Users** | Database (hashed passwords) |
+| **Cameras** | Database (metadata) |
+| **Snapshots** | Database (binary blobs) |
+| **Recordings** | Database (binary blobs) |
+| **Audit Logs** | Database |
+
+**No media files are exposed on the filesystem** - all snapshots and recordings are stored securely in the database.
 
 ---
 
@@ -265,8 +280,9 @@ chmod +x teardown.sh && ./teardown.sh
 
 You'll be prompted to remove:
 - Docker containers and images
-- Configuration files
-- Data and logs
+- Configuration files (.env)
+- Database (users, media, audit logs)
+- SSL certificates
 
 ---
 

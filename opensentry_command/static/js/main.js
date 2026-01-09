@@ -196,6 +196,67 @@ function resetRetry(cameraId) {
     retryCount[cameraId] = 0;
 }
 
+// Track recording state per camera
+const recordingState = {};
+
+// Take snapshot from camera
+async function takeSnapshot(cameraId) {
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/snapshot?save=true`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Snapshot saved: ${data.filename}`, 'success');
+        } else {
+            showToast(`Error: ${data.error}`, 'error');
+        }
+    } catch (err) {
+        console.error('Failed to take snapshot:', err);
+        showToast('Failed to take snapshot', 'error');
+    }
+}
+
+// Toggle recording on/off
+async function toggleRecording(cameraId) {
+    const btn = document.getElementById(`record-btn-${cameraId}`);
+    const isRecording = recordingState[cameraId];
+    
+    try {
+        const endpoint = isRecording ? 'stop' : 'start';
+        const response = await fetch(`/api/camera/${cameraId}/recording/${endpoint}`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (data.success || data.filename) {
+            recordingState[cameraId] = !isRecording;
+            
+            if (recordingState[cameraId]) {
+                btn.classList.add('recording');
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                    Stop
+                `;
+                showToast(`Recording started: ${data.filename}`, 'success');
+            } else {
+                btn.classList.remove('recording');
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                    Record
+                `;
+                showToast(`Recording saved: ${data.filename} (${data.duration}s)`, 'success');
+            }
+        } else {
+            showToast(`Error: ${data.error}`, 'error');
+        }
+    } catch (err) {
+        console.error('Failed to toggle recording:', err);
+        showToast('Failed to toggle recording', 'error');
+    }
+}
+
 // Send command to camera via REST API
 async function sendCommand(cameraId, command) {
     try {
@@ -269,6 +330,14 @@ function createCameraCard(cameraId, info) {
             <button class="btn btn-stop" onclick="sendCommand('${cameraId}', 'stop')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
                 Pause
+            </button>
+            <button class="btn btn-snapshot" onclick="takeSnapshot('${cameraId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3.2"/><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+                Snapshot
+            </button>
+            <button class="btn btn-record" id="record-btn-${cameraId}" onclick="toggleRecording('${cameraId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                Record
             </button>
             <button class="btn btn-shutdown" onclick="sendCommand('${cameraId}', 'shutdown')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>

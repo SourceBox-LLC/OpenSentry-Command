@@ -32,10 +32,10 @@ if [ "$remove_config" = "y" ] || [ "$remove_config" = "Y" ]; then
 fi
 
 echo ""
-read -p "Remove data and logs? (y/N): " remove_data
+read -p "Remove database (users, media, audit logs)? (y/N): " remove_data
 if [ "$remove_data" = "y" ] || [ "$remove_data" = "Y" ]; then
-    rm -rf ./data ./logs
-    echo "✅ Data and logs removed"
+    rm -rf ./data
+    echo "✅ Database removed"
 fi
 
 echo ""

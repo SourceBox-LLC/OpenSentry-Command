@@ -1,6 +1,7 @@
 """
 OpenSentry Command Center - Flask Application Factory
 """
+import os
 import signal
 import atexit
 
@@ -24,6 +25,12 @@ def create_app(config_class=Config):
     # Load configuration
     app.config.from_object(config_class)
     
+    # Configure SQLite database
+    db_path = os.environ.get('DATABASE_PATH', '/app/data/opensentry.db')
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
     # Generate proper secret key if not set
     if not app.config.get('SECRET_KEY'):
         app.config['SECRET_KEY'] = generate_secret_key()
@@ -37,7 +44,11 @@ def create_app(config_class=Config):
     # Make CSRF token available in all templates
     app.jinja_env.globals['csrf_token'] = generate_csrf_token
     
-    # Initialize extensions
+    # Initialize database
+    from .models.database import init_db
+    init_db(app)
+    
+    # Initialize authentication (now uses database)
     from .auth import init_auth
     init_auth(app)
     

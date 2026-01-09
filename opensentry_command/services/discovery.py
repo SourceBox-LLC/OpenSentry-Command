@@ -67,6 +67,9 @@ class OpenSentryServiceListener(ServiceListener):
     
     def _register_node(self, name: str, info) -> None:
         """Register a discovered node as a camera"""
+        from flask import current_app
+        from ..models.database import Camera, db
+        
         properties = self._extract_properties(info)
         
         ip_address = None
@@ -89,7 +92,7 @@ class OpenSentryServiceListener(ServiceListener):
         
         initial_status = properties.get('status', 'discovered')
         
-        mqtt_port = properties.get('mqtt_port', '8883')
+        mqtt_port = int(properties.get('mqtt_port', '8883'))
         mqtt_tls = properties.get('mqtt_tls', 'true')
         
         print(f"[mDNS] Registering camera: {camera_id}", flush=True)
@@ -98,6 +101,33 @@ class OpenSentryServiceListener(ServiceListener):
         print(f"       RTSPS: {rtsp_url} (encrypted)", flush=True)
         print(f"       MQTT: port {mqtt_port} (TLS: {mqtt_tls})", flush=True)
         print(f"       Status: {initial_status}", flush=True)
+        
+        # Persist camera to database
+        try:
+            from datetime import datetime
+            with current_app.app_context():
+                camera = Camera.query.filter_by(camera_id=camera_id).first()
+                if camera:
+                    # Update existing camera
+                    camera.name = camera_name
+                    camera.rtsp_url = rtsp_url
+                    camera.mqtt_port = mqtt_port
+                    camera.status = initial_status
+                    camera.last_seen = datetime.utcnow()
+                else:
+                    # Create new camera record
+                    camera = Camera(
+                        camera_id=camera_id,
+                        name=camera_name,
+                        rtsp_url=rtsp_url,
+                        mqtt_port=mqtt_port,
+                        status=initial_status,
+                        last_seen=datetime.utcnow()
+                    )
+                    db.session.add(camera)
+                db.session.commit()
+        except Exception as e:
+            print(f"[mDNS] Warning: Could not persist camera to database: {e}")
         
         with cameras_lock:
             CAMERAS[camera_id] = {

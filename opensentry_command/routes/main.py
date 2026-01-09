@@ -142,6 +142,23 @@ def settings():
                           username=Config.OPENSENTRY_USERNAME)
 
 
+@main_bp.route('/media')
+@login_required
+def media():
+    """Media library page for snapshots and recordings"""
+    return render_template('media.html')
+
+
+@main_bp.route('/users')
+@login_required
+def users():
+    """User management page (admin only)"""
+    if not current_user.is_admin():
+        flash('Admin access required', 'error')
+        return redirect(url_for('main.index'))
+    return render_template('users.html')
+
+
 @main_bp.route('/api/regenerate-secret', methods=['POST'])
 @login_required
 def regenerate_secret():

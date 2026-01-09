@@ -65,6 +65,15 @@ class CameraStream:
         self.retry_count = 0
         self.max_retries = 60
         
+        # Recording state
+        self.recording = False
+        self.recording_lock = threading.Lock()
+        self.video_writer = None
+        self.recording_filename = None
+        self.recording_tempfile = None
+        self.recording_start_time = None
+        self.frames_recorded = 0
+        
     def start(self):
         """Start the capture thread"""
         if self.running:
@@ -76,10 +85,110 @@ class CameraStream:
         
     def stop(self):
         """Stop the capture thread"""
+        self.stop_recording()  # Stop any active recording
         self.running = False
         if self.thread:
             self.thread.join(timeout=2)
         print(f"[Camera {self.camera_id}] Capture thread stopped")
+    
+    def start_recording(self) -> dict:
+        """Start recording video to temporary file"""
+        import tempfile
+        
+        with self.recording_lock:
+            if self.recording:
+                return {'error': 'Already recording', 'filename': self.recording_filename}
+            
+            if self.frame is None:
+                return {'error': 'No frame available to determine video size'}
+            
+            # Get frame dimensions
+            height, width = self.frame.shape[:2]
+            
+            # Create filename with timestamp
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            self.recording_filename = f"{self.camera_id}_{timestamp}.mp4"
+            
+            # Use temp directory for recording
+            self.recording_tempfile = tempfile.NamedTemporaryFile(
+                suffix='.mp4', delete=False
+            )
+            filepath = self.recording_tempfile.name
+            self.recording_tempfile.close()
+            
+            # Use mp4v codec for compatibility
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            self.video_writer = cv2.VideoWriter(filepath, fourcc, 15.0, (width, height))
+            
+            if not self.video_writer.isOpened():
+                self.video_writer = None
+                self.recording_filename = None
+                os.unlink(filepath)
+                return {'error': 'Failed to create video writer'}
+            
+            self.recording = True
+            self.recording_start_time = time.time()
+            self.frames_recorded = 0
+            print(f"[Recording] Started: {self.recording_filename} (temp: {filepath})")
+            
+            return {
+                'success': True,
+                'filename': self.recording_filename,
+                'camera_id': self.camera_id
+            }
+    
+    def stop_recording(self) -> dict:
+        """Stop recording and return video data"""
+        with self.recording_lock:
+            if not self.recording:
+                return {'error': 'Not recording'}
+            
+            self.recording = False
+            filename = self.recording_filename
+            frames = self.frames_recorded
+            duration = time.time() - self.recording_start_time if self.recording_start_time else 0
+            temp_path = self.recording_tempfile.name if self.recording_tempfile else None
+            
+            if self.video_writer:
+                self.video_writer.release()
+                self.video_writer = None
+            
+            # Read video data from temp file
+            video_data = None
+            if temp_path and os.path.exists(temp_path):
+                with open(temp_path, 'rb') as f:
+                    video_data = f.read()
+                os.unlink(temp_path)  # Delete temp file
+            
+            self.recording_filename = None
+            self.recording_start_time = None
+            self.frames_recorded = 0
+            self.recording_tempfile = None
+            
+            print(f"[Recording] Stopped: {filename} ({frames} frames, {duration:.1f}s, {len(video_data) if video_data else 0} bytes)")
+            
+            return {
+                'success': True,
+                'filename': filename,
+                'frames': frames,
+                'duration': round(duration, 1),
+                'data': video_data
+            }
+    
+    def get_recording_status(self) -> dict:
+        """Get current recording status"""
+        with self.recording_lock:
+            if not self.recording:
+                return {'recording': False}
+            
+            duration = time.time() - self.recording_start_time if self.recording_start_time else 0
+            return {
+                'recording': True,
+                'filename': self.recording_filename,
+                'frames': self.frames_recorded,
+                'duration': round(duration, 1)
+            }
         
     def _capture_loop(self):
         """Background thread that maintains persistent RTSP connection"""
@@ -119,6 +228,12 @@ class CameraStream:
                     with self.frame_lock:
                         self.frame = frame
                         self.last_frame_time = time.time()
+                    
+                    # Write frame to recording if active
+                    with self.recording_lock:
+                        if self.recording and self.video_writer:
+                            self.video_writer.write(frame)
+                            self.frames_recorded += 1
                 else:
                     consecutive_failures += 1
                     time.sleep(0.033)

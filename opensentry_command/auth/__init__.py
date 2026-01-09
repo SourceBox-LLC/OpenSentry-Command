@@ -10,5 +10,5 @@ from .handlers import (
     is_authenticated,
     is_using_defaults,
     log_logout,
-    User
 )
+from ..models.database import User

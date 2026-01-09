@@ -22,10 +22,6 @@ wheels/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
-
 # Security files (never commit!)
 .secret_key
 

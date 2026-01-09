@@ -5,64 +5,34 @@ Implements security headers, CSRF protection, and audit logging.
 import os
 import secrets
 import hashlib
-import logging
 from datetime import datetime
-from functools import wraps
 from pathlib import Path
 
-from flask import request, session, abort, g
+from flask import request, session, g
 
 
 # ============================================================================
-# AUDIT LOGGING
+# AUDIT LOGGING (Database Only)
 # ============================================================================
-
-# Setup audit logger
-_audit_logger = None
-
-
-def _get_audit_logger():
-    """Get or create the audit logger"""
-    global _audit_logger
-    if _audit_logger is None:
-        _audit_logger = logging.getLogger('opensentry.audit')
-        _audit_logger.setLevel(logging.INFO)
-        
-        # Create logs directory if it doesn't exist
-        log_dir = Path('/var/log/opensentry')
-        if not log_dir.exists():
-            # Fall back to local directory
-            log_dir = Path(__file__).parent.parent / 'logs'
-            log_dir.mkdir(exist_ok=True)
-        
-        # File handler for audit log
-        audit_file = log_dir / 'audit.log'
-        file_handler = logging.FileHandler(audit_file)
-        file_handler.setLevel(logging.INFO)
-        
-        # Format: timestamp | event_type | ip | user | details
-        formatter = logging.Formatter(
-            '%(asctime)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(formatter)
-        _audit_logger.addHandler(file_handler)
-        
-        # Also log to console
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(logging.Formatter('[Audit] %(message)s'))
-        _audit_logger.addHandler(console_handler)
-        
-        print(f"[Security] Audit logging enabled: {audit_file}")
-    
-    return _audit_logger
-
 
 def audit_log(event_type: str, ip: str, user: str = '-', details: str = ''):
-    """Log a security-relevant event"""
-    logger = _get_audit_logger()
-    logger.info(f"{event_type} | {ip} | {user} | {details}")
+    """Log a security-relevant event to database"""
+    try:
+        from flask import current_app
+        from .models.database import AuditLog, db
+        
+        with current_app.app_context():
+            log_entry = AuditLog(
+                event=event_type,
+                ip_address=ip,
+                username=user if user != '-' else None,
+                details=details
+            )
+            db.session.add(log_entry)
+            db.session.commit()
+    except Exception as e:
+        # Log to console only as fallback during startup
+        print(f"[Audit] {event_type} | {ip} | {user} | {details}")
 
 
 # ============================================================================
@@ -86,17 +56,6 @@ def validate_csrf_token():
     
     return secrets.compare_digest(token, form_token)
 
-
-def csrf_protect(f):
-    """Decorator to enforce CSRF protection on POST requests"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if request.method == 'POST':
-            if not validate_csrf_token():
-                audit_log('CSRF_FAILURE', _get_request_ip(), details='Invalid CSRF token')
-                abort(403, description='CSRF token validation failed')
-        return f(*args, **kwargs)
-    return decorated_function
 
 
 # ============================================================================
@@ -188,36 +147,6 @@ def is_using_default_credentials(username: str, password: str) -> bool:
     """Check if the provided credentials are known defaults"""
     return (username.lower(), password) in DEFAULT_CREDENTIALS
 
-
-def check_credential_strength(password: str) -> tuple[bool, str]:
-    """
-    Check password strength.
-    Returns (is_acceptable, message)
-    """
-    if len(password) < 8:
-        return False, "Password must be at least 8 characters"
-    
-    # Check for basic complexity (at least one letter and one number)
-    has_letter = any(c.isalpha() for c in password)
-    has_digit = any(c.isdigit() for c in password)
-    
-    if not (has_letter and has_digit):
-        return False, "Password should contain letters and numbers"
-    
-    return True, "OK"
-
-
-# ============================================================================
-# HELPER FUNCTIONS
-# ============================================================================
-
-def _get_request_ip() -> str:
-    """Get client IP from request"""
-    if request.headers.get('X-Forwarded-For'):
-        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
-    elif request.headers.get('X-Real-IP'):
-        return request.headers.get('X-Real-IP')
-    return request.remote_addr or '127.0.0.1'
 
 
 # ============================================================================

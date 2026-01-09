@@ -1,6 +1,6 @@
 # OpenSentry Command Center
 # Quick Start: docker compose up --build
-# Dashboard: http://localhost:5000
+# Dashboard: https://localhost:5000
 
 services:
   opensentry-command:
@@ -12,6 +12,5 @@ services:
       - .env
     volumes:
       - ./data:/app/data
-      - ./logs:/app/logs
       - ./certs:/app/certs
       - ./.env:/app/.env
