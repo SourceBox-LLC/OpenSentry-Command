@@ -4,6 +4,8 @@
 
 **🔒 Fully Encrypted:** HTTPS web UI, RTSPS video streams, MQTT over TLS
 
+![Dashboard](docs/images/dashboard.png)
+
 ---
 
 ## 🚀 Quick Start
@@ -95,6 +97,8 @@ The Command Center starts automatically:
 2. Click the **⚙️ Settings** icon (top right)
 3. Copy your **Security Secret**
 4. Set up [OpenSentry Camera Nodes](https://github.com/SourceBox-LLC/OpenSentry-Node) using this secret
+
+![Settings Page](docs/images/settings-page.png)
 
 Cameras auto-discover within 30 seconds.
 
@@ -193,6 +197,10 @@ OpenSentry implements enterprise-grade security:
 The setup script offers to add the self-signed certificate to your system trust store:
 - **Chrome/Chromium:** Uses system store (auto-trusted)
 - **Firefox:** One-time "Accept the Risk" click required
+
+![Certificate Warning](docs/images/certificate-warning.png)
+
+*Firefox shows this warning on first visit - click "Advanced" → "Accept the Risk and Continue"*
 
 ### Network Ports
 
