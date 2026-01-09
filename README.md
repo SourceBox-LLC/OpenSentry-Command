@@ -100,6 +100,14 @@ The Command Center starts automatically:
 
 ![Settings Page](docs/images/settings-page.png)
 
+### User Management
+
+Admins can create and manage user accounts from **Settings → Manage Users**:
+- **Admin** role: Full access to all features
+- **Viewer** role: View-only access to camera streams
+
+![User Management](docs/images/user-management.png)
+
 Cameras auto-discover within 30 seconds.
 
 ---
