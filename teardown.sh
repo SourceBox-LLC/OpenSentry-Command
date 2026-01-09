@@ -34,7 +34,7 @@ fi
 echo ""
 read -p "Remove database (users, media, audit logs)? (y/N): " remove_data
 if [ "$remove_data" = "y" ] || [ "$remove_data" = "Y" ]; then
-    rm -rf ./data
+    sudo rm -rf ./data
     echo "✅ Database removed"
 fi
 
