@@ -126,3 +126,95 @@ def video_feed(camera_id):
         return Response(generate_frames(camera_id),
                        mimetype='multipart/x-mixed-replace; boundary=frame')
     return "Camera not found", 404
+
+
+@main_bp.route('/settings')
+@login_required
+def settings():
+    """Settings page"""
+    from ..config import Config
+    
+    # Get the secret, mask it partially for display
+    secret = Config.OPENSENTRY_SECRET or ''
+    
+    return render_template('settings.html', 
+                          opensentry_secret=secret,
+                          username=Config.OPENSENTRY_USERNAME)
+
+
+@main_bp.route('/api/regenerate-secret', methods=['POST'])
+@login_required
+def regenerate_secret():
+    """Regenerate the OPENSENTRY_SECRET and update .env file"""
+    import secrets
+    import os
+    from ..config import Config
+    from ..security import audit_log
+    from ..services import camera as camera_service
+    from ..models.camera import CAMERAS, camera_streams, cameras_lock
+    
+    ip = get_client_ip()
+    
+    # Generate new secret
+    new_secret = secrets.token_hex(32)
+    
+    # Find and update .env file
+    env_path = '/app/.env'  # Docker path
+    if not os.path.exists(env_path):
+        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+    
+    if not os.path.exists(env_path):
+        audit_log('SECRET_REGENERATE_FAILED', ip, current_user.username, 'No .env file found')
+        return {'success': False, 'error': 'No .env file found'}, 404
+    
+    try:
+        # Read existing .env
+        with open(env_path, 'r') as f:
+            lines = f.readlines()
+        
+        # Update or add OPENSENTRY_SECRET
+        secret_found = False
+        new_lines = []
+        for line in lines:
+            if line.startswith('OPENSENTRY_SECRET='):
+                new_lines.append(f'OPENSENTRY_SECRET={new_secret}\n')
+                secret_found = True
+            else:
+                new_lines.append(line)
+        
+        if not secret_found:
+            new_lines.append(f'\nOPENSENTRY_SECRET={new_secret}\n')
+        
+        # Write back
+        with open(env_path, 'w') as f:
+            f.writelines(new_lines)
+        
+        # Update in-memory config
+        Config.OPENSENTRY_SECRET = new_secret
+        os.environ['OPENSENTRY_SECRET'] = new_secret
+        
+        # Update RTSP credentials module-level variables
+        new_username, new_password = camera_service._get_rtsp_credentials()
+        camera_service.RTSP_USERNAME = new_username
+        camera_service.RTSP_PASSWORD = new_password
+        
+        # Stop all existing camera streams and clear cameras
+        with cameras_lock:
+            for camera_id, stream in list(camera_streams.items()):
+                print(f"[Secret Regeneration] Stopping stream for {camera_id}")
+                stream.stop()
+            camera_streams.clear()
+            CAMERAS.clear()
+            print("[Secret Regeneration] Cleared all cameras - awaiting re-discovery")
+        
+        audit_log('SECRET_REGENERATED', ip, current_user.username, 'Security secret regenerated successfully')
+        
+        return {
+            'success': True, 
+            'secret': new_secret,
+            'message': 'Secret regenerated. Update your camera nodes with the new secret.'
+        }
+    
+    except Exception as e:
+        audit_log('SECRET_REGENERATE_FAILED', ip, current_user.username, str(e))
+        return {'success': False, 'error': str(e)}, 500

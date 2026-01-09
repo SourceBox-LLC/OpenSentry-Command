@@ -60,21 +60,7 @@ Choose a password (min 8 chars): ********
 
 ---
 
-### Step 5: Save Your Security Secret
-
-A secret key is generated automatically. **Copy this - you'll need it for camera nodes!**
-
-```
-╔═══════════════════════════════════════════════════════════════╗
-║  IMPORTANT: Copy this secret to your Camera Nodes!            ║
-╠═══════════════════════════════════════════════════════════════╣
-║  OPENSENTRY_SECRET=7de776c167242fbf10da85c3d182a9fb...        ║
-╚═══════════════════════════════════════════════════════════════╝
-```
-
----
-
-### Step 6: Done!
+### Step 5: Done!
 
 The Command Center starts automatically:
 
@@ -101,9 +87,10 @@ The Command Center starts automatically:
 
 ## 📷 Adding Cameras
 
-Set up [OpenSentry Camera Nodes](https://github.com/SourceBox-LLC/OpenSentry-Node) on your network.
-
-**Important:** When setting up camera nodes, use the same `OPENSENTRY_SECRET` shown during Command Center setup.
+1. Log into the Command Center dashboard
+2. Click the **⚙️ Settings** icon (top right)
+3. Copy your **Security Secret**
+4. Set up [OpenSentry Camera Nodes](https://github.com/SourceBox-LLC/OpenSentry-Node) using this secret
 
 Cameras auto-discover within 30 seconds.
 
@@ -139,6 +126,9 @@ docker compose restart
 
 # Update
 git pull && docker compose up --build -d
+
+# Complete teardown
+chmod +x teardown.sh && ./teardown.sh
 ```
 
 ---
@@ -216,6 +206,21 @@ chmod +x setup.sh && ./setup.sh
 ```
 
 **Access the dashboard at http://localhost:5000** from your Windows browser.
+
+---
+
+## 🗑️ Uninstall
+
+To completely remove OpenSentry Command Center:
+
+```bash
+chmod +x teardown.sh && ./teardown.sh
+```
+
+You'll be prompted to remove:
+- Docker containers and images
+- Configuration files
+- Data and logs
 
 ---
 

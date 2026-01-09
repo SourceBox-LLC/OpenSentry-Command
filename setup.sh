@@ -77,12 +77,6 @@ EOF
 
 echo "✅ Configuration saved to .env"
 echo ""
-echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║  IMPORTANT: Copy this secret to your Camera Nodes!            ║"
-echo "╠═══════════════════════════════════════════════════════════════╣"
-echo "║  OPENSENTRY_SECRET=$secret"
-echo "╚═══════════════════════════════════════════════════════════════╝"
-echo ""
 
 # Start the service
 echo "🚀 Starting Command Center..."

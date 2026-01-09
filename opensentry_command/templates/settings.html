@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - OpenSentry Command Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .settings-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .settings-header {
+            margin-bottom: 2rem;
+        }
+
+        .settings-header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .settings-header p {
+            color: var(--text-secondary);
+        }
+
+        .settings-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .settings-card h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .settings-card p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+
+        .secret-display {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+            word-break: break-all;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .secret-value {
+            flex: 1;
+            color: var(--accent-green);
+        }
+
+        .secret-hidden {
+            color: var(--text-muted);
+        }
+
+        .copy-btn {
+            background: var(--gradient-2);
+            border: none;
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .copy-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--accent-blue-glow);
+        }
+
+        .copy-btn.copied {
+            background: var(--gradient-1);
+        }
+
+        .regenerate-btn {
+            background: var(--gradient-3);
+            border: none;
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .regenerate-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--accent-amber-glow);
+        }
+
+        .regenerate-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Modal styles */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal h3 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .modal p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .modal-warning {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            color: var(--accent-red);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 0.6rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .modal-btn-cancel {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+        }
+
+        .modal-btn-cancel:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .modal-btn-danger {
+            background: var(--gradient-4);
+            border: none;
+            color: white;
+        }
+
+        .modal-btn-danger:hover {
+            box-shadow: 0 4px 12px var(--accent-red-glow);
+        }
+
+        .success-message {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--accent-green);
+            display: none;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        .toggle-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.5rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .toggle-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .no-secret-warning {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            color: var(--accent-red);
+            font-size: 0.875rem;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .info-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875rem;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.875rem;
+            margin-bottom: 1.5rem;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--text-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">🛡️</div>
+                <div class="logo-text">Open<span>Sentry</span></div>
+            </div>
+            <div class="system-status">
+                <a href="{{ url_for('main.index') }}" class="logout-btn" title="Dashboard">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                        <polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                </a>
+                <a href="{{ url_for('main.logout') }}" class="logout-btn" title="Logout">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <polyline points="16 17 21 12 16 7"/>
+                        <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="settings-container">
+            <a href="{{ url_for('main.index') }}" class="back-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                Back to Dashboard
+            </a>
+
+            <div class="settings-header">
+                <h1>⚙️ Settings</h1>
+                <p>Manage your OpenSentry Command Center configuration</p>
+            </div>
+
+            <div class="settings-card">
+                <h2>🔑 Security Secret</h2>
+                <p>Use this secret when setting up Camera Nodes. All nodes must use the same secret to connect.</p>
+                
+                {% if opensentry_secret %}
+                <div class="secret-display">
+                    <span class="secret-value" id="secret-value">{{ opensentry_secret }}</span>
+                    <button class="toggle-btn" onclick="toggleSecret()" title="Show/Hide">
+                        <svg id="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                    <button class="copy-btn" onclick="copySecret()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                        </svg>
+                        <span id="copy-text">Copy</span>
+                    </button>
+                    <button class="regenerate-btn" onclick="showRegenerateConfirm()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        <span>Regenerate</span>
+                    </button>
+                </div>
+                {% else %}
+                <div class="no-secret-warning">
+                    ⚠️ No security secret configured. Run <code>./setup.sh</code> to generate one, or add <code>OPENSENTRY_SECRET</code> to your .env file.
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="settings-card">
+                <h2>📋 Current Configuration</h2>
+                <p>Your current Command Center settings.</p>
+                
+                <div class="info-row">
+                    <span class="info-label">Username</span>
+                    <span class="info-value">{{ username }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Dashboard URL</span>
+                    <span class="info-value">http://localhost:5000</span>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <h2>📷 Adding Camera Nodes</h2>
+                <p>To add a camera node, run the setup script on your camera device and enter the security secret above when prompted.</p>
+                
+                <div class="secret-display" style="background: var(--bg-primary);">
+                    <code style="color: var(--text-secondary); font-size: 0.8rem;">
+                        git clone https://github.com/SourceBox-LLC/OpenSentry-Node.git<br>
+                        cd OpenSentry-Node<br>
+                        chmod +x setup.sh && ./setup.sh
+                    </code>
+                </div>
+            </div>
+
+            <div id="success-message" class="success-message"></div>
+        </div>
+    </main>
+
+    <!-- Regenerate Confirmation Modal -->
+    <div class="modal-overlay" id="regenerate-modal">
+        <div class="modal">
+            <h3>⚠️ Regenerate Security Secret?</h3>
+            <p>This will create a new security secret. Your current secret will be replaced.</p>
+            <div class="modal-warning">
+                <strong>Warning:</strong> All connected camera nodes will disconnect immediately. You will need to run <code>./setup.sh</code> on each camera node and enter the new secret.
+            </div>
+            <div class="modal-buttons">
+                <button class="modal-btn modal-btn-cancel" onclick="hideRegenerateConfirm()">Cancel</button>
+                <button class="modal-btn modal-btn-danger" onclick="regenerateSecret()">Regenerate Secret</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const secretValue = document.getElementById('secret-value');
+        let originalSecret = secretValue ? secretValue.textContent : '';
+        let isHidden = true;
+
+        // Hide by default on page load
+        if (secretValue && originalSecret) {
+            secretValue.textContent = '•'.repeat(originalSecret.length);
+            secretValue.classList.add('secret-hidden');
+        }
+
+        function toggleSecret() {
+            if (!secretValue) return;
+            
+            if (isHidden) {
+                secretValue.textContent = originalSecret;
+                secretValue.classList.remove('secret-hidden');
+            } else {
+                secretValue.textContent = '•'.repeat(originalSecret.length);
+                secretValue.classList.add('secret-hidden');
+            }
+            isHidden = !isHidden;
+        }
+
+        function copySecret() {
+            if (!originalSecret) return;
+            
+            navigator.clipboard.writeText(originalSecret).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                const text = document.getElementById('copy-text');
+                btn.classList.add('copied');
+                text.textContent = 'Copied!';
+                
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    text.textContent = 'Copy';
+                }, 2000);
+            });
+        }
+
+        function showRegenerateConfirm() {
+            document.getElementById('regenerate-modal').classList.add('active');
+        }
+
+        function hideRegenerateConfirm() {
+            document.getElementById('regenerate-modal').classList.remove('active');
+        }
+
+        async function regenerateSecret() {
+            const btn = document.querySelector('.modal-btn-danger');
+            btn.disabled = true;
+            btn.textContent = 'Regenerating...';
+
+            try {
+                const response = await fetch('/api/regenerate-secret', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Update the displayed secret
+                    originalSecret = data.secret;
+                    
+                    // Update display (keep it hidden)
+                    secretValue.textContent = '•'.repeat(originalSecret.length);
+                    secretValue.classList.add('secret-hidden');
+                    isHidden = true;
+
+                    // Hide modal
+                    hideRegenerateConfirm();
+
+                    // Show success message
+                    const successMsg = document.getElementById('success-message');
+                    successMsg.innerHTML = '✅ Secret regenerated successfully! Copy the new secret and update your camera nodes.';
+                    successMsg.classList.add('show');
+
+                    // Auto-reveal the new secret so user can copy it
+                    setTimeout(() => {
+                        secretValue.textContent = originalSecret;
+                        secretValue.classList.remove('secret-hidden');
+                        isHidden = false;
+                    }, 500);
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to regenerate secret'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Regenerate Secret';
+            }
+        }
+
+        // Close modal on overlay click
+        document.getElementById('regenerate-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                hideRegenerateConfirm();
+            }
+        });
+    </script>
+</body>
+</html>
