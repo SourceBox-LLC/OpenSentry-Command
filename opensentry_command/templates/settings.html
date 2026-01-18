@@ -290,6 +290,54 @@
         .back-link:hover {
             color: var(--text-primary);
         }
+
+        /* Toggle Switch Styles */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-card-hover);
+            border: 1px solid var(--border-color);
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background: var(--gradient-1);
+            border-color: transparent;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
     </style>
 </head>
 <body>
@@ -381,6 +429,26 @@
                 <div class="info-row">
                     <span class="info-label">Dashboard URL</span>
                     <span class="info-value">https://localhost:5000</span>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <h2>🔔 Notifications</h2>
+                <p>Configure notification preferences.</p>
+                
+                <div class="info-row">
+                    <span class="info-label">Motion Detection Alerts</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="motion-notifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Show Toast Notifications</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toast-notifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
                 </div>
             </div>
 
@@ -534,6 +602,30 @@
                 hideRegenerateConfirm();
             }
         });
+
+        // Notification Settings
+        const motionToggle = document.getElementById('motion-notifications');
+        const toastToggle = document.getElementById('toast-notifications');
+
+        // Load saved preferences
+        const motionEnabled = localStorage.getItem('motionNotifications') !== 'false'; // Default: true
+        const toastEnabled = localStorage.getItem('toastNotifications') !== 'false'; // Default: true
+        
+        if (motionToggle) {
+            motionToggle.checked = motionEnabled;
+            motionToggle.addEventListener('change', (e) => {
+                localStorage.setItem('motionNotifications', e.target.checked);
+                console.log('Motion notifications:', e.target.checked ? 'enabled' : 'disabled');
+            });
+        }
+
+        if (toastToggle) {
+            toastToggle.checked = toastEnabled;
+            toastToggle.addEventListener('change', (e) => {
+                localStorage.setItem('toastNotifications', e.target.checked);
+                console.log('Toast notifications:', e.target.checked ? 'enabled' : 'disabled');
+            });
+        }
     </script>
 </body>
 </html>

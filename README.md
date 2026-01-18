@@ -1,8 +1,9 @@
 # 🛡️ OpenSentry Command Center
 
-**View and control all your security cameras from one dashboard.**
+**View and control all your security cameras from one dashboard with real-time motion detection.**
 
-**🔒 Fully Encrypted:** HTTPS web UI, RTSPS video streams, MQTT over TLS
+**🔒 Fully Encrypted:** HTTPS web UI, RTSPS video streams, MQTT over TLS  
+**🎯 Motion Detection:** Real-time alerts, motion history, and smart notifications
 
 ![Dashboard](docs/images/dashboard.png)
 
@@ -112,19 +113,60 @@ Cameras auto-discover within 30 seconds.
 
 ---
 
+## 🎯 Motion Detection Features
+
+OpenSentry automatically detects and responds to motion from compatible camera nodes:
+
+### Real-Time Motion Alerts
+- **Visual Indicators:** Red badge appears on camera feed when motion detected
+- **Toast Notifications:** Pop-up alerts for motion events
+- **Animation Effects:** Camera cards pulse when motion is active
+
+### Motion History
+- Click **📜 Motion History** on any camera to view recent events
+- Stores last 100 motion events per camera
+- Shows timestamp and duration for each event
+
+### Notification Settings
+Configure motion alerts in **Settings → Notifications**:
+- **Motion Detection Alerts:** Toggle motion notifications on/off
+- **Toast Notifications:** Enable/disable pop-up alerts
+- Preferences saved locally in your browser
+
+### Supported Motion Nodes
+- [OpenSentry-MotionNode](https://github.com/SourceBox-LLC/OpenSentry-MotionNode) - Motion detection with OpenCV
+- Basic nodes show as "📷 Basic Camera Node"
+- Motion nodes show as "🎯 Motion Detection Node"
+
+---
+
 ## 🎮 Dashboard Controls
+
+### Camera Controls
 
 | Button | Action |
 |--------|--------|
 | **▶ Start** | Start video stream |
 | **⏸ Pause** | Pause stream |
 | **⏻ Shutdown** | Turn off camera |
+| **📜 Motion History** | View recent motion events |
+| **❌ Forget** | Remove camera from system |
+
+### Status Indicators
 
 | Status | Meaning |
 |--------|---------|
 | 🟢 Streaming | Camera active |
 | 🟡 Idle | Paused |
 | 🔴 Offline | Not responding |
+| 🔴 MOTION DETECTED! | Motion currently active |
+
+### Node Types
+
+| Icon | Type | Features |
+|------|------|----------|
+| 📷 | Basic Camera Node | Live streaming only |
+| 🎯 | Motion Detection Node | Live streaming + motion detection |
 
 ---
 
@@ -189,6 +231,42 @@ Access your Command Center from anywhere using [Tailscale](https://tailscale.com
 
 ---
 
+## 🔌 API Endpoints
+
+The Command Center provides REST API endpoints for integration:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/cameras` | GET | List all cameras with status and motion data |
+| `/api/camera/<id>/status` | GET | Get specific camera status |
+| `/api/camera/<id>/command` | POST | Send command (start/stop/shutdown) |
+| `/api/camera/<id>/forget` | DELETE | Remove camera from system |
+| `/api/regenerate-secret` | POST | Generate new security secret |
+
+### Camera Data Response
+```json
+{
+  "camera-id": {
+    "name": "motion-cam-test",
+    "status": "streaming",
+    "node_type": "motion",
+    "capabilities": "streaming,motion_detection",
+    "motion_active": false,
+    "motion_events": [
+      {
+        "event": "motion_start",
+        "timestamp": 1234567890,
+        "area_x": 100,
+        "area_y": 200
+      }
+    ],
+    "last_seen": 1234567890
+  }
+}
+```
+
+---
+
 ## ❓ Troubleshooting
 
 | Problem | Solution |
@@ -197,6 +275,8 @@ Access your Command Center from anywhere using [Tailscale](https://tailscale.com
 | **Can't log in** | Default: `admin` / `opensentry`. Check `.env` file. |
 | **Account locked** | Wait 5 minutes. |
 | **Port 5000 in use** | Stop other app or edit port in `docker-compose.yml` |
+| **Motion not detected** | Ensure using motion-capable node. Check MQTT connection. |
+| **No motion alerts** | Check notification settings in dashboard. |
 
 **Still stuck?** Run `docker compose logs -f` and check for errors.
 

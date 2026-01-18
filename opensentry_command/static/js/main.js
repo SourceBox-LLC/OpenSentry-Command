@@ -4,6 +4,10 @@
 
 // Toast notification system
 function showToast(message, type = 'success') {
+    // Check if toast notifications are enabled
+    const toastEnabled = localStorage.getItem('toastNotifications') !== 'false';
+    if (!toastEnabled) return;
+    
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -286,6 +290,126 @@ async function sendCommand(cameraId, command) {
     }
 }
 
+// Forget/remove a camera from the system
+async function forgetCamera(cameraId, cameraName) {
+    // Show confirmation dialog
+    const confirmMessage = `Are you sure you want to forget camera "${cameraName}" (${cameraId})?\n\nThis will:\n• Remove the camera from the system\n• Delete all associated snapshots and recordings\n• Stop monitoring this camera\n\nThis action cannot be undone.`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/forget`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            showToast(data.message, 'success');
+            
+            // Remove camera card from UI
+            const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
+            if (card) {
+                card.style.animation = 'fadeOut 0.5s ease-out';
+                setTimeout(() => card.remove(), 500);
+            }
+            
+            // Remove from known cameras set
+            knownCameras.delete(cameraId);
+            delete previousStatus[cameraId];
+            
+            // Update node count
+            updateNodeCount();
+        } else {
+            showToast(`Error: ${data.error || 'Failed to forget camera'}`, 'error');
+        }
+    } catch (err) {
+        console.error('Failed to forget camera:', err);
+        showToast('Failed to forget camera', 'error');
+    }
+}
+
+// Store motion events per camera
+const cameraMotionEvents = {};
+const MAX_MOTION_EVENTS = 10; // Per camera
+
+// Toggle camera-specific motion history panel
+function toggleCameraMotionHistory(cameraId) {
+    const panel = document.getElementById(`motion-history-${cameraId}`);
+    if (panel) {
+        panel.classList.toggle('hidden');
+    }
+}
+
+// Add motion event to camera history
+function addMotionEvent(cameraId, cameraName, eventType, timestamp) {
+    if (!cameraMotionEvents[cameraId]) {
+        cameraMotionEvents[cameraId] = [];
+    }
+    
+    const event = {
+        eventType,
+        timestamp: timestamp || Date.now(),
+        time: new Date().toLocaleTimeString()
+    };
+    
+    cameraMotionEvents[cameraId].unshift(event);
+    if (cameraMotionEvents[cameraId].length > MAX_MOTION_EVENTS) {
+        cameraMotionEvents[cameraId].pop();
+    }
+    
+    updateCameraMotionHistory(cameraId);
+}
+
+// Update camera-specific motion history display
+function updateCameraMotionHistory(cameraId) {
+    const listEl = document.getElementById(`motion-events-${cameraId}`);
+    if (!listEl) return;
+    
+    const events = cameraMotionEvents[cameraId] || [];
+    
+    if (events.length === 0) {
+        listEl.innerHTML = '<p class="no-events">No recent motion events</p>';
+        return;
+    }
+    
+    listEl.innerHTML = events.map(event => `
+        <div class="motion-event-mini">
+            <span class="event-icon">${event.eventType === 'motion_start' ? '🔴' : '⭕'}</span>
+            <span class="event-time">${event.time}</span>
+            <span class="event-type">${event.eventType === 'motion_start' ? 'Motion' : 'End'}</span>
+        </div>
+    `).join('');
+}
+
+// Update node count display
+function updateNodeCount() {
+    const cameras = document.querySelectorAll('.camera-card');
+    let activeCount = 0;
+    
+    cameras.forEach(card => {
+        const statusEl = card.querySelector('.status-badge');
+        if (statusEl) {
+            const status = statusEl.querySelector('.status-text').textContent;
+            if (status === 'streaming' || status === 'online' || status === 'discovered') {
+                activeCount++;
+            }
+        }
+    });
+    
+    const nodesCount = document.getElementById('nodes-count');
+    const nodesDot = document.getElementById('nodes-dot');
+    if (nodesCount && nodesDot) {
+        nodesCount.textContent = `${activeCount} Node${activeCount !== 1 ? 's' : ''} Online`;
+        nodesDot.className = activeCount > 0 ? 'status-dot' : 'status-dot error';
+    }
+    
+    return activeCount;
+}
+
 // Track known cameras - initialize with any server-rendered cards
 const knownCameras = new Set();
 
@@ -297,6 +421,17 @@ function createCameraCard(cameraId, info) {
     const card = document.createElement('div');
     card.className = 'camera-card';
     card.dataset.cameraId = cameraId;
+    
+    // Determine node type display
+    let nodeTypeDisplay = '';
+    if (info.node_type === 'motion') {
+        nodeTypeDisplay = '🎯 Motion Detection Node';
+    } else if (info.node_type === 'basic') {
+        nodeTypeDisplay = '📷 Basic Camera Node';
+    } else {
+        nodeTypeDisplay = `📹 ${info.node_type || 'Unknown'} Node`;
+    }
+    
     card.innerHTML = `
         <div class="camera-header">
             <div class="camera-info">
@@ -304,6 +439,7 @@ function createCameraCard(cameraId, info) {
                 <div class="camera-details">
                     <h3>${info.name}</h3>
                     <span>${cameraId}</span>
+                    <span class="node-type" id="node-type-${cameraId}">${nodeTypeDisplay}</span>
                 </div>
             </div>
             <div class="status-badge ${info.status}" id="status-${cameraId}">
@@ -343,7 +479,24 @@ function createCameraCard(cameraId, info) {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
                 Shutdown
             </button>
+            <button class="btn btn-forget" onclick="forgetCamera('${cameraId}', '${info.name}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                Forget
+            </button>
         </div>
+        ${info.node_type === 'motion' ? `
+        <div class="camera-motion-controls">
+            <button class="btn btn-motion-history" onclick="toggleCameraMotionHistory('${cameraId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+                Motion History
+            </button>
+            <div class="motion-history-panel hidden" id="motion-history-${cameraId}">
+                <div class="motion-events-mini" id="motion-events-${cameraId}">
+                    <p class="no-events">No recent motion events</p>
+                </div>
+            </div>
+        </div>
+        ` : ''}
     `;
     return card;
 }
@@ -396,6 +549,88 @@ async function updateStatus() {
                 const textEl = statusEl.querySelector('.status-text');
                 if (textEl) textEl.textContent = info.status;
                 statusEl.className = `status-badge ${info.status}`;
+            }
+            
+            // Update node type if changed
+            const nodeTypeEl = document.getElementById(`node-type-${cameraId}`);
+            if (nodeTypeEl && info.node_type) {
+                let nodeTypeDisplay = '';
+                if (info.node_type === 'motion') {
+                    nodeTypeDisplay = '🎯 Motion Detection Node';
+                } else if (info.node_type === 'basic') {
+                    nodeTypeDisplay = '📷 Basic Camera Node';
+                } else {
+                    nodeTypeDisplay = `📹 ${info.node_type} Node`;
+                }
+                if (nodeTypeEl.textContent !== nodeTypeDisplay) {
+                    nodeTypeEl.textContent = nodeTypeDisplay;
+                }
+            }
+            
+            // Sync motion events from server
+            if (info.motion_events && Array.isArray(info.motion_events)) {
+                // Update local cache with server events
+                cameraMotionEvents[cameraId] = info.motion_events.slice(0, MAX_MOTION_EVENTS).map(event => ({
+                    eventType: event.event,
+                    timestamp: event.timestamp * 1000, // Convert to milliseconds
+                    time: new Date(event.timestamp * 1000).toLocaleTimeString()
+                }));
+                updateCameraMotionHistory(cameraId);
+            }
+            
+            // Handle motion detection
+            if (info.motion_active !== undefined) {
+                const wasActive = previousStatus[`${cameraId}_motion`] || false;
+                
+                if (info.motion_active && !wasActive) {
+                    // Motion just started
+                    const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
+                    if (card) {
+                        card.classList.add('motion-active');
+                    }
+                    
+                    // Add motion badge to feed overlay
+                    const feedOverlay = document.getElementById(`feed-overlay-${cameraId}`);
+                    if (feedOverlay && !feedOverlay.querySelector('.motion-badge')) {
+                        const motionBadge = document.createElement('span');
+                        motionBadge.className = 'feed-tag motion-badge';
+                        motionBadge.innerHTML = '🔴 MOTION DETECTED!';
+                        feedOverlay.appendChild(motionBadge);
+                    }
+                    
+                    // Show toast notification if motion alerts are enabled
+                    const motionEnabled = localStorage.getItem('motionNotifications') !== 'false';
+                    if (motionEnabled) {
+                        showToast(`🎯 Motion detected on ${info.name}!`, 'warning');
+                    }
+                    
+                    // Add to history if not already in server events
+                    if (!info.motion_events || info.motion_events.length === 0 || 
+                        info.motion_events[0].event !== 'motion_start') {
+                        addMotionEvent(cameraId, info.name, 'motion_start');
+                    }
+                    
+                } else if (!info.motion_active && wasActive) {
+                    // Motion just ended
+                    const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
+                    if (card) {
+                        card.classList.remove('motion-active');
+                    }
+                    
+                    // Remove motion badge from feed
+                    const motionBadge = document.querySelector(`#feed-overlay-${cameraId} .motion-badge`);
+                    if (motionBadge) {
+                        motionBadge.remove();
+                    }
+                    
+                    // Add to history if not already in server events
+                    if (!info.motion_events || info.motion_events.length === 0 || 
+                        info.motion_events[0].event !== 'motion_end') {
+                        addMotionEvent(cameraId, info.name, 'motion_end');
+                    }
+                }
+                
+                previousStatus[`${cameraId}_motion`] = info.motion_active;
             }
 
             // Handle status changes
@@ -450,8 +685,9 @@ async function updateStatus() {
         // Update MQTT/Nodes status
         const mqttDot = document.getElementById('mqtt-dot');
         const mqttText = document.getElementById('mqtt-text');
-        const nodesDot = document.getElementById('nodes-dot');
-        const nodesCount = document.getElementById('nodes-count');
+
+        // Use the updateNodeCount function for consistency
+        updateNodeCount();
 
         const anyOnline = Object.values(cameras).some(c =>
             c.status !== 'unknown' && c.last_seen !== null
@@ -460,13 +696,9 @@ async function updateStatus() {
         if (anyOnline) {
             mqttDot.className = 'status-dot';
             mqttText.textContent = 'MQTT Connected';
-            nodesDot.className = 'status-dot';
-            nodesCount.textContent = `${activeCount} Node${activeCount !== 1 ? 's' : ''} Online`;
         } else {
             mqttDot.className = 'status-dot warning';
             mqttText.textContent = 'MQTT Waiting...';
-            nodesDot.className = 'status-dot error';
-            nodesCount.textContent = '0 Nodes Online';
         }
     } catch (err) {
         console.error('Failed to fetch status:', err);

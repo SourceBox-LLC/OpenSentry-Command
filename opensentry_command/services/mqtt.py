@@ -2,8 +2,10 @@
 MQTT client for OpenSentry Command Center.
 Handles communication with camera nodes via MQTT broker.
 """
+
 import ssl
 import time
+import json
 import hashlib
 import paho.mqtt.client as mqtt
 
@@ -48,21 +50,75 @@ def _on_connect(client, userdata, flags, reason_code, properties):
     print(f"[MQTT] Connected with result code {reason_code}")
     client.subscribe("opensentry/+/status")
     print("[MQTT] Subscribed to opensentry/+/status")
+    client.subscribe("opensentry/+/motion")
+    print("[MQTT] Subscribed to opensentry/+/motion")
 
 
 def _on_message(client, userdata, msg):
     """Called when a message is received from MQTT"""
     topic = msg.topic
-    payload = msg.payload.decode('utf-8')
-    
-    parts = topic.split('/')
-    if len(parts) == 3 and parts[0] == 'opensentry' and parts[2] == 'status':
+    payload = msg.payload.decode("utf-8")
+
+    parts = topic.split("/")
+    if len(parts) == 3 and parts[0] == "opensentry":
         camera_id = parts[1]
-        
-        if camera_id in CAMERAS:
-            CAMERAS[camera_id]['status'] = payload
-            CAMERAS[camera_id]['last_seen'] = time.time()
-            print(f"[MQTT] {camera_id} status: {payload}")
+        message_type = parts[2]
+
+        if message_type == "status":
+            if camera_id in CAMERAS:
+                # Try to parse as JSON first (new format)
+                try:
+                    status_data = json.loads(payload)
+
+                    # Extract status and additional info from JSON
+                    CAMERAS[camera_id]["status"] = status_data.get("status", payload)
+
+                    # Update node type and capabilities if provided
+                    if "node_type" in status_data:
+                        CAMERAS[camera_id]["node_type"] = status_data["node_type"]
+                    if "capabilities" in status_data:
+                        CAMERAS[camera_id]["capabilities"] = status_data["capabilities"]
+
+                    CAMERAS[camera_id]["last_seen"] = time.time()
+                    print(
+                        f"[MQTT] {camera_id} status: {status_data.get('status')} (type: {status_data.get('node_type', 'unknown')})"
+                    )
+
+                except (json.JSONDecodeError, TypeError):
+                    # Fallback to plain text status (backward compatibility)
+                    CAMERAS[camera_id]["status"] = payload
+                    CAMERAS[camera_id]["last_seen"] = time.time()
+                    print(f"[MQTT] {camera_id} status: {payload}")
+
+        elif message_type == "motion":
+            if camera_id in CAMERAS:
+                # Parse motion event JSON
+                try:
+                    motion_data = json.loads(payload)
+
+                    # Store motion event in camera data
+                    if "motion_events" not in CAMERAS[camera_id]:
+                        CAMERAS[camera_id]["motion_events"] = []
+
+                    # Keep last 100 motion events
+                    CAMERAS[camera_id]["motion_events"].append(motion_data)
+                    if len(CAMERAS[camera_id]["motion_events"]) > 100:
+                        CAMERAS[camera_id]["motion_events"].pop(0)
+
+                    # Update motion status
+                    if motion_data.get("event") == "motion_start":
+                        CAMERAS[camera_id]["motion_active"] = True
+                        print(
+                            f"[MQTT] {camera_id} motion started at area ({motion_data.get('area_x')}, {motion_data.get('area_y')})"
+                        )
+                    elif motion_data.get("event") == "motion_end":
+                        CAMERAS[camera_id]["motion_active"] = False
+                        print(
+                            f"[MQTT] {camera_id} motion ended, duration: {motion_data.get('duration')}s"
+                        )
+
+                except Exception as e:
+                    print(f"[MQTT] Error parsing motion event: {e}")
 
 
 def _on_disconnect(client, userdata, flags, reason_code, properties):
@@ -100,7 +156,7 @@ def send_command(camera_id: str, command: str) -> bool:
     """Send a command to a camera node via MQTT"""
     topic = f"opensentry/{camera_id}/command"
     result = _client.publish(topic, command)
-    
+
     if result.rc == mqtt.MQTT_ERR_SUCCESS:
         print(f"[MQTT] Sent command '{command}' to {camera_id}")
         return True

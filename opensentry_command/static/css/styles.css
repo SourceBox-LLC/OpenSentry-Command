@@ -308,6 +308,16 @@ body {
     font-family: 'JetBrains Mono', monospace;
 }
 
+.camera-details .node-type {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.65rem;
+    color: var(--accent);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
 /* Status Badge */
 .status-badge {
     display: flex;
@@ -523,6 +533,113 @@ body {
     animation: pulse-fast 1s ease-in-out infinite;
 }
 
+/* Motion detection styles */
+.feed-tag.motion-badge {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
+    color: #fff;
+    animation: motionPulse 1s ease-in-out infinite;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+
+@keyframes motionPulse {
+    0%, 100% { 
+        transform: scale(1);
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+    }
+    50% { 
+        transform: scale(1.05);
+        box-shadow: 0 6px 25px rgba(239, 68, 68, 0.6);
+    }
+}
+
+.camera-card.motion-active {
+    animation: motionAlert 0.5s ease-in-out;
+    border-color: var(--accent-red);
+    box-shadow: 0 10px 40px rgba(239, 68, 68, 0.2);
+}
+
+.camera-card.motion-active .camera-header {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(220, 38, 38, 0.05));
+}
+
+@keyframes motionAlert {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+}
+
+/* Camera Motion Controls */
+.camera-motion-controls {
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.btn-motion-history {
+    width: 100%;
+    background: var(--gradient-3);
+    color: #fff;
+    box-shadow: 0 4px 15px var(--accent-amber-glow);
+}
+
+.btn-motion-history:hover {
+    box-shadow: 0 6px 25px var(--accent-amber-glow);
+}
+
+.motion-history-panel {
+    margin-top: 0.75rem;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.motion-history-panel.hidden {
+    display: none;
+}
+
+.motion-events-mini {
+    font-size: 0.75rem;
+}
+
+.motion-event-mini {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.motion-event-mini:last-child {
+    border-bottom: none;
+}
+
+.event-icon {
+    font-size: 0.75rem;
+}
+
+.event-time {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.event-type {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 500;
+    font-size: 0.7rem;
+}
+
+.no-events {
+    text-align: center;
+    color: var(--text-muted);
+    margin: 0.5rem 0;
+    font-size: 0.75rem;
+}
+
 /* Controls */
 .camera-controls {
     padding: 0.6rem 1rem;
@@ -627,6 +744,19 @@ body {
     box-shadow: 0 6px 25px var(--accent-red-glow);
 }
 
+.btn-forget {
+    background: linear-gradient(135deg, #dc2626, #991b1b);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+    border: 1px solid rgba(220, 38, 38, 0.5);
+}
+
+.btn-forget:hover {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    box-shadow: 0 6px 25px rgba(220, 38, 38, 0.5);
+    border-color: #dc2626;
+}
+
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -669,6 +799,17 @@ body {
 @keyframes slideOut {
     from { transform: translateX(0); opacity: 1; }
     to { transform: translateX(100%); opacity: 0; }
+}
+
+@keyframes fadeOut {
+    from { 
+        opacity: 1; 
+        transform: scale(1);
+    }
+    to { 
+        opacity: 0; 
+        transform: scale(0.9);
+    }
 }
 
 .toast-icon {
