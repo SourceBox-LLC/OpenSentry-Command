@@ -102,6 +102,10 @@
                             <span class="node-type" id="node-type-{{ camera_id }}">
                                 {% if camera_info.node_type == 'motion' %}
                                     🎯 Motion Detection Node
+                                {% elif camera_info.node_type == 'face_camera' %}
+                                    📸 Face Detection Node
+                                {% elif camera_info.node_type == 'object_camera' %}
+                                    🔍 Object Detection Node
                                 {% elif camera_info.node_type == 'basic' %}
                                     📷 Basic Camera Node
                                 {% else %}
@@ -161,6 +165,32 @@
                     <div class="motion-history-panel hidden" id="motion-history-{{ camera_id }}">
                         <div class="motion-events-mini" id="motion-events-{{ camera_id }}">
                             <p class="no-events">No recent motion events</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if camera_info.node_type == 'face_camera' %}
+                <div class="camera-face-controls">
+                    <button class="btn btn-face-history" onclick="toggleCameraFaceHistory('{{ camera_id }}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                        Face History
+                    </button>
+                    <div class="face-history-panel hidden" id="face-history-{{ camera_id }}">
+                        <div class="face-events-mini" id="face-events-{{ camera_id }}">
+                            <p class="no-events">No recent face events</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if camera_info.node_type == 'object_camera' %}
+                <div class="camera-object-controls">
+                    <button class="btn btn-object-history" onclick="toggleCameraObjectHistory('{{ camera_id }}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/></svg>
+                        Object History
+                    </button>
+                    <div class="object-history-panel hidden" id="object-history-{{ camera_id }}">
+                        <div class="object-events-mini" id="object-events-{{ camera_id }}">
+                            <p class="no-events">No recent object detections</p>
                         </div>
                     </div>
                 </div>

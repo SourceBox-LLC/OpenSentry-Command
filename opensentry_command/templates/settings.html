@@ -444,6 +444,20 @@
                     </label>
                 </div>
                 <div class="info-row">
+                    <span class="info-label">Face Detection Alerts</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="face-notifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Object Detection Alerts</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="object-notifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="info-row">
                     <span class="info-label">Show Toast Notifications</span>
                     <label class="toggle-switch">
                         <input type="checkbox" id="toast-notifications" checked>
@@ -469,12 +483,36 @@
 
             <div class="settings-card">
                 <h2>📷 Adding Camera Nodes</h2>
-                <p>To add a camera node, run the setup script on your camera device and enter the security secret above when prompted.</p>
+                <p>Choose a node type and run the setup script on your camera device. Enter the security secret above when prompted.</p>
+                
+                <div style="margin-bottom: 1rem;">
+                    <div class="info-row">
+                        <span class="info-label">📷 Basic Camera Node</span>
+                        <span class="info-value" style="font-size: 0.75rem; color: var(--text-muted);">Streaming only</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">🎯 Motion Detection Node</span>
+                        <span class="info-value" style="font-size: 0.75rem; color: var(--text-muted);">Streaming + motion alerts</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">📸 Face Detection Node</span>
+                        <span class="info-value" style="font-size: 0.75rem; color: var(--text-muted);">Streaming + face detection</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">🔍 Object Detection Node</span>
+                        <span class="info-value" style="font-size: 0.75rem; color: var(--text-muted);">Streaming + AI object detection</span>
+                    </div>
+                </div>
                 
                 <div class="secret-display" style="background: var(--bg-primary);">
                     <code style="color: var(--text-secondary); font-size: 0.8rem;">
-                        git clone https://github.com/SourceBox-LLC/OpenSentry-Node.git<br>
-                        cd OpenSentry-Node<br>
+                        # Choose your node type:<br>
+                        # Basic: OpenSentry-Node<br>
+                        # Motion: OpenSentry-MotionNode<br>
+                        # Face: OpenSentry-FaceNode<br>
+                        # Object: OpenSentry-ObjectDetectionNode<br><br>
+                        git clone https://github.com/SourceBox-LLC/&lt;NODE_TYPE&gt;.git<br>
+                        cd &lt;NODE_TYPE&gt;<br>
                         chmod +x setup.sh && ./setup.sh
                     </code>
                 </div>
@@ -605,10 +643,14 @@
 
         // Notification Settings
         const motionToggle = document.getElementById('motion-notifications');
+        const faceToggle = document.getElementById('face-notifications');
+        const objectToggle = document.getElementById('object-notifications');
         const toastToggle = document.getElementById('toast-notifications');
 
         // Load saved preferences
         const motionEnabled = localStorage.getItem('motionNotifications') !== 'false'; // Default: true
+        const faceEnabled = localStorage.getItem('faceNotifications') !== 'false'; // Default: true
+        const objectEnabled = localStorage.getItem('objectNotifications') !== 'false'; // Default: true
         const toastEnabled = localStorage.getItem('toastNotifications') !== 'false'; // Default: true
         
         if (motionToggle) {
@@ -616,6 +658,22 @@
             motionToggle.addEventListener('change', (e) => {
                 localStorage.setItem('motionNotifications', e.target.checked);
                 console.log('Motion notifications:', e.target.checked ? 'enabled' : 'disabled');
+            });
+        }
+
+        if (faceToggle) {
+            faceToggle.checked = faceEnabled;
+            faceToggle.addEventListener('change', (e) => {
+                localStorage.setItem('faceNotifications', e.target.checked);
+                console.log('Face notifications:', e.target.checked ? 'enabled' : 'disabled');
+            });
+        }
+
+        if (objectToggle) {
+            objectToggle.checked = objectEnabled;
+            objectToggle.addEventListener('change', (e) => {
+                localStorage.setItem('objectNotifications', e.target.checked);
+                console.log('Object notifications:', e.target.checked ? 'enabled' : 'disabled');
             });
         }
 

@@ -1,9 +1,9 @@
 # 🛡️ OpenSentry Command Center
 
-**View and control all your security cameras from one dashboard with real-time motion detection.**
+**View and control all your security cameras from one dashboard with real-time detection alerts.**
 
 **🔒 Fully Encrypted:** HTTPS web UI, RTSPS video streams, MQTT over TLS  
-**🎯 Motion Detection:** Real-time alerts, motion history, and smart notifications
+**🎯 Smart Detection:** Motion, face, and object detection with real-time alerts
 
 ![Dashboard](docs/images/dashboard.png)
 
@@ -113,30 +113,34 @@ Cameras auto-discover within 30 seconds.
 
 ---
 
-## 🎯 Motion Detection Features
+## 🎯 Detection Features
 
-OpenSentry automatically detects and responds to motion from compatible camera nodes:
+OpenSentry automatically detects and responds to events from compatible camera nodes:
 
-### Real-Time Motion Alerts
-- **Visual Indicators:** Red badge appears on camera feed when motion detected
-- **Toast Notifications:** Pop-up alerts for motion events
-- **Animation Effects:** Camera cards pulse when motion is active
+### Real-Time Detection Alerts
+- **Visual Indicators:** Colored badges appear on camera feed when events detected
+- **Toast Notifications:** Pop-up alerts for detection events
+- **Animation Effects:** Camera cards pulse when detection is active
 
-### Motion History
-- Click **📜 Motion History** on any camera to view recent events
-- Stores last 100 motion events per camera
-- Shows timestamp and duration for each event
+### Detection History
+- Click the **History** button on any detection-capable camera
+- Stores last 100 events per camera
+- Shows timestamp and details for each event
 
 ### Notification Settings
-Configure motion alerts in **Settings → Notifications**:
+Configure alerts in **Settings → Notifications**:
 - **Motion Detection Alerts:** Toggle motion notifications on/off
-- **Toast Notifications:** Enable/disable pop-up alerts
+- **Face Detection Alerts:** Toggle face notifications on/off
+- **Object Detection Alerts:** Toggle object notifications on/off
 - Preferences saved locally in your browser
 
-### Supported Motion Nodes
-- [OpenSentry-MotionNode](https://github.com/SourceBox-LLC/OpenSentry-MotionNode) - Motion detection with OpenCV
-- Basic nodes show as "📷 Basic Camera Node"
-- Motion nodes show as "🎯 Motion Detection Node"
+### Supported Node Types
+| Node | Icon | Features | Link |
+|------|------|----------|------|
+| **Basic Camera** | 📷 | Live streaming only | [OpenSentry-Node](https://github.com/SourceBox-LLC/OpenSentry-Node) |
+| **Motion Detection** | 🎯 | Streaming + motion detection | [OpenSentry-MotionNode](https://github.com/SourceBox-LLC/OpenSentry-MotionNode) |
+| **Face Detection** | 📸 | Streaming + face detection | [OpenSentry-FaceNode](https://github.com/SourceBox-LLC/OpenSentry-FaceNode) |
+| **Object Detection** | 🔍 | Streaming + AI object detection (80+ classes) | [OpenSentry-ObjectDetectionNode](https://github.com/SourceBox-LLC/OpenSentry-ObjectDetectionNode) |
 
 ---
 
@@ -159,7 +163,9 @@ Configure motion alerts in **Settings → Notifications**:
 | 🟢 Streaming | Camera active |
 | 🟡 Idle | Paused |
 | 🔴 Offline | Not responding |
-| 🔴 MOTION DETECTED! | Motion currently active |
+| 🔴 MOTION | Motion currently active |
+| 👤 FACE | Face currently detected |
+| 🔍 OBJECTS | Objects currently detected |
 
 ### Node Types
 
@@ -167,6 +173,8 @@ Configure motion alerts in **Settings → Notifications**:
 |------|------|----------|
 | 📷 | Basic Camera Node | Live streaming only |
 | 🎯 | Motion Detection Node | Live streaming + motion detection |
+| 📸 | Face Detection Node | Live streaming + face detection |
+| 🔍 | Object Detection Node | Live streaming + AI object detection |
 
 ---
 
@@ -247,19 +255,24 @@ The Command Center provides REST API endpoints for integration:
 ```json
 {
   "camera-id": {
-    "name": "motion-cam-test",
+    "name": "front-door-cam",
     "status": "streaming",
-    "node_type": "motion",
-    "capabilities": "streaming,motion_detection",
-    "motion_active": false,
-    "motion_events": [
+    "node_type": "object_camera",
+    "capabilities": "streaming,object_detection",
+    "objects_active": true,
+    "object_events": [
       {
-        "event": "motion_start",
-        "timestamp": 1234567890,
-        "area_x": 100,
-        "area_y": 200
+        "event": "objects_detected",
+        "objects": [
+          {"class": "person", "confidence": 85},
+          {"class": "dog", "confidence": 72}
+        ]
       }
     ],
+    "motion_active": false,
+    "motion_events": [],
+    "face_active": false,
+    "face_events": [],
     "last_seen": 1234567890
   }
 }
@@ -275,8 +288,8 @@ The Command Center provides REST API endpoints for integration:
 | **Can't log in** | Default: `admin` / `opensentry`. Check `.env` file. |
 | **Account locked** | Wait 5 minutes. |
 | **Port 5000 in use** | Stop other app or edit port in `docker-compose.yml` |
-| **Motion not detected** | Ensure using motion-capable node. Check MQTT connection. |
-| **No motion alerts** | Check notification settings in dashboard. |
+| **Detection not working** | Ensure using detection-capable node. Check MQTT connection. |
+| **No detection alerts** | Check notification settings in dashboard. |
 
 **Still stuck?** Run `docker compose logs -f` and check for errors.
 

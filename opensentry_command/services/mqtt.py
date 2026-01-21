@@ -52,6 +52,10 @@ def _on_connect(client, userdata, flags, reason_code, properties):
     print("[MQTT] Subscribed to opensentry/+/status")
     client.subscribe("opensentry/+/motion")
     print("[MQTT] Subscribed to opensentry/+/motion")
+    client.subscribe("opensentry/+/face")
+    print("[MQTT] Subscribed to opensentry/+/face")
+    client.subscribe("opensentry/+/objects")
+    print("[MQTT] Subscribed to opensentry/+/objects")
 
 
 def _on_message(client, userdata, msg):
@@ -119,6 +123,60 @@ def _on_message(client, userdata, msg):
 
                 except Exception as e:
                     print(f"[MQTT] Error parsing motion event: {e}")
+
+        elif message_type == "face":
+            if camera_id in CAMERAS:
+                try:
+                    face_data = json.loads(payload)
+
+                    if "face_events" not in CAMERAS[camera_id]:
+                        CAMERAS[camera_id]["face_events"] = []
+
+                    CAMERAS[camera_id]["face_events"].append(face_data)
+                    if len(CAMERAS[camera_id]["face_events"]) > 100:
+                        CAMERAS[camera_id]["face_events"].pop(0)
+
+                    if face_data.get("event") == "face_detected":
+                        CAMERAS[camera_id]["face_active"] = True
+                        print(
+                            f"[MQTT] {camera_id} face detected: {face_data.get('count')} face(s), confidence: {face_data.get('max_confidence', 0):.2f}"
+                        )
+                    elif face_data.get("event") == "face_end":
+                        CAMERAS[camera_id]["face_active"] = False
+                        print(
+                            f"[MQTT] {camera_id} face ended, duration: {face_data.get('duration')}s"
+                        )
+
+                except Exception as e:
+                    print(f"[MQTT] Error parsing face event: {e}")
+
+        elif message_type == "objects":
+            if camera_id in CAMERAS:
+                try:
+                    objects_data = json.loads(payload)
+
+                    if "object_events" not in CAMERAS[camera_id]:
+                        CAMERAS[camera_id]["object_events"] = []
+
+                    CAMERAS[camera_id]["object_events"].append(objects_data)
+                    if len(CAMERAS[camera_id]["object_events"]) > 100:
+                        CAMERAS[camera_id]["object_events"].pop(0)
+
+                    if objects_data.get("event") == "objects_detected":
+                        CAMERAS[camera_id]["objects_active"] = True
+                        objects_list = objects_data.get("objects", [])
+                        object_names = [
+                            obj.get("class", "unknown") for obj in objects_list
+                        ]
+                        print(
+                            f"[MQTT] {camera_id} objects detected: {', '.join(object_names)}"
+                        )
+                    elif objects_data.get("event") == "objects_cleared":
+                        CAMERAS[camera_id]["objects_active"] = False
+                        print(f"[MQTT] {camera_id} objects cleared")
+
+                except Exception as e:
+                    print(f"[MQTT] Error parsing objects event: {e}")
 
 
 def _on_disconnect(client, userdata, flags, reason_code, properties):

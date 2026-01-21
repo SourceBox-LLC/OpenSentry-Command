@@ -385,6 +385,117 @@ function updateCameraMotionHistory(cameraId) {
     `).join('');
 }
 
+// Store face events per camera
+const cameraFaceEvents = {};
+const MAX_FACE_EVENTS = 10;
+
+// Toggle camera-specific face history panel
+function toggleCameraFaceHistory(cameraId) {
+    const panel = document.getElementById(`face-history-${cameraId}`);
+    if (panel) {
+        panel.classList.toggle('hidden');
+    }
+}
+
+// Add face event to camera history
+function addFaceEvent(cameraId, cameraName, eventType, timestamp, confidence = null) {
+    if (!cameraFaceEvents[cameraId]) {
+        cameraFaceEvents[cameraId] = [];
+    }
+    
+    const event = {
+        eventType,
+        timestamp: timestamp || Date.now(),
+        time: new Date().toLocaleTimeString(),
+        confidence
+    };
+    
+    cameraFaceEvents[cameraId].unshift(event);
+    if (cameraFaceEvents[cameraId].length > MAX_FACE_EVENTS) {
+        cameraFaceEvents[cameraId].pop();
+    }
+    
+    updateCameraFaceHistory(cameraId);
+}
+
+// Update camera-specific face history display
+function updateCameraFaceHistory(cameraId) {
+    const listEl = document.getElementById(`face-events-${cameraId}`);
+    if (!listEl) return;
+    
+    const events = cameraFaceEvents[cameraId] || [];
+    
+    if (events.length === 0) {
+        listEl.innerHTML = '<p class="no-events">No recent face events</p>';
+        return;
+    }
+    
+    listEl.innerHTML = events.map(event => `
+        <div class="face-event-mini">
+            <span class="event-icon">${event.eventType === 'face_detected' ? '👤' : '👤✓'}</span>
+            <span class="event-time">${event.time}</span>
+            <span class="event-type">${event.eventType === 'face_detected' ? (event.confidence ? `${(event.confidence * 100).toFixed(0)}%` : 'Face') : 'Gone'}</span>
+        </div>
+    `).join('');
+}
+
+// Store object events per camera
+const cameraObjectEvents = {};
+const MAX_OBJECT_EVENTS = 10;
+
+// Toggle camera-specific object history panel
+function toggleCameraObjectHistory(cameraId) {
+    const panel = document.getElementById(`object-history-${cameraId}`);
+    if (panel) {
+        panel.classList.toggle('hidden');
+    }
+}
+
+// Add object event to camera history
+function addObjectEvent(cameraId, cameraName, eventType, timestamp, objects = []) {
+    if (!cameraObjectEvents[cameraId]) {
+        cameraObjectEvents[cameraId] = [];
+    }
+    
+    const event = {
+        eventType,
+        timestamp: timestamp || Date.now(),
+        time: new Date().toLocaleTimeString(),
+        objects
+    };
+    
+    cameraObjectEvents[cameraId].unshift(event);
+    if (cameraObjectEvents[cameraId].length > MAX_OBJECT_EVENTS) {
+        cameraObjectEvents[cameraId].pop();
+    }
+    
+    updateCameraObjectHistory(cameraId);
+}
+
+// Update camera-specific object history display
+function updateCameraObjectHistory(cameraId) {
+    const listEl = document.getElementById(`object-events-${cameraId}`);
+    if (!listEl) return;
+    
+    const events = cameraObjectEvents[cameraId] || [];
+    
+    if (events.length === 0) {
+        listEl.innerHTML = '<p class="no-events">No recent object detections</p>';
+        return;
+    }
+    
+    listEl.innerHTML = events.map(event => {
+        const objectNames = event.objects.map(o => o.class || o).join(', ');
+        return `
+            <div class="object-event-mini">
+                <span class="event-icon">${event.eventType === 'objects_detected' ? '🔍' : '✓'}</span>
+                <span class="event-time">${event.time}</span>
+                <span class="event-type">${event.eventType === 'objects_detected' ? objectNames : 'Cleared'}</span>
+            </div>
+        `;
+    }).join('');
+}
+
 // Update node count display
 function updateNodeCount() {
     const cameras = document.querySelectorAll('.camera-card');
@@ -426,6 +537,10 @@ function createCameraCard(cameraId, info) {
     let nodeTypeDisplay = '';
     if (info.node_type === 'motion') {
         nodeTypeDisplay = '🎯 Motion Detection Node';
+    } else if (info.node_type === 'face_camera') {
+        nodeTypeDisplay = '📸 Face Detection Node';
+    } else if (info.node_type === 'object_camera') {
+        nodeTypeDisplay = '🔍 Object Detection Node';
     } else if (info.node_type === 'basic') {
         nodeTypeDisplay = '📷 Basic Camera Node';
     } else {
@@ -497,6 +612,32 @@ function createCameraCard(cameraId, info) {
             </div>
         </div>
         ` : ''}
+        ${info.node_type === 'face_camera' ? `
+        <div class="camera-face-controls">
+            <button class="btn btn-face-history" onclick="toggleCameraFaceHistory('${cameraId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                Face History
+            </button>
+            <div class="face-history-panel hidden" id="face-history-${cameraId}">
+                <div class="face-events-mini" id="face-events-${cameraId}">
+                    <p class="no-events">No recent face events</p>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+        ${info.node_type === 'object_camera' ? `
+        <div class="camera-object-controls">
+            <button class="btn btn-object-history" onclick="toggleCameraObjectHistory('${cameraId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/></svg>
+                Object History
+            </button>
+            <div class="object-history-panel hidden" id="object-history-${cameraId}">
+                <div class="object-events-mini" id="object-events-${cameraId}">
+                    <p class="no-events">No recent object detections</p>
+                </div>
+            </div>
+        </div>
+        ` : ''}
     `;
     return card;
 }
@@ -557,6 +698,10 @@ async function updateStatus() {
                 let nodeTypeDisplay = '';
                 if (info.node_type === 'motion') {
                     nodeTypeDisplay = '🎯 Motion Detection Node';
+                } else if (info.node_type === 'face_camera') {
+                    nodeTypeDisplay = '📸 Face Detection Node';
+                } else if (info.node_type === 'object_camera') {
+                    nodeTypeDisplay = '🔍 Object Detection Node';
                 } else if (info.node_type === 'basic') {
                     nodeTypeDisplay = '📷 Basic Camera Node';
                 } else {
@@ -631,6 +776,138 @@ async function updateStatus() {
                 }
                 
                 previousStatus[`${cameraId}_motion`] = info.motion_active;
+            }
+
+            // Handle face detection
+            if (info.face_active !== undefined) {
+                const wasActive = previousStatus[`${cameraId}_face`] || false;
+
+                if (info.face_active && !wasActive) {
+                    // Face just detected
+                    const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
+                    if (card) {
+                        card.classList.add('face-active');
+                    }
+
+                    // Add face badge to feed overlay
+                    const feedOverlay = document.getElementById(`feed-overlay-${cameraId}`);
+                    if (feedOverlay && !feedOverlay.querySelector('.face-badge')) {
+                        const faceBadge = document.createElement('span');
+                        faceBadge.className = 'feed-tag face-badge';
+                        faceBadge.innerHTML = '👤 FACE DETECTED';
+                        feedOverlay.appendChild(faceBadge);
+                    }
+
+                    // Show toast notification if face alerts are enabled
+                    const faceEnabled = localStorage.getItem('faceNotifications') !== 'false';
+                    if (faceEnabled) {
+                        showToast(`📸 Face detected on ${info.name}!`, 'warning');
+                    }
+
+                    // Add to history if not already in server events
+                    if (!info.face_events || info.face_events.length === 0 ||
+                        info.face_events[0].event !== 'face_detected') {
+                        addFaceEvent(cameraId, info.name, 'face_detected');
+                    }
+
+                } else if (!info.face_active && wasActive) {
+                    // Face ended
+                    const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
+                    if (card) {
+                        card.classList.remove('face-active');
+                    }
+
+                    // Remove face badge from feed
+                    const faceBadge = document.querySelector(`#feed-overlay-${cameraId} .face-badge`);
+                    if (faceBadge) {
+                        faceBadge.remove();
+                    }
+
+                    // Add to history if not already in server events
+                    if (!info.face_events || info.face_events.length === 0 ||
+                        info.face_events[0].event !== 'face_end') {
+                        addFaceEvent(cameraId, info.name, 'face_end');
+                    }
+                }
+
+                previousStatus[`${cameraId}_face`] = info.face_active;
+            }
+
+            // Sync face events from server
+            if (info.face_events && Array.isArray(info.face_events)) {
+                cameraFaceEvents[cameraId] = info.face_events.slice(0, MAX_FACE_EVENTS).map(event => ({
+                    eventType: event.event,
+                    timestamp: event.timestamp * 1000,
+                    time: new Date(event.timestamp * 1000).toLocaleTimeString(),
+                    confidence: event.max_confidence || null
+                }));
+                updateCameraFaceHistory(cameraId);
+            }
+
+            // Handle object detection
+            if (info.objects_active !== undefined) {
+                const wasActive = previousStatus[`${cameraId}_objects`] || false;
+
+                if (info.objects_active && !wasActive) {
+                    // Objects just detected
+                    const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
+                    if (card) {
+                        card.classList.add('objects-active');
+                    }
+
+                    // Add objects badge to feed overlay
+                    const feedOverlay = document.getElementById(`feed-overlay-${cameraId}`);
+                    if (feedOverlay && !feedOverlay.querySelector('.objects-badge')) {
+                        const objectsBadge = document.createElement('span');
+                        objectsBadge.className = 'feed-tag objects-badge';
+                        objectsBadge.innerHTML = '🔍 OBJECTS';
+                        feedOverlay.appendChild(objectsBadge);
+                    }
+
+                    // Show toast notification if object alerts are enabled
+                    const objectsEnabled = localStorage.getItem('objectNotifications') !== 'false';
+                    if (objectsEnabled) {
+                        showToast(`🔍 Objects detected on ${info.name}!`, 'info');
+                    }
+
+                    // Add to history if not already in server events
+                    if (!info.object_events || info.object_events.length === 0 ||
+                        info.object_events[0].event !== 'objects_detected') {
+                        addObjectEvent(cameraId, info.name, 'objects_detected', null, []);
+                    }
+
+                } else if (!info.objects_active && wasActive) {
+                    // Objects cleared
+                    const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
+                    if (card) {
+                        card.classList.remove('objects-active');
+                    }
+
+                    // Remove objects badge from feed
+                    const objectsBadge = document.querySelector(`#feed-overlay-${cameraId} .objects-badge`);
+                    if (objectsBadge) {
+                        objectsBadge.remove();
+                    }
+
+                    // Add to history if not already in server events
+                    if (!info.object_events || info.object_events.length === 0 ||
+                        info.object_events[0].event !== 'objects_cleared') {
+                        addObjectEvent(cameraId, info.name, 'objects_cleared', null, []);
+                    }
+                }
+
+                previousStatus[`${cameraId}_objects`] = info.objects_active;
+            }
+
+            // Sync object events from server
+            if (info.object_events && Array.isArray(info.object_events)) {
+                cameraObjectEvents[cameraId] = info.object_events.slice(0, MAX_OBJECT_EVENTS).map(event => ({
+                    eventType: event.event,
+                    timestamp: event.timestamp ? event.timestamp * 1000 : Date.now(),
+                    time: event.timestamp ? new Date(event.timestamp * 1000).toLocaleTimeString() : new Date().toLocaleTimeString(),
+                    objects: event.objects || []
+                }));
+                updateCameraObjectHistory(cameraId);
             }
 
             // Handle status changes
