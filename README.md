@@ -139,7 +139,7 @@ Configure alerts in **Settings → Notifications**:
 |------|------|----------|------|
 | **Basic Camera** | 📷 | Live streaming only | [OpenSentry-Node](https://github.com/SourceBox-LLC/OpenSentry-Node) |
 | **Motion Detection** | 🎯 | Streaming + motion detection | [OpenSentry-MotionNode](https://github.com/SourceBox-LLC/OpenSentry-MotionNode) |
-| **Face Detection** | 📸 | Streaming + face detection | [OpenSentry-FaceNode](https://github.com/SourceBox-LLC/OpenSentry-FaceNode) |
+| **Face Detection** | 📸 | Streaming + face detection | [OpenSentry-FaceDetectionNode](https://github.com/SourceBox-LLC/OpenSentry-FaceDetectionNode) |
 | **Object Detection** | 🔍 | Streaming + AI object detection (80+ classes) | [OpenSentry-ObjectDetectionNode](https://github.com/SourceBox-LLC/OpenSentry-ObjectDetectionNode) |
 
 ---
