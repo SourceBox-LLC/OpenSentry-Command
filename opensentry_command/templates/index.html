@@ -128,6 +128,11 @@
                     <div class="feed-overlay" id="feed-overlay-{{ camera_id }}">
                         <span class="feed-tag live">LIVE</span>
                         <span class="feed-tag">HD</span>
+                        <span class="feed-tag rec hidden" id="rec-indicator-{{ camera_id }}">REC</span>
+                    </div>
+                    <div class="recording-timer hidden" id="recording-timer-{{ camera_id }}">
+                        <span class="rec-dot"></span>
+                        <span class="rec-time">00:00</span>
                     </div>
                 </div>
                 <div class="camera-controls">

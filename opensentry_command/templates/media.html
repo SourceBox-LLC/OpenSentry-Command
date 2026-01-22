@@ -114,6 +114,105 @@
         .back-link:hover {
             text-decoration: underline;
         }
+        /* Video preview with play button */
+        .media-preview.video {
+            position: relative;
+            cursor: pointer;
+        }
+        .media-preview.video .play-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.3);
+            transition: background 0.2s ease;
+        }
+        .media-preview.video:hover .play-overlay {
+            background: rgba(0, 0, 0, 0.5);
+        }
+        .media-preview.video .play-icon {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+        .media-preview.video:hover .play-icon {
+            transform: scale(1.1);
+            background: #fff;
+        }
+        .media-preview.video .play-icon svg {
+            width: 24px;
+            height: 24px;
+            margin-left: 4px;
+        }
+        /* Duration badge */
+        .duration-badge {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Video modal */
+        .video-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 2rem;
+        }
+        .video-modal.active {
+            display: flex;
+        }
+        .video-modal-content {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+            background: var(--bg-card);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .video-modal video {
+            max-width: 90vw;
+            max-height: 80vh;
+            display: block;
+        }
+        .video-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .video-modal-title {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .video-modal-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .video-modal-close:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
     </style>
 </head>
 <body>
@@ -179,6 +278,24 @@
     <!-- Toast Container -->
     <div class="toast-container" id="toast-container"></div>
 
+    <!-- Video Player Modal -->
+    <div class="video-modal" id="video-modal" onclick="closeVideoModal(event)">
+        <div class="video-modal-content" onclick="event.stopPropagation()">
+            <div class="video-modal-header">
+                <span class="video-modal-title" id="video-modal-title">Recording</span>
+                <button class="video-modal-close" onclick="closeVideoModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <video id="video-player" controls>
+                Your browser does not support video playback.
+            </video>
+        </div>
+    </div>
+
     <script>
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
@@ -206,6 +323,38 @@
         function formatDate(timestamp) {
             return new Date(timestamp * 1000).toLocaleString();
         }
+
+        function formatDuration(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function playVideo(url, filename) {
+            const modal = document.getElementById('video-modal');
+            const player = document.getElementById('video-player');
+            const title = document.getElementById('video-modal-title');
+            
+            title.textContent = filename;
+            player.src = url;
+            modal.classList.add('active');
+            player.play();
+        }
+
+        function closeVideoModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            const modal = document.getElementById('video-modal');
+            const player = document.getElementById('video-player');
+            
+            player.pause();
+            player.src = '';
+            modal.classList.remove('active');
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeVideoModal();
+        });
 
         function showTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -278,14 +427,22 @@
                 
                 grid.innerHTML = recordings.map(r => `
                     <div class="media-card">
-                        <div class="media-preview video">🎬</div>
+                        <div class="media-preview video" onclick="playVideo('${r.url}', '${r.filename}')">
+                            <div class="play-overlay">
+                                <div class="play-icon">
+                                    <svg viewBox="0 0 24 24" fill="#000"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                </div>
+                            </div>
+                            ${r.duration ? `<span class="duration-badge">${formatDuration(r.duration)}</span>` : ''}
+                        </div>
                         <div class="media-info">
                             <div class="media-name">${r.filename}</div>
                             <div class="media-meta">
-                                <span>${formatBytes(r.size)}${r.duration ? ` • ${r.duration}s` : ''}</span>
+                                <span>${formatBytes(r.size)}${r.duration ? ` • ${formatDuration(r.duration)}` : ''}</span>
                                 <span>${formatDate(r.created)}</span>
                             </div>
                             <div class="media-actions">
+                                <button class="btn btn-snapshot" onclick="playVideo('${r.url}', '${r.filename}')">Play</button>
                                 <a href="${r.url}" download="${r.filename}" class="btn btn-start">Download</a>
                                 <button class="btn btn-shutdown" onclick="deleteRecording(${r.id})">Delete</button>
                             </div>

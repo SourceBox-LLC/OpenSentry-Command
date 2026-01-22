@@ -128,11 +128,22 @@ OpenSentry automatically detects and responds to events from compatible camera n
 - Shows timestamp and details for each event
 
 ### Notification Settings
+
 Configure alerts in **Settings → Notifications**:
 - **Motion Detection Alerts:** Toggle motion notifications on/off
 - **Face Detection Alerts:** Toggle face notifications on/off
 - **Object Detection Alerts:** Toggle object notifications on/off
+- **Show Toast Notifications:** Toggle pop-up alerts on/off
 - Preferences saved locally in your browser
+
+### Recording Settings
+
+Configure auto-recording in **Settings → Recording**:
+- **24/7 Recording:** Enable continuous recording from all cameras
+- **Motion Detection Recording:** Auto-record on motion
+- **Face Detection Recording:** Auto-record on face detection
+- **Object Detection Recording:** Auto-record on object detection
+- **Post-Detection Buffer:** Recording duration after detection ends (1-30 seconds)
 
 ### Supported Node Types
 | Node | Icon | Features | Link |
@@ -152,9 +163,42 @@ Configure alerts in **Settings → Notifications**:
 |--------|--------|
 | **▶ Start** | Start video stream |
 | **⏸ Pause** | Pause stream |
+| **📷 Snapshot** | Capture and save snapshot |
+| **🎬 Record** | Start/stop video recording |
 | **⏻ Shutdown** | Turn off camera |
-| **📜 Motion History** | View recent motion events |
+| **📜 History** | View detection events (motion/face/object) |
 | **❌ Forget** | Remove camera from system |
+
+### Recording
+
+| Icon | Meaning |
+|------|---------|
+| 🔴 **REC** | Recording in progress (pulsing badge) |
+| ⏱️ **00:00** | Recording timer showing elapsed time |
+
+When recording, a REC badge appears on the camera feed and a timer counts up. Recordings are automatically transcoded to H.264 format for browser playback and saved to the Media Library.
+
+### Auto-Recording
+
+Configure automatic recording in **Settings → Recording**:
+
+| Option | Description |
+|--------|-------------|
+| **Record on Motion Detection** | Automatically record when motion is detected |
+| **Record on Face Detection** | Automatically record when a face is detected |
+| **Record on Object Detection** | Automatically record when objects are detected |
+| **Post-Detection Buffer** | Continue recording for 1-30 seconds after detection ends (default: 5s) |
+
+### 24/7 Continuous Recording
+
+Enable **24/7 Recording** for continuous recording from all cameras:
+
+- Overrides all individual auto-recording settings
+- Records from all connected cameras simultaneously
+- Toggle off to return to normal event-based recording
+- Useful for complete surveillance coverage
+
+Both auto-recording and 24/7 modes save recordings to the Media Library with H.264 transcoding for easy browser playback.
 
 ### Status Indicators
 
@@ -175,6 +219,28 @@ Configure alerts in **Settings → Notifications**:
 | 🎯 | Motion Detection Node | Live streaming + motion detection |
 | 📸 | Face Detection Node | Live streaming + face detection |
 | 🔍 | Object Detection Node | Live streaming + AI object detection |
+
+---
+
+## 📁 Media Library
+
+Access saved snapshots and recordings from the dashboard:
+
+1. Click the **📁 Media Library** icon (top right)
+2. Switch between **Snapshots** and **Recordings** tabs
+
+### Snapshots
+- View all captured snapshots
+- Click **Download** to save locally
+- Click **Delete** to remove
+
+### Recordings
+- View all recorded videos
+- Click **Play** to watch in browser (H.264 format)
+- Click **Download** for original file
+- Click **Delete** to remove
+
+Recordings are stored as encrypted blobs in the database - no files are exposed on the filesystem.
 
 ---
 
@@ -243,6 +309,7 @@ Access your Command Center from anywhere using [Tailscale](https://tailscale.com
 
 The Command Center provides REST API endpoints for integration:
 
+### Camera Management
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/cameras` | GET | List all cameras with status and motion data |
@@ -250,6 +317,23 @@ The Command Center provides REST API endpoints for integration:
 | `/api/camera/<id>/command` | POST | Send command (start/stop/shutdown) |
 | `/api/camera/<id>/forget` | DELETE | Remove camera from system |
 | `/api/regenerate-secret` | POST | Generate new security secret |
+
+### Recording
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/camera/<id>/recording/start` | POST | Start recording video |
+| `/api/camera/<id>/recording/stop` | POST | Stop recording and save |
+| `/api/camera/<id>/recording/status` | GET | Get recording status |
+
+### Media Library
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/snapshots` | GET | List all snapshots |
+| `/api/snapshots/<id>` | GET | Download snapshot |
+| `/api/snapshots/<id>` | DELETE | Delete snapshot |
+| `/api/recordings` | GET | List all recordings |
+| `/api/recordings/<id>` | GET | Stream recording (add `?download=true` for download) |
+| `/api/recordings/<id>` | DELETE | Delete recording |
 
 ### Camera Data Response
 ```json

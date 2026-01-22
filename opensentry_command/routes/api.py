@@ -5,15 +5,21 @@ Handles REST API endpoints for camera data and commands.
 
 import io
 import cv2
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, jsonify, request, Response, send_file
 from flask_login import login_required, current_user
 
 from ..models.camera import CAMERAS, camera_streams
-from ..models.database import db, Media, Camera as CameraModel, AuditLog
+from ..models.database import db, Media, Camera as CameraModel, AuditLog, Alert
 from ..services import mqtt
 
 api_bp = Blueprint("api", __name__)
+
+
+@api_bp.route("/health")
+def health_check():
+    """Health check endpoint for system monitoring"""
+    return jsonify({"status": "healthy", "service": "OpenSentry Command Center"})
 
 
 @api_bp.route("/cameras")
@@ -232,6 +238,10 @@ def start_recording(camera_id):
 
     if "error" in result:
         return jsonify(result), 400
+
+    # Update CAMERAS with recording status
+    CAMERAS[camera_id]["recording"] = True
+
     return jsonify(result)
 
 
@@ -250,6 +260,9 @@ def stop_recording(camera_id):
 
     if "error" in result:
         return jsonify(result), 400
+
+    # Update CAMERAS with recording status
+    CAMERAS[camera_id]["recording"] = False
 
     # Save recording to database as blob
     if result.get("success") and result.get("data"):
@@ -308,16 +321,19 @@ def list_recordings():
 @api_bp.route("/recordings/<int:media_id>")
 @login_required
 def get_recording(media_id):
-    """Download a specific recording from database"""
+    """Stream a recording for playback (or download with ?download=true)"""
     media = Media.query.get(media_id)
     if not media or media.media_type != "recording":
         return jsonify({"error": "Recording not found"}), 404
 
+    # Check if download is requested
+    download = request.args.get("download", "false").lower() == "true"
+
     return send_file(
         io.BytesIO(media.data),
         mimetype=media.mimetype,
-        as_attachment=True,
-        download_name=media.filename,
+        as_attachment=download,
+        download_name=media.filename if download else None,
     )
 
 
@@ -335,6 +351,133 @@ def delete_recording(media_id):
 
     print(f"[Recording] Deleted from DB: {filename}")
     return jsonify({"success": True, "deleted": filename})
+
+
+# =============================================================================
+# RECORDING SETTINGS ENDPOINTS
+# =============================================================================
+
+from ..models.database import Setting
+
+
+@api_bp.route("/settings/recording", methods=["GET"])
+@login_required
+def get_recording_settings():
+    """Get all recording settings"""
+    settings = {
+        # Auto-recording toggles
+        "motion_recording": Setting.get("motion_recording", "false") == "true",
+        "face_recording": Setting.get("face_recording", "false") == "true",
+        "object_recording": Setting.get("object_recording", "false") == "true",
+        # Post-detection buffer (seconds)
+        "post_buffer": int(Setting.get("post_buffer", "5")),
+        # Scheduled recording
+        "scheduled_recording": Setting.get("scheduled_recording", "false") == "true",
+        "scheduled_start": Setting.get("scheduled_start", "06:00"),
+        "scheduled_end": Setting.get("scheduled_end", "17:00"),
+        # 24/7 continuous recording (master toggle)
+        "continuous_24_7": Setting.get("continuous_24_7", "false") == "true",
+    }
+    return jsonify(settings)
+
+
+@api_bp.route("/settings/recording", methods=["POST"])
+@login_required
+def update_recording_settings():
+    """Update recording settings"""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    # Update each setting
+    if "motion_recording" in data:
+        Setting.set("motion_recording", str(data["motion_recording"]).lower())
+    if "face_recording" in data:
+        Setting.set("face_recording", str(data["face_recording"]).lower())
+    if "object_recording" in data:
+        Setting.set("object_recording", str(data["object_recording"]).lower())
+    if "post_buffer" in data:
+        Setting.set("post_buffer", str(data["post_buffer"]))
+    if "scheduled_recording" in data:
+        Setting.set("scheduled_recording", str(data["scheduled_recording"]).lower())
+    if "scheduled_start" in data:
+        Setting.set("scheduled_start", str(data["scheduled_start"]))
+    if "scheduled_end" in data:
+        Setting.set("scheduled_end", str(data["scheduled_end"]))
+    if "continuous_24_7" in data:
+        Setting.set("continuous_24_7", str(data["continuous_24_7"]).lower())
+
+    print(f"[Settings] Recording settings updated")
+    return jsonify({"success": True})
+
+
+# =============================================================================
+# NOTIFICATION SETTINGS ENDPOINTS
+# =============================================================================
+
+
+@api_bp.route("/settings/notifications", methods=["GET"])
+@login_required
+def get_notification_settings():
+    """Get all notification settings"""
+    settings = {
+        "motion_notifications": Setting.get("motion_notifications", "true") == "true",
+        "face_notifications": Setting.get("face_notifications", "true") == "true",
+        "object_notifications": Setting.get("object_notifications", "true") == "true",
+        "toast_notifications": Setting.get("toast_notifications", "true") == "true",
+    }
+    return jsonify(settings)
+
+
+@api_bp.route("/settings/notifications", methods=["POST"])
+@login_required
+def update_notification_settings():
+    """Update notification settings"""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    if "motion_notifications" in data:
+        Setting.set("motion_notifications", str(data["motion_notifications"]).lower())
+    if "face_notifications" in data:
+        Setting.set("face_notifications", str(data["face_notifications"]).lower())
+    if "object_notifications" in data:
+        Setting.set("object_notifications", str(data["object_notifications"]).lower())
+    if "toast_notifications" in data:
+        Setting.set("toast_notifications", str(data["toast_notifications"]).lower())
+
+    print(f"[Settings] Notification settings updated")
+    return jsonify({"success": True})
+
+
+# =============================================================================
+# ALL SETTINGS ENDPOINT
+# =============================================================================
+
+
+@api_bp.route("/settings", methods=["GET"])
+@login_required
+def get_all_settings():
+    """Get all settings (notifications + recording)"""
+    notifications = {
+        "motion_notifications": Setting.get("motion_notifications", "true") == "true",
+        "face_notifications": Setting.get("face_notifications", "true") == "true",
+        "object_notifications": Setting.get("object_notifications", "true") == "true",
+        "toast_notifications": Setting.get("toast_notifications", "true") == "true",
+    }
+    recording = {
+        "motion_recording": Setting.get("motion_recording", "false") == "true",
+        "face_recording": Setting.get("face_recording", "false") == "true",
+        "object_recording": Setting.get("object_recording", "false") == "true",
+        "post_buffer": int(Setting.get("post_buffer", "5")),
+        "scheduled_recording": Setting.get("scheduled_recording", "false") == "true",
+        "scheduled_start": Setting.get("scheduled_start", "06:00"),
+        "scheduled_end": Setting.get("scheduled_end", "17:00"),
+        "continuous_24_7": Setting.get("continuous_24_7", "false") == "true",
+    }
+    return jsonify({"notifications": notifications, "recording": recording})
 
 
 # =============================================================================
@@ -484,6 +627,61 @@ def delete_user(user_id):
     return jsonify({"success": True, "deleted": username})
 
 
+@api_bp.route("/users/<int:user_id>/change-password", methods=["POST"])
+@login_required
+def change_password(user_id):
+    """Change a user's password (user can change own, admin can change any)"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Only allow user to change their own password, or admin to change any
+    if user.id != current_user.id and not current_user.is_admin():
+        return jsonify({"error": "Permission denied"}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
+    current_password = data.get("current_password", "")
+    new_password = data.get("new_password", "")
+    confirm_password = data.get("confirm_password", "")
+
+    # Verify current password (unless admin changing another user's password)
+    if user.id == current_user.id:
+        if not user.check_password(current_password):
+            return jsonify({"error": "Current password is incorrect"}), 400
+
+    # Validate new password
+    if not new_password:
+        return jsonify({"error": "New password is required"}), 400
+
+    if len(new_password) < 8:
+        return jsonify({"error": "New password must be at least 8 characters"}), 400
+
+    if new_password != confirm_password:
+        return jsonify({"error": "New passwords do not match"}), 400
+
+    # Update password
+    user.set_password(new_password)
+    db.session.commit()
+
+    # Audit log
+    from ..security import audit_log
+    from ..auth import get_client_ip
+
+    ip = get_client_ip()
+    audit_log(
+        "PASSWORD_CHANGE",
+        ip,
+        current_user.username,
+        f"User changed password: {user.username}",
+    )
+
+    print(f"[Users] Password changed for user: {user.username}")
+    return jsonify({"success": True, "message": "Password changed successfully"})
+
+
 # =============================================================================
 # AUDIT LOG ENDPOINTS
 # =============================================================================
@@ -589,3 +787,88 @@ def assign_camera_group(camera_id):
 
     db.session.commit()
     return jsonify({"success": True, "camera_id": camera_id, "group_id": group_id})
+
+
+@api_bp.route("/alerts", methods=["GET"])
+@login_required
+def get_alerts():
+    """Get detection alerts with optional filtering"""
+    from ..models.database import Alert, db
+
+    detection_type = request.args.get("type")
+    since_hours = request.args.get("since_hours", 24, type=int)
+    camera_id = request.args.get("camera_id")
+    limit = request.args.get("limit", 100, type=int)
+
+    query = Alert.query
+
+    if detection_type:
+        if detection_type not in ["motion", "face", "object"]:
+            return jsonify({"error": "Invalid detection type"}), 400
+        query = query.filter_by(detection_type=detection_type)
+
+    if camera_id:
+        query = query.filter_by(camera_id=camera_id)
+
+    since_time = datetime.utcnow() - timedelta(hours=since_hours)
+    query = query.filter(Alert.created_at >= since_time)
+
+    alerts = query.order_by(Alert.created_at.desc()).limit(limit).all()
+
+    return jsonify([alert.to_dict() for alert in alerts])
+
+
+@api_bp.route("/alerts/<int:alert_id>", methods=["GET"])
+@login_required
+def get_alert(alert_id):
+    """Get a specific alert"""
+    from ..models.database import Alert
+
+    alert = Alert.query.get(alert_id)
+    if not alert:
+        return jsonify({"error": "Alert not found"}), 404
+
+    return jsonify(alert.to_dict())
+
+
+@api_bp.route("/alerts/<int:alert_id>", methods=["DELETE"])
+@login_required
+def delete_alert(alert_id):
+    """Delete an alert (admin only)"""
+    from ..models.database import Alert
+    from ..security import audit_log
+    from ..auth import get_client_ip
+
+    alert = Alert.query.get(alert_id)
+    if not alert:
+        return jsonify({"error": "Alert not found"}), 404
+
+    alert_data = alert.to_dict()
+    db.session.delete(alert)
+    db.session.commit()
+
+    audit_log(
+        "DELETE_ALERT",
+        get_client_ip(),
+        current_user.username,
+        f"Deleted {alert_data['type']} alert from {alert_data['camera_id']}",
+    )
+
+    return jsonify({"success": True, "deleted": alert_id})
+
+
+def log_alert(camera_id, detection_type, confidence=None, thumbnail_path=None):
+    """Log a detection alert to the database"""
+    from ..models.database import Alert, db
+
+    alert = Alert(
+        camera_id=camera_id,
+        detection_type=detection_type,
+        confidence=confidence,
+        thumbnail_path=thumbnail_path,
+    )
+    db.session.add(alert)
+    db.session.commit()
+
+    print(f"[Alerts] Logged {detection_type} alert from {camera_id}")
+    return alert

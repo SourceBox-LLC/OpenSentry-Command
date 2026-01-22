@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://opensentry.fly.dev/docs.html
+    about: Check the documentation for setup guides and troubleshooting
+  - name: Discussions
+    url: https://github.com/SourceBox-LLC/OpenSentry-Command/discussions
+    about: Ask questions or discuss ideas with the community

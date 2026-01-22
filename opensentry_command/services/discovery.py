@@ -163,6 +163,7 @@ class OpenSentryServiceListener(ServiceListener):
                 "last_seen": time.time(),
                 "mdns_name": name,
                 "discovered_via": "mdns",
+                "recording": False,
             }
 
             if camera_id not in camera_streams:

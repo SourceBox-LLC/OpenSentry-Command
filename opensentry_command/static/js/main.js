@@ -202,6 +202,100 @@ function resetRetry(cameraId) {
 
 // Track recording state per camera
 const recordingState = {};
+const recordingTimers = {};
+const recordingStartTimes = {};
+
+// Track motion-triggered recording state
+const motionRecordingState = {};
+const motionRecordingTimers = {};
+
+// Get motion buffer from settings (default 5 seconds)
+function getMotionBufferMs() {
+    const savedBuffer = localStorage.getItem('motionBuffer');
+    const bufferSeconds = savedBuffer ? parseInt(savedBuffer, 10) : 5;
+    return bufferSeconds * 1000; // Convert to milliseconds
+}
+
+// Cached recording settings
+let recordingSettingsCache = null;
+let settingsCacheTime = 0;
+const SETTINGS_CACHE_MS = 5000; // Cache settings for 5 seconds
+
+// Get recording settings from API
+async function getRecordingSettings() {
+    const now = Date.now();
+    if (recordingSettingsCache && (now - settingsCacheTime) < SETTINGS_CACHE_MS) {
+        return recordingSettingsCache;
+    }
+
+    try {
+        const response = await fetch('/api/settings/recording');
+        recordingSettingsCache = await response.json();
+        settingsCacheTime = now;
+        return recordingSettingsCache;
+    } catch (err) {
+        console.error('Failed to get recording settings:', err);
+        // Return defaults on error
+        return {
+            continuous_24_7: false,
+            scheduled_recording: false,
+            scheduled_start: '06:00',
+            scheduled_end: '17:00',
+            motion_recording: false,
+            face_recording: false,
+            object_recording: false
+        };
+    }
+}
+
+// Check if recording is allowed based on settings and schedule
+async function isRecordingAllowed(recordingType) {
+    const settings = await getRecordingSettings();
+
+    // 24/7 recording overrides everything
+    if (settings.continuous_24_7) {
+        console.log(`[Schedule] 24/7 enabled, allowing ${recordingType} recording`);
+        return true;
+    }
+
+    // Check if the specific recording type is enabled
+    const typeEnabled = settings[recordingType];
+    if (!typeEnabled) {
+        console.log(`[Schedule] ${recordingType} recording disabled`);
+        return false;
+    }
+
+    // If scheduled recording is enabled, check time window
+    if (settings.scheduled_recording) {
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        // Parse scheduled times (format: "HH:MM")
+        const [startHour, startMin] = settings.scheduled_start.split(':').map(Number);
+        const [endHour, endMin] = settings.scheduled_end.split(':').map(Number);
+        const startMinutes = startHour * 60 + startMin;
+        const endMinutes = endHour * 60 + endMin;
+
+        // Check if current time is within window
+        let isInWindow;
+        if (startMinutes <= endMinutes) {
+            // Same-day window (e.g., 06:00 to 17:00)
+            isInWindow = currentMinutes >= startMinutes && currentMinutes < endMinutes;
+        } else {
+            // Overnight window (e.g., 22:00 to 06:00)
+            isInWindow = currentMinutes >= startMinutes || currentMinutes < endMinutes;
+        }
+
+        if (!isInWindow) {
+            console.log(`[Schedule] Outside scheduled window (${settings.scheduled_start} - ${settings.scheduled_end}), blocking ${recordingType} recording`);
+            return false;
+        }
+        
+        console.log(`[Schedule] Within scheduled window, allowing ${recordingType} recording`);
+    }
+
+    return true;
+}
 
 // Take snapshot from camera
 async function takeSnapshot(cameraId) {
@@ -243,6 +337,7 @@ async function toggleRecording(cameraId) {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
                     Stop
                 `;
+                showRecordingIndicator(cameraId, true);
                 showToast(`Recording started: ${data.filename}`, 'success');
             } else {
                 btn.classList.remove('recording');
@@ -250,7 +345,15 @@ async function toggleRecording(cameraId) {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
                     Record
                 `;
-                showToast(`Recording saved: ${data.filename} (${data.duration}s)`, 'success');
+                showRecordingIndicator(cameraId, false);
+                // Clear auto recording state (motion or object triggered)
+                motionRecordingState[cameraId] = false;
+                if (motionRecordingTimers[cameraId]) {
+                    clearTimeout(motionRecordingTimers[cameraId]);
+                    delete motionRecordingTimers[cameraId];
+                }
+                const duration = data.duration ? Math.round(data.duration) : 0;
+                showToast(`Recording saved: ${data.filename} (${duration}s)`, 'success');
             }
         } else {
             showToast(`Error: ${data.error}`, 'error');
@@ -258,6 +361,507 @@ async function toggleRecording(cameraId) {
     } catch (err) {
         console.error('Failed to toggle recording:', err);
         showToast('Failed to toggle recording', 'error');
+    }
+}
+
+// Show/hide recording indicator and timer on feed
+function showRecordingIndicator(cameraId, show) {
+    const recIndicator = document.getElementById(`rec-indicator-${cameraId}`);
+    const recTimer = document.getElementById(`recording-timer-${cameraId}`);
+    
+    console.log(`[REC] showRecordingIndicator called: cameraId=${cameraId}, show=${show}`);
+    console.log(`[REC] recIndicator element:`, recIndicator);
+    console.log(`[REC] recTimer element:`, recTimer);
+    
+    if (show) {
+        // Show REC badge
+        if (recIndicator) {
+            recIndicator.classList.remove('hidden');
+            console.log(`[REC] Showing REC indicator for ${cameraId}`);
+        } else {
+            console.warn(`[REC] REC indicator element not found for ${cameraId}`);
+        }
+        // Show and start timer
+        if (recTimer) {
+            recTimer.classList.remove('hidden');
+            recordingStartTimes[cameraId] = Date.now();
+            updateRecordingTimer(cameraId);
+            recordingTimers[cameraId] = setInterval(() => updateRecordingTimer(cameraId), 1000);
+            console.log(`[REC] Started timer for ${cameraId}`);
+        } else {
+            console.warn(`[REC] Recording timer element not found for ${cameraId}`);
+        }
+    } else {
+        // Hide REC badge
+        if (recIndicator) {
+            recIndicator.classList.add('hidden');
+            console.log(`[REC] Hiding REC indicator for ${cameraId}`);
+        }
+        // Hide and stop timer
+        if (recTimer) {
+            recTimer.classList.add('hidden');
+        }
+        if (recordingTimers[cameraId]) {
+            clearInterval(recordingTimers[cameraId]);
+            delete recordingTimers[cameraId];
+            console.log(`[REC] Stopped timer for ${cameraId}`);
+        }
+        delete recordingStartTimes[cameraId];
+    }
+}
+
+// Update recording timer display
+function updateRecordingTimer(cameraId) {
+    const recTimer = document.getElementById(`recording-timer-${cameraId}`);
+    if (!recTimer || !recordingStartTimes[cameraId]) return;
+    
+    const elapsed = Math.floor((Date.now() - recordingStartTimes[cameraId]) / 1000);
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const seconds = (elapsed % 60).toString().padStart(2, '0');
+    
+    const timeSpan = recTimer.querySelector('.rec-time');
+    if (timeSpan) {
+        timeSpan.textContent = `${minutes}:${seconds}`;
+    }
+}
+
+// Check recording status for all cameras on page load
+async function syncRecordingStates() {
+    try {
+        const response = await fetch('/api/cameras');
+        const cameras = await response.json();
+        
+        for (const [cameraId, cameraInfo] of Object.entries(cameras)) {
+            // Check if this camera has an active stream with recording
+            try {
+                const statusResponse = await fetch(`/api/camera/${cameraId}/recording/status`);
+                const status = await statusResponse.json();
+                
+                if (status.recording) {
+                    recordingState[cameraId] = true;
+                    const btn = document.getElementById(`record-btn-${cameraId}`);
+                    if (btn) {
+                        btn.classList.add('recording');
+                        btn.innerHTML = `
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                            Stop
+                        `;
+                    }
+                    // Calculate elapsed time from server data
+                    if (status.duration) {
+                        recordingStartTimes[cameraId] = Date.now() - (status.duration * 1000);
+                    } else {
+                        recordingStartTimes[cameraId] = Date.now();
+                    }
+                    showRecordingIndicator(cameraId, true);
+                }
+            } catch (e) {
+                // Recording status endpoint might not exist or camera not streaming
+                console.debug(`Could not check recording status for ${cameraId}:`, e);
+            }
+        }
+    } catch (err) {
+        console.error('Failed to sync recording states:', err);
+    }
+}
+
+// Start motion-triggered recording
+async function startMotionRecording(cameraId, cameraName) {
+    // Check if already recording
+    if (recordingState[cameraId]) {
+        console.log(`[MotionRec] Already recording ${cameraId}, resetting post-buffer timer`);
+        // Reset the post-buffer timer
+        if (motionRecordingTimers[cameraId]) {
+            clearTimeout(motionRecordingTimers[cameraId]);
+        }
+        motionRecordingTimers[cameraId] = setTimeout(() => {
+            stopMotionRecording(cameraId, cameraName);
+        }, getMotionBufferMs());
+        return;
+    }
+
+    // Check if motion recording is allowed based on schedule
+    const isAllowed = await isRecordingAllowed('motion_recording');
+    if (!isAllowed) {
+        return;
+    }
+
+    console.log(`[MotionRec] Starting motion-triggered recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/start`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success || data.filename) {
+            recordingState[cameraId] = true;
+            motionRecordingState[cameraId] = true;
+
+            // Update button state
+            const btn = document.getElementById(`record-btn-${cameraId}`);
+            if (btn) {
+                btn.classList.add('recording');
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                    Stop
+                `;
+            }
+
+            showRecordingIndicator(cameraId, true);
+            showToast(`🎯 Auto-recording: ${cameraName}`, 'info');
+
+            // Set timer to stop recording after motion ends + buffer
+            motionRecordingTimers[cameraId] = setTimeout(() => {
+                stopMotionRecording(cameraId, cameraName);
+            }, getMotionBufferMs());
+
+            console.log(`[MotionRec] Recording started for ${cameraId}, will stop in ${getMotionBufferMs()}ms`);
+        } else {
+            console.error(`[MotionRec] Failed to start recording for ${cameraId}:`, data.error);
+        }
+    } catch (err) {
+        console.error(`[MotionRec] Error starting recording for ${cameraId}:`, err);
+    }
+}
+
+// Stop motion-triggered recording
+async function stopMotionRecording(cameraId, cameraName) {
+    // Check if we started this recording
+    if (!motionRecordingState[cameraId] || !recordingState[cameraId]) {
+        console.log(`[MotionRec] Not a motion recording or already stopped for ${cameraId}`);
+        return;
+    }
+
+    console.log(`[MotionRec] Stopping motion-triggered recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/stop`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        recordingState[cameraId] = false;
+        motionRecordingState[cameraId] = false;
+
+        // Clear any pending timer
+        if (motionRecordingTimers[cameraId]) {
+            clearTimeout(motionRecordingTimers[cameraId]);
+            delete motionRecordingTimers[cameraId];
+        }
+
+        // Update button state
+        const btn = document.getElementById(`record-btn-${cameraId}`);
+        if (btn) {
+            btn.classList.remove('recording');
+            btn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                Record
+            `;
+        }
+
+        showRecordingIndicator(cameraId, false);
+
+        if (data.filename) {
+            const duration = data.duration ? Math.round(data.duration) : 0;
+            console.log(`[MotionRec] Recording saved: ${data.filename} (${duration}s)`);
+        }
+    } catch (err) {
+        console.error(`[MotionRec] Error stopping recording for ${cameraId}:`, err);
+    }
+}
+
+// Start object-triggered recording
+async function startObjectRecording(cameraId, cameraName) {
+    // Check if already recording
+    if (recordingState[cameraId]) {
+        console.log(`[ObjectRec] Already recording ${cameraId}, resetting post-buffer timer`);
+        // Reset the post-buffer timer
+        if (motionRecordingTimers[cameraId]) {
+            clearTimeout(motionRecordingTimers[cameraId]);
+        }
+        motionRecordingTimers[cameraId] = setTimeout(() => {
+            stopObjectRecording(cameraId, cameraName);
+        }, getMotionBufferMs());
+        return;
+    }
+
+    // Check if object recording is allowed based on schedule
+    const isAllowed = await isRecordingAllowed('object_recording');
+    if (!isAllowed) {
+        return;
+    }
+
+    console.log(`[ObjectRec] Starting object-triggered recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/start`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success || data.filename) {
+            recordingState[cameraId] = true;
+            motionRecordingState[cameraId] = true; // Reuse motion recording state
+
+            // Update button state
+            const btn = document.getElementById(`record-btn-${cameraId}`);
+            if (btn) {
+                btn.classList.add('recording');
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                    Stop
+                `;
+            }
+
+            showRecordingIndicator(cameraId, true);
+            showToast(`🔍 Auto-recording: ${cameraName}`, 'info');
+
+            // Set timer to stop recording after detection ends + buffer
+            motionRecordingTimers[cameraId] = setTimeout(() => {
+                stopObjectRecording(cameraId, cameraName);
+            }, getMotionBufferMs());
+
+            const bufferMs = getMotionBufferMs();
+            console.log(`[ObjectRec] Recording started for ${cameraId}, will stop in ${bufferMs}ms`);
+        } else {
+            console.error(`[ObjectRec] Failed to start recording for ${cameraId}:`, data.error);
+        }
+    } catch (err) {
+        console.error(`[ObjectRec] Error starting recording for ${cameraId}:`, err);
+    }
+}
+
+// Stop object-triggered recording
+async function stopObjectRecording(cameraId, cameraName) {
+    // Check if we started this recording
+    if (!motionRecordingState[cameraId] || !recordingState[cameraId]) {
+        console.log(`[ObjectRec] Not an object recording or already stopped for ${cameraId}`);
+        return;
+    }
+
+    console.log(`[ObjectRec] Stopping object-triggered recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/stop`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        recordingState[cameraId] = false;
+        motionRecordingState[cameraId] = false;
+
+        // Clear any pending timer
+        if (motionRecordingTimers[cameraId]) {
+            clearTimeout(motionRecordingTimers[cameraId]);
+            delete motionRecordingTimers[cameraId];
+        }
+
+        // Update button state
+        const btn = document.getElementById(`record-btn-${cameraId}`);
+        if (btn) {
+            btn.classList.remove('recording');
+            btn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                Record
+            `;
+        }
+
+        showRecordingIndicator(cameraId, false);
+
+        if (data.filename) {
+            const duration = data.duration ? Math.round(data.duration) : 0;
+            console.log(`[ObjectRec] Recording saved: ${data.filename} (${duration}s)`);
+        }
+    } catch (err) {
+        console.error(`[ObjectRec] Error stopping recording for ${cameraId}:`, err);
+    }
+}
+
+// Start face-triggered recording
+async function startFaceRecording(cameraId, cameraName) {
+    // Check if already recording
+    if (recordingState[cameraId]) {
+        console.log(`[FaceRec] Already recording ${cameraId}, resetting post-buffer timer`);
+        // Reset the post-buffer timer
+        if (motionRecordingTimers[cameraId]) {
+            clearTimeout(motionRecordingTimers[cameraId]);
+        }
+        motionRecordingTimers[cameraId] = setTimeout(() => {
+            stopFaceRecording(cameraId, cameraName);
+        }, getMotionBufferMs());
+        return;
+    }
+
+    // Check if face recording is allowed based on schedule
+    const isAllowed = await isRecordingAllowed('face_recording');
+    if (!isAllowed) {
+        return;
+    }
+
+    console.log(`[FaceRec] Starting face-triggered recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/start`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success || data.filename) {
+            recordingState[cameraId] = true;
+            motionRecordingState[cameraId] = true; // Reuse motion recording state
+
+            // Update button state
+            const btn = document.getElementById(`record-btn-${cameraId}`);
+            if (btn) {
+                btn.classList.add('recording');
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                    Stop
+                `;
+            }
+
+            showRecordingIndicator(cameraId, true);
+            showToast(`📸 Auto-recording: ${cameraName}`, 'info');
+
+            // Set timer to stop recording after detection ends + buffer
+            motionRecordingTimers[cameraId] = setTimeout(() => {
+                stopFaceRecording(cameraId, cameraName);
+            }, getMotionBufferMs());
+
+            const bufferMs = getMotionBufferMs();
+            console.log(`[FaceRec] Recording started for ${cameraId}, will stop in ${bufferMs}ms`);
+        } else {
+            console.error(`[FaceRec] Failed to start recording for ${cameraId}:`, data.error);
+        }
+    } catch (err) {
+        console.error(`[FaceRec] Error starting recording for ${cameraId}:`, err);
+    }
+}
+
+// Stop face-triggered recording
+async function stopFaceRecording(cameraId, cameraName) {
+    // Check if we started this recording
+    if (!motionRecordingState[cameraId] || !recordingState[cameraId]) {
+        console.log(`[FaceRec] Not a face recording or already stopped for ${cameraId}`);
+        return;
+    }
+
+    console.log(`[FaceRec] Stopping face-triggered recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/stop`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        recordingState[cameraId] = false;
+        motionRecordingState[cameraId] = false;
+
+        // Clear any pending timer
+        if (motionRecordingTimers[cameraId]) {
+            clearTimeout(motionRecordingTimers[cameraId]);
+            delete motionRecordingTimers[cameraId];
+        }
+
+        // Update button state
+        const btn = document.getElementById(`record-btn-${cameraId}`);
+        if (btn) {
+            btn.classList.remove('recording');
+            btn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                Record
+            `;
+        }
+
+        showRecordingIndicator(cameraId, false);
+
+        if (data.filename) {
+            const duration = data.duration ? Math.round(data.duration) : 0;
+            console.log(`[FaceRec] Recording saved: ${data.filename} (${duration}s)`);
+        }
+    } catch (err) {
+        console.error(`[FaceRec] Error stopping recording for ${cameraId}:`, err);
+    }
+}
+
+// Start continuous recording (24/7)
+async function startContinuousRecording(cameraId, cameraName) {
+    // Check if already recording
+    if (recordingState[cameraId]) {
+        console.log(`[ContinuousRec] Already recording ${cameraId}`);
+        return;
+    }
+
+    console.log(`[ContinuousRec] Starting 24/7 recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/start`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success || data.filename) {
+            recordingState[cameraId] = true;
+            motionRecordingState[cameraId] = true; // Mark as continuous
+
+            // Update button state
+            const btn = document.getElementById(`record-btn-${cameraId}`);
+            if (btn) {
+                btn.classList.add('recording');
+                btn.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                    Stop
+                `;
+            }
+
+            showRecordingIndicator(cameraId, true);
+            console.log(`[ContinuousRec] Recording started for ${cameraId}`);
+        } else {
+            console.error(`[ContinuousRec] Failed to start recording for ${cameraId}:`, data.error);
+        }
+    } catch (err) {
+        console.error(`[ContinuousRec] Error starting recording for ${cameraId}:`, err);
+    }
+}
+
+// Stop continuous recording (24/7)
+async function stopContinuousRecording(cameraId, cameraName) {
+    // Check if we're recording
+    if (!recordingState[cameraId]) {
+        console.log(`[ContinuousRec] Not recording ${cameraId}`);
+        return;
+    }
+
+    console.log(`[ContinuousRec] Stopping 24/7 recording for ${cameraId}`);
+
+    try {
+        const response = await fetch(`/api/camera/${cameraId}/recording/stop`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        recordingState[cameraId] = false;
+        motionRecordingState[cameraId] = false;
+
+        // Update button state
+        const btn = document.getElementById(`record-btn-${cameraId}`);
+        if (btn) {
+            btn.classList.remove('recording');
+            btn.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                Record
+            `;
+        }
+
+        showRecordingIndicator(cameraId, false);
+
+        if (data.filename) {
+            const duration = data.duration ? Math.round(data.duration) : 0;
+            console.log(`[ContinuousRec] Recording saved: ${data.filename} (${duration}s)`);
+        }
+    } catch (err) {
+        console.error(`[ContinuousRec] Error stopping recording for ${cameraId}:`, err);
     }
 }
 
@@ -571,6 +1175,11 @@ function createCameraCard(cameraId, info) {
             <div class="feed-overlay" id="feed-overlay-${cameraId}">
                 <span class="feed-tag live">LIVE</span>
                 <span class="feed-tag">HD</span>
+                <span class="feed-tag rec hidden" id="rec-indicator-${cameraId}">REC</span>
+            </div>
+            <div class="recording-timer hidden" id="recording-timer-${cameraId}">
+                <span class="rec-dot"></span>
+                <span class="rec-time">00:00</span>
             </div>
         </div>
         <div class="camera-controls">
@@ -748,6 +1357,9 @@ async function updateStatus() {
                     if (motionEnabled) {
                         showToast(`🎯 Motion detected on ${info.name}!`, 'warning');
                     }
+
+                    // Start motion-triggered recording if enabled
+                    startMotionRecording(cameraId, info.name);
                     
                     // Add to history if not already in server events
                     if (!info.motion_events || info.motion_events.length === 0 || 
@@ -756,7 +1368,7 @@ async function updateStatus() {
                     }
                     
                 } else if (!info.motion_active && wasActive) {
-                    // Motion just ended
+                    // Motion just ended - recording will stop automatically after buffer
                     const card = document.querySelector(`.camera-card[data-camera-id="${cameraId}"]`);
                     if (card) {
                         card.classList.remove('motion-active');
@@ -803,6 +1415,9 @@ async function updateStatus() {
                     if (faceEnabled) {
                         showToast(`📸 Face detected on ${info.name}!`, 'warning');
                     }
+
+                    // Start face-triggered recording if enabled
+                    startFaceRecording(cameraId, info.name);
 
                     // Add to history if not already in server events
                     if (!info.face_events || info.face_events.length === 0 ||
@@ -870,6 +1485,9 @@ async function updateStatus() {
                         showToast(`🔍 Objects detected on ${info.name}!`, 'info');
                     }
 
+                    // Start object-triggered recording if enabled
+                    startObjectRecording(cameraId, info.name);
+
                     // Add to history if not already in server events
                     if (!info.object_events || info.object_events.length === 0 ||
                         info.object_events[0].event !== 'objects_detected') {
@@ -908,6 +1526,42 @@ async function updateStatus() {
                     objects: event.objects || []
                 }));
                 updateCameraObjectHistory(cameraId);
+            }
+
+            // Sync recording state from server
+            if (info.recording !== undefined) {
+                console.log(`[Sync] ${cameraId}: recording=${info.recording}, wasRecording=${recordingState[cameraId]}`);
+                const wasRecording = recordingState[cameraId];
+                if (info.recording && !wasRecording) {
+                    // Recording started
+                    recordingState[cameraId] = true;
+                    const btn = document.getElementById(`record-btn-${cameraId}`);
+                    if (btn) {
+                        btn.classList.add('recording');
+                        btn.innerHTML = `
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
+                            Stop
+                        `;
+                    }
+                    recordingStartTimes[cameraId] = Date.now();
+                    showRecordingIndicator(cameraId, true);
+                    console.log(`[Sync] Recording started for ${cameraId}`);
+                } else if (!info.recording && wasRecording) {
+                    // Recording stopped
+                    recordingState[cameraId] = false;
+                    const btn = document.getElementById(`record-btn-${cameraId}`);
+                    if (btn) {
+                        btn.classList.remove('recording');
+                        btn.innerHTML = `
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                            Record
+                        `;
+                    }
+                    showRecordingIndicator(cameraId, false);
+                    console.log(`[Sync] Recording stopped for ${cameraId}`);
+                }
+            } else {
+                console.log(`[Sync] ${cameraId}: recording key not in info`);
             }
 
             // Handle status changes
@@ -1005,6 +1659,9 @@ function initializeApp() {
     // Start polling for status updates
     setInterval(updateStatus, 2000);
     updateStatus();
+    
+    // Sync recording states from server
+    syncRecordingStates();
 }
 
 // Initialize when DOM is ready

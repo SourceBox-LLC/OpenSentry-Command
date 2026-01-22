@@ -1,6 +1,7 @@
 """
 Persistent RTSP camera stream management for OpenSentry Command Center.
 """
+
 import cv2
 import threading
 import time
@@ -13,7 +14,9 @@ from ..config import Config
 
 # Force RTSP to use TCP and accept self-signed certs for RTSPS
 # tls_verify=0 allows self-signed certificates
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|rtsp_flags;prefer_tcp|tls_verify;0"
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+    "rtsp_transport;tcp|rtsp_flags;prefer_tcp|tls_verify;0"
+)
 
 
 def derive_credential(secret: str, service: str) -> str:
@@ -29,7 +32,9 @@ def _get_rtsp_credentials():
         print("[RTSP] Using derived credentials from OPENSENTRY_SECRET")
         return "opensentry", derive_credential(Config.OPENSENTRY_SECRET, "rtsp")
     else:
-        print(f"[RTSP] Using legacy credentials: {Config.RTSP_USERNAME}/{'*' * len(Config.RTSP_PASSWORD)}")
+        print(
+            f"[RTSP] Using legacy credentials: {Config.RTSP_USERNAME}/{'*' * len(Config.RTSP_PASSWORD)}"
+        )
         return Config.RTSP_USERNAME, Config.RTSP_PASSWORD
 
 
@@ -43,18 +48,31 @@ def add_rtsp_credentials(url: str) -> str:
         netloc = f"{RTSP_USERNAME}:{RTSP_PASSWORD}@{parsed.hostname}"
         if parsed.port:
             netloc += f":{parsed.port}"
-        return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+        return urlunparse(
+            (
+                parsed.scheme,
+                netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
     return url
 
 
 class CameraStream:
     """Manages a persistent RTSP connection with shared frame buffer"""
-    
+
     def __init__(self, camera_id: str, url: str):
         self.camera_id = camera_id
         self.original_url = url
         self.url = add_rtsp_credentials(url)
-        masked_url = self.url.replace(f":{RTSP_PASSWORD}@", ":****@") if RTSP_PASSWORD else self.url
+        masked_url = (
+            self.url.replace(f":{RTSP_PASSWORD}@", ":****@")
+            if RTSP_PASSWORD
+            else self.url
+        )
         print(f"[Camera {camera_id}] RTSP URL: {masked_url}")
         self.frame = None
         self.frame_lock = threading.Lock()
@@ -64,7 +82,7 @@ class CameraStream:
         self.last_frame_time = 0
         self.retry_count = 0
         self.max_retries = 60
-        
+
         # Recording state
         self.recording = False
         self.recording_lock = threading.Lock()
@@ -73,7 +91,7 @@ class CameraStream:
         self.recording_tempfile = None
         self.recording_start_time = None
         self.frames_recorded = 0
-        
+
     def start(self):
         """Start the capture thread"""
         if self.running:
@@ -82,7 +100,7 @@ class CameraStream:
         self.thread = threading.Thread(target=self._capture_loop, daemon=True)
         self.thread.start()
         print(f"[Camera {self.camera_id}] Capture thread started")
-        
+
     def stop(self):
         """Stop the capture thread"""
         self.stop_recording()  # Stop any active recording
@@ -90,137 +108,342 @@ class CameraStream:
         if self.thread:
             self.thread.join(timeout=2)
         print(f"[Camera {self.camera_id}] Capture thread stopped")
-    
+
     def start_recording(self) -> dict:
         """Start recording video to temporary file"""
         import tempfile
-        
+
         with self.recording_lock:
             if self.recording:
-                return {'error': 'Already recording', 'filename': self.recording_filename}
-            
+                return {
+                    "error": "Already recording",
+                    "filename": self.recording_filename,
+                }
+
             if self.frame is None:
-                return {'error': 'No frame available to determine video size'}
-            
+                return {"error": "No frame available to determine video size"}
+
             # Get frame dimensions
             height, width = self.frame.shape[:2]
-            
+
             # Create filename with timestamp
             from datetime import datetime
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.recording_filename = f"{self.camera_id}_{timestamp}.mp4"
-            
+
             # Use temp directory for recording
             self.recording_tempfile = tempfile.NamedTemporaryFile(
-                suffix='.mp4', delete=False
+                suffix=".mp4", delete=False
             )
             filepath = self.recording_tempfile.name
             self.recording_tempfile.close()
-            
-            # Use mp4v codec for compatibility
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+
+            # Try H264 codec first (browser compatible), fall back to mp4v
+            # H264 requires: apt-get install libx264-dev and OpenCV built with ffmpeg
+            fourcc = cv2.VideoWriter_fourcc(*"avc1")  # H.264 codec
             self.video_writer = cv2.VideoWriter(filepath, fourcc, 15.0, (width, height))
-            
+
+            # Fallback to mp4v if avc1 failed (will need transcoding for browser playback)
+            if not self.video_writer.isOpened():
+                print(f"[Recording] H.264 codec not available, trying mp4v fallback")
+                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                self.video_writer = cv2.VideoWriter(
+                    filepath, fourcc, 15.0, (width, height)
+                )
+
             if not self.video_writer.isOpened():
                 self.video_writer = None
                 self.recording_filename = None
                 os.unlink(filepath)
-                return {'error': 'Failed to create video writer'}
-            
+                return {"error": "Failed to create video writer"}
+
             self.recording = True
             self.recording_start_time = time.time()
             self.frames_recorded = 0
             print(f"[Recording] Started: {self.recording_filename} (temp: {filepath})")
-            
+
             return {
-                'success': True,
-                'filename': self.recording_filename,
-                'camera_id': self.camera_id
+                "success": True,
+                "filename": self.recording_filename,
+                "camera_id": self.camera_id,
             }
-    
+
     def stop_recording(self) -> dict:
         """Stop recording and return video data"""
         with self.recording_lock:
             if not self.recording:
-                return {'error': 'Not recording'}
-            
+                return {"error": "Not recording"}
+
             self.recording = False
             filename = self.recording_filename
             frames = self.frames_recorded
-            duration = time.time() - self.recording_start_time if self.recording_start_time else 0
-            temp_path = self.recording_tempfile.name if self.recording_tempfile else None
-            
+            duration = (
+                time.time() - self.recording_start_time
+                if self.recording_start_time
+                else 0
+            )
+            temp_path = (
+                self.recording_tempfile.name if self.recording_tempfile else None
+            )
+
             if self.video_writer:
                 self.video_writer.release()
                 self.video_writer = None
-            
+
             # Read video data from temp file
             video_data = None
             if temp_path and os.path.exists(temp_path):
-                with open(temp_path, 'rb') as f:
+                with open(temp_path, "rb") as f:
                     video_data = f.read()
                 os.unlink(temp_path)  # Delete temp file
-            
+
+            # Transcode to browser-compatible H.264 if needed
+            if video_data:
+                safe_filename = filename or "recording"
+                video_data = self._transcode_to_h264(video_data, safe_filename)
+
             self.recording_filename = None
             self.recording_start_time = None
             self.frames_recorded = 0
             self.recording_tempfile = None
-            
-            print(f"[Recording] Stopped: {filename} ({frames} frames, {duration:.1f}s, {len(video_data) if video_data else 0} bytes)")
-            
+
+            print(
+                f"[Recording] Stopped: {filename} ({frames} frames, {duration:.1f}s, {len(video_data) if video_data else 0} bytes)"
+            )
+
             return {
-                'success': True,
-                'filename': filename,
-                'frames': frames,
-                'duration': round(duration, 1),
-                'data': video_data
+                "success": True,
+                "filename": filename,
+                "frames": frames,
+                "duration": round(duration, 1),
+                "data": video_data,
             }
-    
+
+    def _transcode_to_h264(self, video_data: bytes, filename: str) -> bytes:
+        """Transcode video to browser-compatible H.264 format using ffmpeg"""
+        import subprocess
+        import shutil
+
+        # Check if ffmpeg is available
+        ffmpeg_path = shutil.which("ffmpeg")
+        if not ffmpeg_path:
+            print(
+                f"[Recording] ffmpeg not available, using original video (may not play in browser)"
+            )
+            return video_data
+
+        input_path = None
+        output_path = None
+
+        try:
+            # Create temp files for transcoding
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as input_file:
+                input_file.write(video_data)
+                input_path = input_file.name
+
+            output_path = input_path.replace(".mp4", "_h264.mp4")
+
+            # Run ffmpeg to transcode to H.264
+            # -c:v libx264 for H.264 encoding
+            # -preset fast for reasonable encoding speed
+            # -crf 23 for good quality/size balance
+            # -movflags +faststart for web streaming optimization
+            cmd = [
+                ffmpeg_path,
+                "-y",  # Overwrite output file
+                "-i",
+                input_path,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-movflags",
+                "+faststart",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                output_path,
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,  # 60 second timeout
+            )
+
+            # Read transcoded video
+            transcoded_data = None
+            if os.path.exists(output_path):
+                with open(output_path, "rb") as f:
+                    transcoded_data = f.read()
+                os.unlink(output_path)
+
+            # Clean up input file
+            if input_path and os.path.exists(input_path):
+                os.unlink(input_path)
+
+            if transcoded_data and len(transcoded_data) > 0:
+                savings = len(video_data) - len(transcoded_data)
+                print(
+                    f"[Recording] Transcoded to H.264: {filename} ({savings} bytes saved)"
+                )
+                return transcoded_data
+            else:
+                print(f"[Recording] Transcoding failed for {filename}, using original")
+                return video_data
+
+        except subprocess.TimeoutExpired:
+            print(f"[Recording] Transcoding timeout for {filename}, using original")
+            if input_path and os.path.exists(input_path):
+                os.unlink(input_path)
+            if output_path and os.path.exists(output_path):
+                os.unlink(output_path)
+            return video_data
+        except Exception as e:
+            print(f"[Recording] Transcoding error for {filename}: {e}, using original")
+            if input_path and os.path.exists(input_path):
+                os.unlink(input_path)
+            if output_path and os.path.exists(output_path):
+                os.unlink(output_path)
+            return video_data
+
+        try:
+            # Create temp files for transcoding
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as input_file:
+                input_file.write(video_data)
+                input_path = input_file.name
+
+            output_path = input_path.replace(".mp4", "_h264.mp4")
+
+            # Run ffmpeg to transcode to H.264
+            # -c:v libx264 for H.264 encoding
+            # -preset fast for reasonable encoding speed
+            # -crf 23 for good quality/size balance
+            # -movflags +faststart for web streaming optimization
+            cmd = [
+                ffmpeg_path,
+                "-y",  # Overwrite output file
+                "-i",
+                input_path,
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                "-movflags",
+                "+faststart",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                output_path,
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,  # 60 second timeout
+            )
+
+            # Read transcoded video
+            transcoded_data = None
+            if os.path.exists(output_path):
+                with open(output_path, "rb") as f:
+                    transcoded_data = f.read()
+                os.unlink(output_path)
+
+            # Clean up input file
+            os.unlink(input_path)
+
+            if transcoded_data and len(transcoded_data) > 0:
+                savings = len(video_data) - len(transcoded_data)
+                print(
+                    f"[Recording] Transcoded to H.264: {filename} ({savings} bytes saved)"
+                )
+                return transcoded_data
+            else:
+                print(f"[Recording] Transcoding failed for {filename}, using original")
+                return video_data
+
+        except subprocess.TimeoutExpired:
+            print(f"[Recording] Transcoding timeout for {filename}, using original")
+            if os.path.exists(input_path):
+                os.unlink(input_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+            return video_data
+        except Exception as e:
+            print(f"[Recording] Transcoding error for {filename}: {e}, using original")
+            if os.path.exists(input_path):
+                os.unlink(input_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+            return video_data
+
     def get_recording_status(self) -> dict:
         """Get current recording status"""
         with self.recording_lock:
             if not self.recording:
-                return {'recording': False}
-            
-            duration = time.time() - self.recording_start_time if self.recording_start_time else 0
+                return {"recording": False}
+
+            duration = (
+                time.time() - self.recording_start_time
+                if self.recording_start_time
+                else 0
+            )
             return {
-                'recording': True,
-                'filename': self.recording_filename,
-                'frames': self.frames_recorded,
-                'duration': round(duration, 1)
+                "recording": True,
+                "filename": self.recording_filename,
+                "frames": self.frames_recorded,
+                "duration": round(duration, 1),
             }
-        
+
     def _capture_loop(self):
         """Background thread that maintains persistent RTSP connection"""
         while self.running:
             with cameras_lock:
                 camera_info = CAMERAS.get(self.camera_id, {})
-                if camera_info.get('status') == 'offline':
-                    print(f"[Camera {self.camera_id}] Camera offline, stopping reconnection attempts")
+                if camera_info.get("status") == "offline":
+                    print(
+                        f"[Camera {self.camera_id}] Camera offline, stopping reconnection attempts"
+                    )
                     self.running = False
                     break
-            
+
             if self.retry_count >= self.max_retries:
                 print(f"[Camera {self.camera_id}] Max retries reached, stopping")
                 self.running = False
                 break
-            
+
             cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
-            
+
             if not cap.isOpened():
                 self.retry_count += 1
                 self.connected = False
                 wait_time = min(5 * self.retry_count, 30)
-                print(f"[Camera {self.camera_id}] Failed to connect (attempt {self.retry_count}/{self.max_retries}), retrying in {wait_time}s...")
+                print(
+                    f"[Camera {self.camera_id}] Failed to connect (attempt {self.retry_count}/{self.max_retries}), retrying in {wait_time}s..."
+                )
                 time.sleep(wait_time)
                 continue
-            
+
             self.retry_count = 0
             print(f"[Camera {self.camera_id}] Connected to RTSP stream")
             self.connected = True
             consecutive_failures = 0
-            
+
             while self.running and consecutive_failures < 30:
                 success, frame = cap.read()
                 if success:
@@ -228,7 +451,7 @@ class CameraStream:
                     with self.frame_lock:
                         self.frame = frame
                         self.last_frame_time = time.time()
-                    
+
                     # Write frame to recording if active
                     with self.recording_lock:
                         if self.recording and self.video_writer:
@@ -237,19 +460,19 @@ class CameraStream:
                 else:
                     consecutive_failures += 1
                     time.sleep(0.033)
-                    
+
             cap.release()
             self.connected = False
             if self.running:
                 self.retry_count += 1
                 print(f"[Camera {self.camera_id}] Connection lost, reconnecting...")
                 time.sleep(1)
-                
+
     def get_frame(self):
         """Get the latest frame (thread-safe)"""
         with self.frame_lock:
             return self.frame.copy() if self.frame is not None else None
-            
+
     def is_active(self) -> bool:
         """Check if we have recent frames"""
         return self.connected and (time.time() - self.last_frame_time) < 2

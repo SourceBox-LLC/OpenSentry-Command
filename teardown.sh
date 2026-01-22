@@ -34,18 +34,49 @@ fi
 echo ""
 read -p "Remove database (users, media, audit logs)? (y/N): " remove_data
 if [ "$remove_data" = "y" ] || [ "$remove_data" = "Y" ]; then
-    sudo rm -rf ./data
-    echo "✅ Database removed"
+    echo "🗑️  Removing database..."
+    if sudo rm -rf ./data 2>/dev/null; then
+        echo "✅ Database removed"
+    else
+        if [ ! -d "./data" ]; then
+            echo "✅ Database removed (already gone)"
+        else
+            echo "⚠️  Could not remove database. Check permissions in ./data/"
+        fi
+    fi
 fi
 
 echo ""
 read -p "Remove SSL certificates? (y/N): " remove_certs
 if [ "$remove_certs" = "y" ] || [ "$remove_certs" = "Y" ]; then
-    rm -rf ./certs
+    echo "🗑️  Removing SSL certificates..."
+
+    # Try removing directly first
+    if rm -rf ./certs 2>/dev/null; then
+        echo "✅ SSL certificates removed"
+    else
+        # Permission denied - try with sudo
+        echo "⚠️  Permission denied. Trying with sudo..."
+        if sudo rm -rf ./certs 2>/dev/null; then
+            echo "✅ SSL certificates removed (with sudo)"
+        else
+            # Still failed - maybe certs don't exist or other issue
+            if [ ! -d "./certs" ]; then
+                echo "✅ SSL certificates removed (already gone)"
+            else
+                echo "⚠️  Could not remove certificates. Check permissions in ./certs/"
+            fi
+        fi
+    fi
+
     # Also remove from system trust store
-    sudo rm -f /usr/local/share/ca-certificates/opensentry.crt 2>/dev/null
-    sudo update-ca-certificates >/dev/null 2>&1 || true
-    echo "✅ SSL certificates removed"
+    echo "🔐 Removing from system trust store..."
+    if sudo rm -f /usr/local/share/ca-certificates/opensentry.crt 2>/dev/null; then
+        sudo update-ca-certificates >/dev/null 2>&1 || true
+        echo "✅ Removed from system trust store"
+    else
+        echo "ℹ️  No certificate found in system trust store"
+    fi
 fi
 
 echo ""

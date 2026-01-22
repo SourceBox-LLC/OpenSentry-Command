@@ -6,6 +6,11 @@
     padding: 0;
 }
 
+/* Global utility classes */
+.hidden {
+    display: none !important;
+}
+
 :root {
     --bg-primary: #0a0a0f;
     --bg-secondary: #12121a;
@@ -567,6 +572,70 @@ body {
     0% { transform: scale(1); }
     50% { transform: scale(1.02); }
     100% { transform: scale(1); }
+}
+
+/* Recording indicator styles */
+.feed-tag.rec {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95));
+    color: #fff;
+    animation: recPulse 1s ease-in-out infinite;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.feed-tag.rec::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border-radius: 50%;
+    animation: recDot 1s ease-in-out infinite;
+}
+
+@keyframes recPulse {
+    0%, 100% { 
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.6);
+    }
+    50% { 
+        box-shadow: 0 6px 25px rgba(239, 68, 68, 0.9);
+    }
+}
+
+@keyframes recDot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Recording timer overlay */
+.recording-timer {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(185, 28, 28, 0.9);
+    backdrop-filter: blur(8px);
+    padding: 6px 12px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+    z-index: 10;
+}
+
+.recording-timer .rec-dot {
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-radius: 50%;
+    animation: recDot 1s ease-in-out infinite;
+}
+
+.recording-timer .rec-time {
+    min-width: 45px;
 }
 
 /* Camera Motion Controls */

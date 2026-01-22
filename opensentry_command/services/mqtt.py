@@ -12,6 +12,50 @@ import paho.mqtt.client as mqtt
 from ..models.camera import CAMERAS, cameras_lock
 from ..config import Config
 
+# Global reference to Flask app for alert logging
+_flask_app = None
+
+
+def set_flask_app(app):
+    """Set the Flask app reference for use in MQTT callbacks"""
+    global _flask_app
+    _flask_app = app
+
+
+def log_alert_to_db(
+    camera_id,
+    detection_type,
+    confidence=0,
+    region_x=None,
+    region_y=None,
+    region_width=None,
+    region_height=None,
+):
+    """Log an alert to the database - called from MQTT callbacks"""
+    global _flask_app
+    if _flask_app is None:
+        print(f"[Alerts] Cannot log {detection_type} alert - app not ready")
+        return
+
+    try:
+        with _flask_app.app_context():
+            from ..models.database import Alert, db
+
+            alert = Alert(
+                camera_id=camera_id,
+                detection_type=detection_type,
+                confidence=confidence,
+                region_x=region_x,
+                region_y=region_y,
+                region_width=region_width,
+                region_height=region_height,
+            )
+            db.session.add(alert)
+            db.session.commit()
+            print(f"[Alerts] Logged {detection_type} alert from {camera_id}")
+    except Exception as e:
+        print(f"[Alerts] Failed to log {detection_type} alert: {e}")
+
 
 def derive_credential(secret: str, service: str) -> str:
     """Derive a credential from a secret and service name using SHA256"""
@@ -112,6 +156,16 @@ def _on_message(client, userdata, msg):
                     # Update motion status
                     if motion_data.get("event") == "motion_start":
                         CAMERAS[camera_id]["motion_active"] = True
+                        # Log the motion alert with region data
+                        log_alert_to_db(
+                            camera_id,
+                            "motion",
+                            motion_data.get("confidence", 0),
+                            region_x=motion_data.get("area_x"),
+                            region_y=motion_data.get("area_y"),
+                            region_width=motion_data.get("area_width"),
+                            region_height=motion_data.get("area_height"),
+                        )
                         print(
                             f"[MQTT] {camera_id} motion started at area ({motion_data.get('area_x')}, {motion_data.get('area_y')})"
                         )
@@ -138,6 +192,19 @@ def _on_message(client, userdata, msg):
 
                     if face_data.get("event") == "face_detected":
                         CAMERAS[camera_id]["face_active"] = True
+                        # Get face region (typically first face bbox)
+                        face_regions = face_data.get("faces", [])
+                        first_face = face_regions[0] if face_regions else {}
+                        # Log the face alert
+                        log_alert_to_db(
+                            camera_id,
+                            "face",
+                            face_data.get("max_confidence", 0),
+                            region_x=first_face.get("x"),
+                            region_y=first_face.get("y"),
+                            region_width=first_face.get("width"),
+                            region_height=first_face.get("height"),
+                        )
                         print(
                             f"[MQTT] {camera_id} face detected: {face_data.get('count')} face(s), confidence: {face_data.get('max_confidence', 0):.2f}"
                         )
@@ -164,7 +231,24 @@ def _on_message(client, userdata, msg):
 
                     if objects_data.get("event") == "objects_detected":
                         CAMERAS[camera_id]["objects_active"] = True
+                        # Log the object alert
                         objects_list = objects_data.get("objects", [])
+                        max_confidence = max(
+                            (obj.get("confidence", 0) for obj in objects_list),
+                            default=0,
+                        )
+                        # Get region from first object
+                        first_obj = objects_list[0] if objects_list else {}
+                        log_alert_to_db(
+                            camera_id,
+                            "object",
+                            max_confidence,
+                            region_x=first_obj.get("x"),
+                            region_y=first_obj.get("y"),
+                            region_width=first_obj.get("width"),
+                            region_height=first_obj.get("height"),
+                        )
+
                         object_names = [
                             obj.get("class", "unknown") for obj in objects_list
                         ]

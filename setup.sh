@@ -43,13 +43,19 @@ echo ""
 read -p "Choose a username [admin]: " username
 username=${username:-admin}
 
-# Get password
+# Get password with confirmation
 while true; do
-    read -s -p "Choose a password (min 8 chars): " password
+    read -s -p "Choose a password (min 8 chars): " password1
     echo ""
-    if [ ${#password} -lt 8 ]; then
-        echo "   ❌ Password too short, try again"
+    read -s -p "Confirm password: " password2
+    echo ""
+
+    if [ ${#password1} -lt 8 ]; then
+        echo "   ❌ Password too short (minimum 8 characters), try again"
+    elif [ "$password1" != "$password2" ]; then
+        echo "   ❌ Passwords don't match, try again"
     else
+        password="$password1"
         break
     fi
 done

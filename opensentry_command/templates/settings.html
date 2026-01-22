@@ -291,6 +291,25 @@
             color: var(--text-primary);
         }
 
+        .info-message {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.875rem;
+        }
+
+        .info-message.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .info-message.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
         /* Toggle Switch Styles */
         .toggle-switch {
             position: relative;
@@ -433,6 +452,34 @@
             </div>
 
             <div class="settings-card">
+                <h2>🔐 Change Password</h2>
+                <p>Update your login password for the Command Center.</p>
+                
+                <form id="password-form" onsubmit="changePassword(event)">
+                    <div class="info-row">
+                        <span class="info-label">Current Password</span>
+                        <input type="password" id="current-password" placeholder="Enter current password" style="flex: 1; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">New Password</span>
+                        <input type="password" id="new-password" placeholder="Min 8 characters" style="flex: 1; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Confirm Password</span>
+                        <input type="password" id="confirm-password" placeholder="Confirm new password" style="flex: 1; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);">
+                    </div>
+                    <div id="password-message" class="info-message" style="display: none;"></div>
+                    <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                        Change Password
+                    </button>
+                </form>
+            </div>
+
+            <div class="settings-card">
                 <h2>🔔 Notifications</h2>
                 <p>Configure notification preferences.</p>
                 
@@ -463,6 +510,83 @@
                         <input type="checkbox" id="toast-notifications" checked>
                         <span class="toggle-slider"></span>
                     </label>
+                </div>
+            </div>
+
+            <div class="settings-card">
+                <h2>🎬 Recording</h2>
+                <p>Configure automatic recording settings for Motion, Face, and Object Detection Nodes.</p>
+                
+                <div class="info-row" style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--accent-green);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <div>
+                            <span class="info-label" style="font-weight: 600; font-size: 1rem;">🔴 24/7 Recording</span>
+                            <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0.25rem 0 0 0;">Record continuously from all cameras (overrides all other settings)</p>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="continuous-recording">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="event-recording-options">
+                    <div class="info-row" style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--accent-blue);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <div>
+                                <span class="info-label" style="font-weight: 600;">⏰ Scheduled Recording</span>
+                                <p style="color: var(--text-muted); font-size: 0.8rem; margin: 0.25rem 0 0 0;">Only record during specific hours</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="scheduled-recording">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div id="scheduled-times" style="margin-top: 1rem; display: none; gap: 1rem; align-items: center;">
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Start Time</label>
+                                <input type="time" id="scheduled-start" value="06:00" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">End Time</label>
+                                <input type="time" id="scheduled-end" value="17:00" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">Record only when specific events are detected:</p>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Record on Motion Detection</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="motion-recording">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Record on Face Detection</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="face-recording">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Record on Object Detection</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="object-recording">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="info-row" style="flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; width: 100%;">
+                        <span class="info-label">Post-Detection Buffer</span>
+                        <span class="info-value" id="buffer-value">5 seconds</span>
+                    </div>
+                    <input type="range" id="motion-buffer" min="1" max="30" value="5" style="width: 100%; cursor: pointer;">
+                    <p style="color: var(--text-muted); font-size: 0.75rem; margin: 0;">
+                        Record for this long after detection ends (1-30 seconds)
+                    </p>
                 </div>
             </div>
 
@@ -647,42 +771,359 @@
         const objectToggle = document.getElementById('object-notifications');
         const toastToggle = document.getElementById('toast-notifications');
 
-        // Load saved preferences
-        const motionEnabled = localStorage.getItem('motionNotifications') !== 'false'; // Default: true
-        const faceEnabled = localStorage.getItem('faceNotifications') !== 'false'; // Default: true
-        const objectEnabled = localStorage.getItem('objectNotifications') !== 'false'; // Default: true
-        const toastEnabled = localStorage.getItem('toastNotifications') !== 'false'; // Default: true
-        
+        // Load notification settings from database
+        async function loadNotificationSettings() {
+            try {
+                const response = await fetch('/api/settings/notifications');
+                const settings = await response.json();
+
+                if (motionToggle) motionToggle.checked = settings.motion_notifications;
+                if (faceToggle) faceToggle.checked = settings.face_notifications;
+                if (objectToggle) objectToggle.checked = settings.object_notifications;
+                if (toastToggle) toastToggle.checked = settings.toast_notifications;
+
+                console.log('[Settings] Loaded notification settings from database');
+            } catch (err) {
+                console.error('[Settings] Failed to load notification settings:', err);
+                // Fallback to defaults
+                if (motionToggle) motionToggle.checked = true;
+                if (faceToggle) faceToggle.checked = true;
+                if (objectToggle) objectToggle.checked = true;
+                if (toastToggle) toastToggle.checked = true;
+            }
+        }
+
+        // Save notification settings to database
+        async function saveNotificationSetting(key, value) {
+            try {
+                await fetch('/api/settings/notifications', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [key]: value })
+                });
+                console.log(`[Settings] Saved ${key}: ${value}`);
+            } catch (err) {
+                console.error(`[Settings] Failed to save ${key}:`, err);
+            }
+        }
+
+        // Initialize notification settings
+        loadNotificationSettings();
+
+        // Notification toggle handlers
         if (motionToggle) {
-            motionToggle.checked = motionEnabled;
             motionToggle.addEventListener('change', (e) => {
-                localStorage.setItem('motionNotifications', e.target.checked);
-                console.log('Motion notifications:', e.target.checked ? 'enabled' : 'disabled');
+                saveNotificationSetting('motion_notifications', e.target.checked);
             });
         }
 
         if (faceToggle) {
-            faceToggle.checked = faceEnabled;
             faceToggle.addEventListener('change', (e) => {
-                localStorage.setItem('faceNotifications', e.target.checked);
-                console.log('Face notifications:', e.target.checked ? 'enabled' : 'disabled');
+                saveNotificationSetting('face_notifications', e.target.checked);
             });
         }
 
         if (objectToggle) {
-            objectToggle.checked = objectEnabled;
             objectToggle.addEventListener('change', (e) => {
-                localStorage.setItem('objectNotifications', e.target.checked);
-                console.log('Object notifications:', e.target.checked ? 'enabled' : 'disabled');
+                saveNotificationSetting('object_notifications', e.target.checked);
             });
         }
 
         if (toastToggle) {
-            toastToggle.checked = toastEnabled;
             toastToggle.addEventListener('change', (e) => {
-                localStorage.setItem('toastNotifications', e.target.checked);
-                console.log('Toast notifications:', e.target.checked ? 'enabled' : 'disabled');
+                saveNotificationSetting('toast_notifications', e.target.checked);
             });
+        }
+
+        // Motion Recording Settings
+        const motionRecordingToggle = document.getElementById('motion-recording');
+        const faceRecordingToggle = document.getElementById('face-recording');
+        const objectRecordingToggle = document.getElementById('object-recording');
+        const continuousRecordingToggle = document.getElementById('continuous-recording');
+        const scheduledRecordingToggle = document.getElementById('scheduled-recording');
+        const scheduledStartInput = document.getElementById('scheduled-start');
+        const scheduledEndInput = document.getElementById('scheduled-end');
+        const scheduledTimesDiv = document.getElementById('scheduled-times');
+        const eventRecordingOptions = document.getElementById('event-recording-options');
+        const bufferSlider = document.getElementById('motion-buffer');
+        const bufferValueDisplay = document.getElementById('buffer-value');
+
+        // Load recording settings from database
+        async function loadRecordingSettings() {
+            try {
+                const response = await fetch('/api/settings/recording');
+                const settings = await response.json();
+
+                // Set toggle states
+                if (motionRecordingToggle) motionRecordingToggle.checked = settings.motion_recording;
+                if (faceRecordingToggle) faceRecordingToggle.checked = settings.face_recording;
+                if (objectRecordingToggle) objectRecordingToggle.checked = settings.object_recording;
+                if (continuousRecordingToggle) continuousRecordingToggle.checked = settings.continuous_24_7;
+                if (scheduledRecordingToggle) scheduledRecordingToggle.checked = settings.scheduled_recording;
+                if (scheduledStartInput) scheduledStartInput.value = settings.scheduled_start;
+                if (scheduledEndInput) scheduledEndInput.value = settings.scheduled_end;
+                if (bufferSlider) {
+                    bufferSlider.value = settings.post_buffer;
+                    if (bufferValueDisplay) bufferValueDisplay.textContent = `${settings.post_buffer} seconds`;
+                }
+
+                // Show/hide scheduled times based on toggle
+                if (scheduledTimesDiv && scheduledRecordingToggle) {
+                    scheduledTimesDiv.style.display = scheduledRecordingToggle.checked ? 'flex' : 'none';
+                }
+
+                // Disable individual toggles if continuous recording is enabled
+                setIndividualTogglesEnabled(!settings.continuous_24_7);
+
+                console.log('[Settings] Loaded recording settings from database');
+            } catch (err) {
+                console.error('[Settings] Failed to load recording settings:', err);
+            }
+        }
+
+        // Save recording settings to database
+        async function saveRecordingSettings(updates) {
+            try {
+                const response = await fetch('/api/settings/recording', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    console.log('[Settings] Recording settings saved');
+                }
+            } catch (err) {
+                console.error('[Settings] Failed to save recording settings:', err);
+            }
+        }
+
+        // Disable individual toggles if continuous recording is enabled
+        function setIndividualTogglesEnabled(enabled) {
+            if (motionRecordingToggle) {
+                motionRecordingToggle.disabled = !enabled;
+                motionRecordingToggle.parentElement.style.opacity = enabled ? '1' : '0.5';
+            }
+            if (faceRecordingToggle) {
+                faceRecordingToggle.disabled = !enabled;
+                faceRecordingToggle.parentElement.style.opacity = enabled ? '1' : '0.5';
+            }
+            if (objectRecordingToggle) {
+                objectRecordingToggle.disabled = !enabled;
+                objectRecordingToggle.parentElement.style.opacity = enabled ? '1' : '0.5';
+            }
+            if (scheduledRecordingToggle) {
+                scheduledRecordingToggle.disabled = !enabled;
+                scheduledRecordingToggle.parentElement.parentElement.style.opacity = enabled ? '1' : '0.5';
+            }
+            if (bufferSlider) {
+                bufferSlider.disabled = !enabled;
+                bufferSlider.style.opacity = enabled ? '1' : '0.5';
+            }
+            if (scheduledStartInput) {
+                scheduledStartInput.disabled = !enabled;
+                scheduledStartInput.style.opacity = enabled ? '1' : '0.5';
+            }
+            if (scheduledEndInput) {
+                scheduledEndInput.disabled = !enabled;
+                scheduledEndInput.style.opacity = enabled ? '1' : '0.5';
+            }
+            if (eventRecordingOptions) {
+                eventRecordingOptions.style.opacity = enabled ? '1' : '0.5';
+                eventRecordingOptions.style.pointerEvents = enabled ? 'auto' : 'none';
+            }
+        }
+
+        // Initialize recording settings
+        loadRecordingSettings();
+
+        // Continuous recording toggle
+        if (continuousRecordingToggle) {
+            continuousRecordingToggle.addEventListener('change', async (e) => {
+                const enabled = e.target.checked;
+                await saveRecordingSettings({ continuous_24_7: enabled });
+
+                if (enabled) {
+                    // Disable individual toggles
+                    setIndividualTogglesEnabled(false);
+                    
+                    // Turn off individual recordings in database
+                    await saveRecordingSettings({
+                        motion_recording: false,
+                        face_recording: false,
+                        object_recording: false,
+                        scheduled_recording: false
+                    });
+                    if (motionRecordingToggle) motionRecordingToggle.checked = false;
+                    if (faceRecordingToggle) faceRecordingToggle.checked = false;
+                    if (objectRecordingToggle) objectRecordingToggle.checked = false;
+                    if (scheduledRecordingToggle) scheduledRecordingToggle.checked = false;
+                    
+                    // Start recording on all cameras
+                    try {
+                        const response = await fetch('/api/cameras');
+                        const cameras = await response.json();
+                        
+                        for (const cameraId in cameras) {
+                            const info = cameras[cameraId];
+                            try {
+                                const recResponse = await fetch(`/api/camera/${cameraId}/recording/start`, {
+                                    method: 'POST'
+                                });
+                                const recData = await recResponse.json();
+                                if (recData.success || recData.filename) {
+                                    console.log(`[ContinuousRec] Started recording on ${cameraId}`);
+                                }
+                            } catch (err) {
+                                console.error(`[ContinuousRec] Error starting recording on ${cameraId}:`, err);
+                            }
+                        }
+                        showToast('🔴 24/7 Recording enabled for all cameras', 'info');
+                    } catch (err) {
+                        console.error('Error starting continuous recordings:', err);
+                    }
+                } else {
+                    // Enable individual toggles
+                    setIndividualTogglesEnabled(true);
+                    
+                    // Stop all recordings
+                    try {
+                        const response = await fetch('/api/cameras');
+                        const cameras = await response.json();
+                        
+                        for (const cameraId in cameras) {
+                            const info = cameras[cameraId];
+                            try {
+                                const recResponse = await fetch(`/api/camera/${cameraId}/recording/stop`, {
+                                    method: 'POST'
+                                });
+                                const recData = await recResponse.json();
+                                if (recData.success || recData.filename) {
+                                    console.log(`[ContinuousRec] Stopped recording on ${cameraId}`);
+                                }
+                            } catch (err) {
+                                console.error(`[ContinuousRec] Error stopping recording on ${cameraId}:`, err);
+                            }
+                        }
+                        showToast('24/7 Recording disabled', 'info');
+                    } catch (err) {
+                        console.error('Error stopping continuous recordings:', err);
+                    }
+                }
+            });
+        }
+
+        // Scheduled recording toggle
+        if (scheduledRecordingToggle) {
+            scheduledRecordingToggle.addEventListener('change', async (e) => {
+                const enabled = e.target.checked;
+                await saveRecordingSettings({ scheduled_recording: enabled });
+                
+                // Show/hide time inputs
+                if (scheduledTimesDiv) {
+                    scheduledTimesDiv.style.display = enabled ? 'flex' : 'none';
+                }
+            });
+        }
+
+        // Scheduled time inputs
+        if (scheduledStartInput) {
+            scheduledStartInput.addEventListener('change', async (e) => {
+                await saveRecordingSettings({ scheduled_start: e.target.value });
+            });
+        }
+        if (scheduledEndInput) {
+            scheduledEndInput.addEventListener('change', async (e) => {
+                await saveRecordingSettings({ scheduled_end: e.target.value });
+            });
+        }
+
+        // Motion recording toggle
+        if (motionRecordingToggle) {
+            motionRecordingToggle.addEventListener('change', async (e) => {
+                await saveRecordingSettings({ motion_recording: e.target.checked });
+                console.log('Motion recording:', e.target.checked ? 'enabled' : 'disabled');
+            });
+        }
+
+        // Face recording toggle
+        if (faceRecordingToggle) {
+            faceRecordingToggle.addEventListener('change', async (e) => {
+                await saveRecordingSettings({ face_recording: e.target.checked });
+                console.log('Face recording:', e.target.checked ? 'enabled' : 'disabled');
+            });
+        }
+
+        // Object recording toggle
+        if (objectRecordingToggle) {
+            objectRecordingToggle.addEventListener('change', async (e) => {
+                await saveRecordingSettings({ object_recording: e.target.checked });
+                console.log('Object recording:', e.target.checked ? 'enabled' : 'disabled');
+            });
+        }
+
+        // Buffer slider
+        if (bufferSlider && bufferValueDisplay) {
+            bufferSlider.addEventListener('change', async (e) => {
+                const value = e.target.value;
+                bufferValueDisplay.textContent = `${value} seconds`;
+                await saveRecordingSettings({ post_buffer: parseInt(value, 10) });
+            });
+        }
+
+        // Password change handler
+        async function changePassword(event) {
+            event.preventDefault();
+            
+            const currentPassword = document.getElementById('current-password')?.value || '';
+            const newPassword = document.getElementById('new-password').value;
+            const confirmPassword = document.getElementById('confirm-password').value;
+            const messageEl = document.getElementById('password-message');
+            
+            // Reset message
+            messageEl.style.display = 'none';
+            messageEl.className = 'info-message';
+            
+            // Validate
+            if (newPassword.length < 8) {
+                showMessage('New password must be at least 8 characters', 'error');
+                return;
+            }
+            
+            if (newPassword !== confirmPassword) {
+                showMessage('New passwords do not match', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/users/{{ current_user.id }}/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        current_password: currentPassword,
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('Password changed successfully!', 'success');
+                    document.getElementById('password-form').reset();
+                } else {
+                    showMessage(data.error || 'Failed to change password', 'error');
+                }
+            } catch (err) {
+                showMessage('Error: ' + (err.message || 'Failed to change password'), 'error');
+            }
+        }
+
+        function showMessage(msg, type) {
+            const messageEl = document.getElementById('password-message');
+            messageEl.textContent = msg;
+            messageEl.className = `info-message ${type}`;
+            messageEl.style.display = 'block';
         }
     </script>
 </body>

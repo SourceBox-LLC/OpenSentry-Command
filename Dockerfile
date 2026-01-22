@@ -5,7 +5,7 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 WORKDIR /app
 
-# Install system dependencies for OpenCV, Avahi, and SSL
+# Install system dependencies for OpenCV, Avahi, SSL, and video transcoding
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     avahi-daemon \
     dbus \
     openssl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files first for better caching
