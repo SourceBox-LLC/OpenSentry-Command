@@ -38,7 +38,7 @@ OpenSentry implements multiple layers of security:
 
 ### DO
 
-1. **Email us directly** at: security@sourcebox-llc.com
+1. **Report via our website**: https://www.sourceboxai.com/security
 
 2. **Include in your report:**
    - Description of the vulnerability
@@ -128,7 +128,7 @@ Security updates are released as soon as possible after a vulnerability is confi
 
 ## Contact
 
-- **Security issues**: security@sourcebox-llc.com
+- **Security issues**: https://www.sourceboxai.com/security
 - **General questions**: [GitHub Discussions](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions)
 - **Bug reports**: [GitHub Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues)
 

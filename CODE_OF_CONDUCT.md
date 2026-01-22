@@ -33,7 +33,7 @@ Maintainers will enforce these standards. Violations may result in:
 
 ## Reporting
 
-Report issues to: opensource@sourcebox-llc.com
+Report issues via our website: https://www.sourceboxai.com/contact
 
 ## Simple Version
 
