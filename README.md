@@ -2,512 +2,385 @@
 
 **View and control all your security cameras from one dashboard with real-time detection alerts.**
 
+**Built with FastAPI + React + Clerk Authentication**
+
 **🔒 Fully Encrypted:** HTTPS web UI, RTSPS video streams, MQTT over TLS  
-**🎯 Smart Detection:** Motion, face, and object detection with real-time alerts
-
-![Dashboard](docs/images/dashboard.png)
-
----
-
-## 🚀 Quick Start
-
-### Step 1: Install Docker
-
-**Linux:**
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-```
-Then log out and back in.
-
-**Mac:** [Download Docker Desktop](https://www.docker.com/products/docker-desktop)
-
-**Windows:** See [Windows Setup (WSL)](#-windows-setup-wsl) below.
+**🎯 Smart Detection:** Motion, face, and object detection with real-time alerts  
+**👥 Organization-Based:** Multi-tenant with role-based access control via Clerk
 
 ---
 
-### Step 2: Download the Project
+## 🚀 Quick Start (Development Mode)
+
+The fastest way to get started is using **Development Mode**, which requires no authentication setup.
+
+### Prerequisites
+
+- **Node.js** >= 18
+- **Python** >= 3.10
+- **uv** (Python package manager)
+
+### 1. Backend Setup
 
 ```bash
-git clone https://github.com/SourceBox-LLC/OpenSentry-Command.git
-cd OpenSentry-Command
+cd backend
+
+# Copy environment file
+cp .env.example .env
+
+# Install dependencies
+uv sync
+
+# Run development server (DEV_MODE=true by default)
+uv run python start.py
 ```
 
----
-
-### Step 3: Run Setup
-
-```bash
-chmod +x setup.sh && ./setup.sh
-```
+The API will be available at `http://localhost:8000`
 
 You'll see:
 ```
-╔═══════════════════════════════════════════════════════════════╗
-║         OpenSentry Command Center - Quick Setup               ║
-╚═══════════════════════════════════════════════════════════════╝
+🚀 OpenSentry Command Center started (DEV MODE - No auth required)
+   DEV_USER_ID: dev-user-123
+   DEV_ORG_ID: dev-org-123
+```
 
-✅ Docker found
+### 2. Frontend Setup
+
+```bash
+cd frontend
+
+# Copy environment file (leave VITE_CLERK_PUBLISHABLE_KEY empty for dev mode)
+cp .env.example .env
+
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+```
+
+The app will be available at `http://localhost:5173`
+
+**No Clerk account or API keys needed!** The app runs with a mock user and organization.
+
+---
+
+## 🔐 Production Setup (Clerk Authentication)
+
+For production with multi-tenant authentication, set up Clerk:
+
+### 1. Create a Clerk Account
+
+1. Go to [clerk.com](https://clerk.com) and create an account
+2. Create a new application
+3. Enable Organizations
+4. Copy your **Publishable Key** and **Secret Key**
+5. Set up a webhook endpoint for subscription events (optional for billing)
+
+### 2. Configure Backend
+
+```bash
+cd backend
+
+# Edit .env
+CLERK_SECRET_KEY=your_secret_key
+CLERK_PUBLISHABLE_KEY=your_publishable_key
+CLERK_JWKS_URL=https://your-instance.clerk.accounts.dev/.well-known/jwks.json
+CLERK_WEBHOOK_SECRET=your_webhook_secret
+DEV_MODE=false
+
+# Install with Clerk support
+uv sync --extra clerk
+
+# Run server
+uv run python start.py
+```
+
+### 3. Configure Frontend
+
+```bash
+cd frontend
+
+# Edit .env
+VITE_CLERK_PUBLISHABLE_KEY=your_publishable_key
+VITE_API_URL=http://localhost:8000
+
+npm run dev
 ```
 
 ---
 
-### Step 4: Choose Username & Password
+## 🏗️ Architecture
 
-The setup will ask you to create login credentials:
+### System Architecture
 
 ```
-📝 Let's configure your Command Center...
-
-Choose a username [admin]: admin
-Choose a password (min 8 chars): ********
+Browser (localhost:5173) → Backend (localhost:8000) ← ngrok ← Rust Camera Nodes (external)
 ```
+
+**Key Points:**
+- Frontend talks directly to backend on same machine (no CORS issues)
+- ngrok is ONLY for external Rust camera nodes to reach the backend
+- `VITE_API_URL` should be `http://localhost:8000` (not ngrok URL)
+
+### Frontend
+- **React 19** - UI framework
+- **Vite** - Build tool
+- **React Router** - Client-side routing
+- **Clerk** - Authentication & organization management (optional)
+- **CSS** - Styling
+
+### Backend
+- **FastAPI** - Python web framework
+- **SQLAlchemy** - ORM
+- **SQLite** - Database (development)
+- **Clerk Backend API** - Auth verification (optional)
+- **Svix** - Webhook handling
+
+### CloudNode (Rust)
+- **OpenSentry CloudNode** - Local camera capture and streaming
+- Captures USB camera video
+- Streams to cloud Command Center via HTTPS
+- Auto-registers cameras on first connection
 
 ---
 
-### Step 5: Done!
+## 🔑 Environment Variables
 
-The Command Center starts automatically:
+### Backend (.env)
 
+```env
+# Development Mode (set to "false" for production with Clerk)
+DEV_MODE=true
+DEV_USER_ID=dev-user-123
+DEV_USER_EMAIL=dev@example.com
+DEV_ORG_ID=dev-org-123
+
+# Clerk Authentication (leave empty for DEV_MODE=true)
+CLERK_SECRET_KEY=
+CLERK_PUBLISHABLE_KEY=
+CLERK_JWKS_URL=
+CLERK_WEBHOOK_SECRET=
+
+# Database
+DATABASE_URL=sqlite:///./opensentry.db
+
+# Frontend URL (for CORS)
+FRONTEND_URL=http://localhost:5173
+
+# OpenSentry Security Secret (for camera node authentication)
+OPENSENTRY_SECRET=your_secret_key_here
+
+# MQTT Configuration
+MQTT_BROKER=localhost
+MQTT_PORT=1883
+MQTT_USE_TLS=false
+MQTT_USERNAME=opensentry
+MQTT_PASSWORD=opensentry
+
+# RTSP Credentials
+RTSP_USERNAME=opensentry
+RTSP_PASSWORD=opensentry
+
+# Session timeout (minutes)
+SESSION_TIMEOUT=30
 ```
-🚀 Starting Command Center...
 
-╔═══════════════════════════════════════════════════════════════╗
-║                    Setup Complete!                            ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Dashboard:  https://localhost:5000                           ║
-║  Username:   admin                                            ║
-║  Password:   ********                                         ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Commands:                                                    ║
-║    View logs:    docker compose logs -f                       ║
-║    Stop:         docker compose down                          ║
-║    Restart:      docker compose restart                       ║
-╚═══════════════════════════════════════════════════════════════╝
+### Frontend (.env)
+
+```env
+# Leave empty for Development Mode
+# VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+
+# Backend API URL
+VITE_API_URL=http://localhost:8000
 ```
-
-**Open https://localhost:5000** and log in. 🎉
-
-> **Note:** On first visit, your browser may show a certificate warning. This is normal for self-signed certificates. Click "Advanced" → "Proceed" to continue securely.
 
 ---
 
 ## 📷 Adding Cameras
 
-1. Log into the Command Center dashboard
-2. Click the **⚙️ Settings** icon (top right)
-3. Copy your **Security Secret**
-4. Set up [OpenSentry Camera Nodes](https://github.com/SourceBox-LLC/OpenSentry-Node) using this secret
+### Cloud-Hosted Mode (Production)
 
-![Settings Page](docs/images/settings-page.png)
+1. **Create a Camera Node:**
+   - Go to Settings → Camera Nodes
+   - Click "Add Node"
+   - Enter a name (e.g., "Home", "Office")
+   - Copy the Node ID and API key
 
-### User Management
-
-Admins can create and manage user accounts from **Settings → Manage Users**:
-- **Admin** role: Full access to all features
-- **Viewer** role: View-only access to camera streams
-
-![User Management](docs/images/user-management.png)
-
-Cameras auto-discover within 30 seconds.
-
----
-
-## 🎯 Detection Features
-
-OpenSentry automatically detects and responds to events from compatible camera nodes:
-
-### Real-Time Detection Alerts
-- **Visual Indicators:** Colored badges appear on camera feed when events detected
-- **Toast Notifications:** Pop-up alerts for detection events
-- **Animation Effects:** Camera cards pulse when detection is active
-
-### Detection History
-- Click the **History** button on any detection-capable camera
-- Stores last 100 events per camera
-- Shows timestamp and details for each event
-
-### Notification Settings
-
-Configure alerts in **Settings → Notifications**:
-- **Motion Detection Alerts:** Toggle motion notifications on/off
-- **Face Detection Alerts:** Toggle face notifications on/off
-- **Object Detection Alerts:** Toggle object notifications on/off
-- **Show Toast Notifications:** Toggle pop-up alerts on/off
-- Preferences saved locally in your browser
-
-### Recording Settings
-
-Configure auto-recording in **Settings → Recording**:
-- **24/7 Recording:** Enable continuous recording from all cameras
-- **Motion Detection Recording:** Auto-record on motion
-- **Face Detection Recording:** Auto-record on face detection
-- **Object Detection Recording:** Auto-record on object detection
-- **Post-Detection Buffer:** Recording duration after detection ends (1-30 seconds)
-
-### Supported Node Types
-| Node | Icon | Features | Link |
-|------|------|----------|------|
-| **Basic Camera** | 📷 | Live streaming only | [OpenSentry-Node](https://github.com/SourceBox-LLC/OpenSentry-Node) |
-| **Motion Detection** | 🎯 | Streaming + motion detection | [OpenSentry-MotionNode](https://github.com/SourceBox-LLC/OpenSentry-MotionNode) |
-| **Face Detection** | 📸 | Streaming + face detection | [OpenSentry-FaceDetectionNode](https://github.com/SourceBox-LLC/OpenSentry-FaceDetectionNode) |
-| **Object Detection** | 🔍 | Streaming + AI object detection (80+ classes) | [OpenSentry-ObjectDetectionNode](https://github.com/SourceBox-LLC/OpenSentry-ObjectDetectionNode) |
-
----
-
-## 🎮 Dashboard Controls
-
-### Camera Controls
-
-| Button | Action |
-|--------|--------|
-| **▶ Start** | Start video stream |
-| **⏸ Pause** | Pause stream |
-| **📷 Snapshot** | Capture and save snapshot |
-| **🎬 Record** | Start/stop video recording |
-| **⏻ Shutdown** | Turn off camera |
-| **📜 History** | View detection events (motion/face/object) |
-| **❌ Forget** | Remove camera from system |
-
-### Recording
-
-| Icon | Meaning |
-|------|---------|
-| 🔴 **REC** | Recording in progress (pulsing badge) |
-| ⏱️ **00:00** | Recording timer showing elapsed time |
-
-When recording, a REC badge appears on the camera feed and a timer counts up. Recordings are automatically transcoded to H.264 format for browser playback and saved to the Media Library.
-
-### Auto-Recording
-
-Configure automatic recording in **Settings → Recording**:
-
-| Option | Description |
-|--------|-------------|
-| **Record on Motion Detection** | Automatically record when motion is detected |
-| **Record on Face Detection** | Automatically record when a face is detected |
-| **Record on Object Detection** | Automatically record when objects are detected |
-| **Post-Detection Buffer** | Continue recording for 1-30 seconds after detection ends (default: 5s) |
-
-### 24/7 Continuous Recording
-
-Enable **24/7 Recording** for continuous recording from all cameras:
-
-- Overrides all individual auto-recording settings
-- Records from all connected cameras simultaneously
-- Toggle off to return to normal event-based recording
-- Useful for complete surveillance coverage
-
-Both auto-recording and 24/7 modes save recordings to the Media Library with H.264 transcoding for easy browser playback.
-
-### Status Indicators
-
-| Status | Meaning |
-|--------|---------|
-| 🟢 Streaming | Camera active |
-| 🟡 Idle | Paused |
-| 🔴 Offline | Not responding |
-| 🔴 MOTION | Motion currently active |
-| 👤 FACE | Face currently detected |
-| 🔍 OBJECTS | Objects currently detected |
-
-### Node Types
-
-| Icon | Type | Features |
-|------|------|----------|
-| 📷 | Basic Camera Node | Live streaming only |
-| 🎯 | Motion Detection Node | Live streaming + motion detection |
-| 📸 | Face Detection Node | Live streaming + face detection |
-| 🔍 | Object Detection Node | Live streaming + AI object detection |
-
----
-
-## 📁 Media Library
-
-Access saved snapshots and recordings from the dashboard:
-
-1. Click the **📁 Media Library** icon (top right)
-2. Switch between **Snapshots** and **Recordings** tabs
-
-### Snapshots
-- View all captured snapshots
-- Click **Download** to save locally
-- Click **Delete** to remove
-
-### Recordings
-- View all recorded videos
-- Click **Play** to watch in browser (H.264 format)
-- Click **Download** for original file
-- Click **Delete** to remove
-
-Recordings are stored as encrypted blobs in the database - no files are exposed on the filesystem.
-
----
-
-## 🔧 Common Commands
-
-```bash
-# View logs
-docker compose logs -f
-
-# Stop
-docker compose down
-
-# Restart
-docker compose restart
-
-# Update
-git pull && docker compose up --build -d
-
-# Complete teardown
-chmod +x teardown.sh && ./teardown.sh
-```
-
----
-
-## 🌐 Remote Access (Tailscale)
-
-Access your Command Center from anywhere using [Tailscale](https://tailscale.com) - a free, secure VPN.
-
-### Setup
-
-1. **Install Tailscale on your server:**
+2. **Run the Rust CloudNode:**
    ```bash
-   curl -fsSL https://tailscale.com/install.sh | sh
-   sudo tailscale up
+   cargo run -- \
+     --node-id <your-node-id> \
+     --api-key <your-api-key> \
+     --api-url https://your-ngrok-url.ngrok-free.dev
    ```
 
-2. **Install Tailscale on your phone/laptop:**
-   - Download from [tailscale.com/download](https://tailscale.com/download)
-   - Sign in with the same account
+3. **Cameras auto-register** when the CloudNode connects with USB cameras
 
-3. **Get your server's Tailscale IP:**
-   ```bash
-   tailscale ip -4
-   # Example: 100.64.0.1
-   ```
+### Local Mode (Development)
 
-4. **Access from anywhere:**
-   ```
-   https://YOUR_TAILSCALE_IP:5000
-   ```
-
-### Why Tailscale?
-
-| Benefit | Description |
-|---------|-------------|
-| **No port forwarding** | Works behind any firewall/NAT |
-| **End-to-end encrypted** | WireGuard-based VPN |
-| **Free for personal use** | Up to 100 devices |
-| **No public IP exposure** | Your server stays hidden |
-
-> **Note:** Your browser will still show a certificate warning since the cert is for `localhost`. Click through to proceed - the connection is still encrypted.
+1. Cameras auto-discover within 30 seconds when OpenSentry Camera Nodes are on the same network via mDNS
+2. Control cameras from the dashboard (start, stop, record, snapshot)
 
 ---
 
-## 🔌 API Endpoints
-
-The Command Center provides REST API endpoints for integration:
+## 🎯 Features
 
 ### Camera Management
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/cameras` | GET | List all cameras with status and motion data |
-| `/api/camera/<id>/status` | GET | Get specific camera status |
-| `/api/camera/<id>/command` | POST | Send command (start/stop/shutdown) |
-| `/api/camera/<id>/forget` | DELETE | Remove camera from system |
-| `/api/regenerate-secret` | POST | Generate new security secret |
+- **Live Streaming** - View all cameras in real-time
+- **Recording** - Start/stop video recordings
+- **Snapshots** - Capture still images
+- **Detection Events** - Motion, face, and object detection
 
-### Recording
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/camera/<id>/recording/start` | POST | Start recording video |
-| `/api/camera/<id>/recording/stop` | POST | Stop recording and save |
-| `/api/camera/<id>/recording/status` | GET | Get recording status |
+### Organization-Based Access
+- Multiple organizations (managed via Clerk)
+- Role-based permissions
+- Multi-tenant data isolation
 
 ### Media Library
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/snapshots` | GET | List all snapshots |
-| `/api/snapshots/<id>` | GET | Download snapshot |
-| `/api/snapshots/<id>` | DELETE | Delete snapshot |
-| `/api/recordings` | GET | List all recordings |
-| `/api/recordings/<id>` | GET | Stream recording (add `?download=true` for download) |
-| `/api/recordings/<id>` | DELETE | Delete recording |
+- View saved snapshots and recordings
+- Download or delete media
+- Automatic H.264 transcoding for browser playback
 
-### Camera Data Response
-```json
-{
-  "camera-id": {
-    "name": "front-door-cam",
-    "status": "streaming",
-    "node_type": "object_camera",
-    "capabilities": "streaming,object_detection",
-    "objects_active": true,
-    "object_events": [
-      {
-        "event": "objects_detected",
-        "objects": [
-          {"class": "person", "confidence": 85},
-          {"class": "dog", "confidence": 72}
-        ]
-      }
-    ],
-    "motion_active": false,
-    "motion_events": [],
-    "face_active": false,
-    "face_events": [],
-    "last_seen": 1234567890
-  }
-}
+---
+
+## 📁 Project Structure
+
+```
+├── backend/                    # FastAPI backend
+│   ├── app/
+│   │   ├── api/               # API routes
+│   │   │   ├── cameras.py     # Camera endpoints
+│   │   │   ├── video.py      # Video streaming
+│   │   │   └── webhooks.py    # Clerk webhooks
+│   │   ├── core/             # Core modules
+│   │   │   ├── config.py     # Configuration
+│   │   │   ├── database.py   # Database setup
+│   │   │   ├── auth.py       # Authentication
+│   │   │   └── clerk.py      # Clerk client
+│   │   ├── models/           # SQLAlchemy models
+│   │   │   └── models.py
+│   │   ├── schemas/          # Pydantic schemas
+│   │   │   └── schemas.py
+│   │   ├── services/         # Business logic
+│   │   │   ├── camera.py     # Camera streaming
+│   │   │   ├── mqtt.py       # MQTT client
+│   │   │   └── discovery.py  # mDNS discovery
+│   │   └── main.py           # FastAPI app
+│   ├── .env.example
+│   └── pyproject.toml
+│
+├── frontend/                   # React frontend
+│   ├── src/
+│   │   ├── components/       # Reusable UI components
+│   │   │   ├── Layout.jsx
+│   │   │   └── CameraCard.jsx
+│   │   ├── hooks/            # Custom React hooks
+│   │   │   ├── useDevMode.jsx
+│   │   │   ├── useAuthCompat.jsx
+│   │   │   └── useOrganizationCompat.jsx
+│   │   ├── pages/            # Page components
+│   │   │   ├── HomePage.jsx
+│   │   │   ├── DashboardPage.jsx
+│   │   │   ├── SettingsPage.jsx
+│   │   │   └── MediaPage.jsx
+│   │   ├── services/         # API client
+│   │   │   └── api.js
+│   │   ├── App.jsx
+│   │   ├── main.jsx
+│   │   └── index.css
+│   ├── .env.example
+│   ├── package.json
+│   └── vite.config.js
+│
+└── README.md
 ```
 
 ---
 
-## ❓ Troubleshooting
+## 📡 API Endpoints
 
-| Problem | Solution |
-|---------|----------|
-| **No cameras showing** | Check both devices are on same WiFi. Wait 30 seconds. |
-| **Can't log in** | Default: `admin` / `opensentry`. Check `.env` file. |
-| **Account locked** | Wait 5 minutes. |
-| **Port 5000 in use** | Stop other app or edit port in `docker-compose.yml` |
-| **Detection not working** | Ensure using detection-capable node. Check MQTT connection. |
-| **No detection alerts** | Check notification settings in dashboard. |
+### Cameras
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cameras` | List all cameras with status |
+| GET | `/api/camera/{id}/status` | Get specific camera status |
+| POST | `/api/camera/{id}/command` | Send command (start/stop/shutdown) |
+| DELETE | `/api/camera/{id}/forget` | Remove camera from system |
+| GET | `/api/camera/{id}/snapshot` | Take a snapshot |
+| POST | `/api/camera/{id}/recording/start` | Start recording |
+| POST | `/api/camera/{id}/recording/stop` | Stop recording |
 
-**Still stuck?** Run `docker compose logs -f` and check for errors.
+### Media
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/snapshots` | List all snapshots |
+| GET | `/api/snapshots/{id}` | Download snapshot |
+| DELETE | `/api/snapshots/{id}` | Delete snapshot |
+| GET | `/api/recordings` | List all recordings |
+| GET | `/api/recordings/{id}` | Stream/download recording |
+| DELETE | `/api/recordings/{id}` | Delete recording |
+
+### Settings
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/settings` | Get all settings |
+| GET | `/api/settings/recording` | Get recording settings |
+| POST | `/api/settings/recording` | Update recording settings |
+| GET | `/api/settings/notifications` | Get notification settings |
+| POST | `/api/settings/notifications` | Update notification settings |
+
+### Webhooks
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/webhooks/clerk` | Handle Clerk webhook events |
+
+### Camera Nodes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/nodes` | List all nodes for organization |
+| POST | `/api/nodes` | Create a new camera node |
+| GET | `/api/nodes/{id}` | Get node details |
+| DELETE | `/api/nodes/{id}` | Delete a node |
+| POST | `/api/nodes/{id}/generate-key` | Regenerate API key |
+| POST | `/api/nodes/register` | Register node (Rust CloudNode) |
+| POST | `/api/nodes/heartbeat` | Node heartbeat (Rust CloudNode) |
 
 ---
 
-## ⚙️ Configuration
+## 🔒 Permissions
 
-Edit `.env` file (created by setup script):
+Clerk organizations support custom permissions (V2 format):
+
+| Permission Key | Description |
+|----------------|-------------|
+| `org:admin:admin` | Full admin access |
+| `org:cameras:manage_cameras` | Manage cameras and nodes |
+| `org:cameras:view_cameras` | View cameras and live feeds |
+
+**Important:** Permissions use the V2 format `org:{feature}:{permission}`. See AGENTS.md for complete Clerk setup instructions.
+
+---
+
+## 🎨 Development
+
+### Backend
 
 ```bash
-# Login
-OPENSENTRY_USERNAME=admin
-OPENSENTRY_PASSWORD=your-password
-
-# Security (must match camera nodes!)
-OPENSENTRY_SECRET=your-secret-key
-
-# Session timeout (minutes)
-SESSION_TIMEOUT=30
-
-# HTTPS (enabled by default)
-HTTPS_ENABLED=true
+cd backend
+uv run python start.py     # Development server
+uv run uvicorn app.main:app --reload  # Alternative
 ```
 
-After changes: `docker compose down && docker compose up -d`
-
----
-
-## 🔒 Security Features
-
-OpenSentry implements enterprise-grade security:
-
-| Feature | Description |
-|---------|-------------|
-| **HTTPS** | Web UI encrypted with TLS on port 5000 |
-| **RTSPS** | Video streams encrypted on port 8322 |
-| **MQTT over TLS** | Control commands encrypted on port 8883 |
-| **Authentication** | Multi-user with roles (admin/viewer) |
-| **CSRF Protection** | Token-based protection on forms |
-| **Security Headers** | CSP, X-Frame-Options, etc. |
-| **Audit Logging** | All events stored in encrypted database |
-| **Session Security** | Secure cookies, configurable timeout |
-| **Media Storage** | Snapshots & recordings stored as encrypted DB blobs |
-
-### Certificate Trust
-
-The setup script offers to add the self-signed certificate to your system trust store:
-- **Chrome/Chromium:** Uses system store (auto-trusted)
-- **Firefox:** One-time "Accept the Risk" click required
-
-![Certificate Warning](docs/images/certificate-warning.png)
-
-*Firefox shows this warning on first visit - click "Advanced" → "Accept the Risk and Continue"*
-
-### Network Ports
-
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| 5000 | HTTPS | Web dashboard |
-| 8322 | RTSPS | Encrypted video from cameras |
-| 8883 | MQTTS | Encrypted control commands |
-
-### Data Storage
-
-All data is stored in a single SQLite database (`data/opensentry.db`):
-
-| Data | Storage |
-|------|---------|
-| **Users** | Database (hashed passwords) |
-| **Cameras** | Database (metadata) |
-| **Snapshots** | Database (binary blobs) |
-| **Recordings** | Database (binary blobs) |
-| **Audit Logs** | Database |
-
-**No media files are exposed on the filesystem** - all snapshots and recordings are stored securely in the database.
-
----
-
-## 🪟 Windows Setup (WSL)
-
-Windows users can run OpenSentry using WSL (Windows Subsystem for Linux).
-
-### Step 1: Install WSL
-
-Open **PowerShell as Administrator** and run:
-
-```powershell
-wsl --install
-```
-
-Restart your computer when prompted.
-
-### Step 2: Set Up Ubuntu
-
-After restart, Ubuntu will open automatically. Create a username and password when asked.
-
-### Step 3: Install Docker in WSL
-
-In the Ubuntu terminal:
+### Frontend
 
 ```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
+cd frontend
+npm run dev     # Development server
+npm run build   # Production build
+npm run lint    # Lint code
 ```
-
-Close and reopen Ubuntu.
-
-### Step 4: Follow Quick Start
-
-Now follow **Steps 2-6** from the [Quick Start](#-quick-start) section above.
-
-```bash
-git clone https://github.com/SourceBox-LLC/OpenSentry-Command.git
-cd OpenSentry-Command
-chmod +x setup.sh && ./setup.sh
-```
-
-**Access the dashboard at https://localhost:5000** from your Windows browser.
-
----
-
-## 🗑️ Uninstall
-
-To completely remove OpenSentry Command Center:
-
-```bash
-chmod +x teardown.sh && ./teardown.sh
-```
-
-You'll be prompted to remove:
-- Docker containers and images
-- Configuration files (.env)
-- Database (users, media, audit logs)
-- SSL certificates
 
 ---
 
@@ -517,4 +390,4 @@ MIT - Free for personal and commercial use.
 
 ---
 
-**[OpenSentry Node](https://github.com/SourceBox-LLC/OpenSentry-Node)** · Made with ❤️ by the OpenSentry Team
+**Built with ❤️ using FastAPI, React, and Clerk**
