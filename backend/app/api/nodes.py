@@ -48,6 +48,11 @@ async def register_node(
         existing_node.status = "online"
         existing_node.last_seen = datetime.utcnow()
 
+        if data.video_codec:
+            existing_node.video_codec = data.video_codec
+            existing_node.audio_codec = data.audio_codec
+            existing_node.codec_detected_at = datetime.utcnow()
+
         # Map device_path to camera_id for response
         camera_mapping = {}
 
@@ -72,6 +77,9 @@ async def register_node(
                 existing_cam.name = cam_data.name or existing_cam.name
                 existing_cam.last_seen = datetime.utcnow()
                 existing_cam.status = "online"
+                if data.video_codec:
+                    existing_cam.video_codec = data.video_codec
+                    existing_cam.audio_codec = data.audio_codec
             else:
                 print(f"[register] Creating new camera {camera_id}")
                 new_cam = Camera(
@@ -85,6 +93,9 @@ async def register_node(
                     else "streaming",
                     status="online",
                     last_seen=datetime.utcnow(),
+                    video_codec=data.video_codec,
+                    audio_codec=data.audio_codec,
+                    codec_detected_at=datetime.utcnow() if data.video_codec else None,
                 )
                 db.add(new_cam)
 
@@ -103,6 +114,7 @@ async def register_node(
     print(f"[register] ERROR: Node not found in database")
     return {
         "success": False,
+        "node_id": data.node_id,
         "status": "pending",
         "node_secret": "",
         "message": "Node not found. Please register this node in the dashboard first.",

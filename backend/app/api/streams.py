@@ -165,7 +165,6 @@ async def get_upload_url(
         camera_id=camera_id,
         org_id=node.org_id,
         filename=filename,
-        checksum=checksum,
     )
 
     pending = PendingUpload(
@@ -236,6 +235,22 @@ async def confirm_upload(
     # Mark upload as complete
     # Note: S3-compatible storage already verified checksum via x-amz-content-sha256 header
     pending.completed = True
+
+    node.upload_count = (node.upload_count or 0) + 1
     db.commit()
+
+    if node.upload_count % settings.CLEANUP_INTERVAL == 0:
+        try:
+            storage = get_storage()
+            storage.cleanup_old_segments(
+                org_id=node.org_id,
+                camera_id=camera_id,
+                keep_count=settings.SEGMENT_RETENTION_COUNT,
+            )
+            print(
+                f"[cleanup] Removed old segments for camera {camera_id}, keeping last {settings.SEGMENT_RETENTION_COUNT}"
+            )
+        except Exception as e:
+            print(f"[cleanup] WARNING: Cleanup failed: {e}")
 
     return {"success": True, "message": "Upload confirmed"}

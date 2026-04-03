@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -374,7 +374,67 @@ async def list_audit_logs(
 
 
 # Health Check (for API endpoint health)
+@router.post("/cameras/{camera_id}/codec")
+async def report_camera_codec(
+    camera_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Report video/audio codec for a camera.
+    Called by CloudNode after detecting codec from first segment.
+    """
+    import hashlib
+    from app.models.models import CameraNode
+
+    # Verify node API key
+    node_api_key = request.headers.get("X-Node-API-Key")
+    if not node_api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
+    api_key_hash = hashlib.sha256(node_api_key.encode()).hexdigest()
+    node = db.query(CameraNode).filter_by(api_key_hash=api_key_hash).first()
+    if not node:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    # Verify camera belongs to this node
+    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    if camera.node_id != node.id:
+        raise HTTPException(
+            status_code=403, detail="Camera does not belong to this node"
+        )
+
+    # Parse codec info from request body
+    import json
+
+    try:
+        body = await request.body()
+        codec_data = json.loads(body)
+        video_codec = codec_data.get("video_codec")
+        audio_codec = codec_data.get("audio_codec")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+
+    if not video_codec:
+        raise HTTPException(status_code=400, detail="video_codec is required")
+
+    # Update codec fields
+    camera.video_codec = video_codec
+    camera.audio_codec = audio_codec or "mp4a.40.2"  # Default to AAC-LC
+    camera.codec_detected_at = datetime.utcnow()
+    db.commit()
+
+    print(
+        f"[codec] Updated codec for camera {camera_id}: video={video_codec}, audio={camera.audio_codec}"
+    )
+
+    return {"success": True, "message": "Codec updated"}
+
+
 @router.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Health check endpoint for monitoring."""
     return {"status": "healthy", "service": "OpenSentry Command Center API"}

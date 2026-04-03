@@ -1,0 +1,20 @@
+[project]
+name = "opensentry-backend"
+version = "2.0.0"
+description = "OpenSentry Command Center Backend - FastAPI with Clerk Auth"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.135.2",
+    "uvicorn>=0.42.0",
+    "sqlalchemy>=2.0.48",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.6",
+    "pyjwt>=2.12.1",
+    "httpx>=0.27.0",
+    "svix>=1.89.0",
+    "clerk-backend-api>=5.0.6",
+    "boto3>=1.35.0",
+    "slowapi>=0.1.9",
+]
