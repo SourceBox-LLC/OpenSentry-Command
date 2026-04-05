@@ -25,6 +25,7 @@ class Config:
     TIGRIS_BUCKET_NAME: str = os.getenv("BUCKET_NAME", "")
 
     STREAM_URL_EXPIRY_SECONDS: int = int(os.getenv("STREAM_URL_EXPIRY_SECONDS", "300"))
+    SEGMENT_URL_EXPIRY_SECONDS: int = int(os.getenv("SEGMENT_URL_EXPIRY_SECONDS", "300"))
     UPLOAD_URL_EXPIRY_SECONDS: int = int(os.getenv("UPLOAD_URL_EXPIRY_SECONDS", "300"))
     UPLOAD_TIMEOUT_MINUTES: int = int(os.getenv("UPLOAD_TIMEOUT_MINUTES", "10"))
     AUDIT_LOG_RETENTION_DAYS: int = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "7"))

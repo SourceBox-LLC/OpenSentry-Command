@@ -59,9 +59,10 @@ async def register_node(
         for cam_data in data.cameras or []:
             # Generate camera_id from node_id and device_path
             device_path = cam_data.device_path or cam_data.camera_id or "unknown"
-            # Sanitize device_path for use as camera_id
+            # Sanitize device_path for use as camera_id.
+            # Replace path separators AND spaces so IDs are URL-safe.
             sanitized_device = (
-                device_path.replace("/", "_").replace("\\", "_").strip("_")
+                device_path.replace("/", "_").replace("\\", "_").replace(" ", "_").strip("_")
             )
             camera_id = f"{data.node_id}_{sanitized_device}"
 
@@ -112,13 +113,10 @@ async def register_node(
         }
 
     print(f"[register] ERROR: Node not found in database")
-    return {
-        "success": False,
-        "node_id": data.node_id,
-        "status": "pending",
-        "node_secret": "",
-        "message": "Node not found. Please register this node in the dashboard first.",
-    }
+    raise HTTPException(
+        status_code=404,
+        detail="Node not found. Create this node in the dashboard first.",
+    )
 
 
 @router.post("/heartbeat")

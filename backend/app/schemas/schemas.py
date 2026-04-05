@@ -134,10 +134,15 @@ class NodeRegister(BaseModel):
     audio_codec: Optional[str] = None
 
 
+class CameraStatus(BaseModel):
+    camera_id: str
+    status: str
+
+
 class NodeHeartbeat(BaseModel):
     node_id: str
     local_ip: Optional[str] = None
-    cameras: Optional[List[dict]] = []
+    cameras: Optional[List[CameraStatus]] = []
 
 
 class NodeCreate(BaseModel):
