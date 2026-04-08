@@ -19,13 +19,13 @@ function LandingNav() {
 
         <ul className={`landing-nav-links ${mobileMenuOpen ? 'active' : ''}`}>
           <li>
-            <a href="/#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
+            <Link to="/#features" onClick={() => setMobileMenuOpen(false)}>Features</Link>
           </li>
           <li>
-            <a href="/#architecture" onClick={() => setMobileMenuOpen(false)}>Architecture</a>
+            <Link to="/#architecture" onClick={() => setMobileMenuOpen(false)}>Architecture</Link>
           </li>
           <li>
-            <a href="/#quickstart" onClick={() => setMobileMenuOpen(false)}>Quick Start</a>
+            <Link to="/#quickstart" onClick={() => setMobileMenuOpen(false)}>Quick Start</Link>
           </li>
           <li>
             <Link to="/docs" onClick={() => setMobileMenuOpen(false)}>Docs</Link>

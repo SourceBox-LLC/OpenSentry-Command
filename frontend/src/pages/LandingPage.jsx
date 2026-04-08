@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react"
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import CameraGridPreview from "../components/CameraGridPreview.jsx"
 
 function LandingPage() {
   const [os, setOs] = useState('linux')
   const [copied, setCopied] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase()
@@ -12,6 +13,13 @@ function LandingPage() {
     else if (ua.includes('mac')) setOs('macos')
     else setOs('linux')
   }, [])
+
+  useEffect(() => {
+    if (location.hash) {
+      const el = document.querySelector(location.hash)
+      if (el) el.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [location.hash])
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text)
@@ -47,9 +55,9 @@ function LandingPage() {
                   <path d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
               </Link>
-              <a href="/#architecture" className="landing-btn landing-btn-outline landing-btn-lg">
+              <Link to="/#architecture" className="landing-btn landing-btn-outline landing-btn-lg">
                 How It Works
-              </a>
+              </Link>
             </div>
             <div className="landing-hero-stats">
               <div className="landing-stat">

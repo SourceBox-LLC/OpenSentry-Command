@@ -17,9 +17,9 @@ function LandingFooter() {
           <div className="landing-footer-links">
             <div className="landing-footer-col">
               <h5>Product</h5>
-              <a href="/#features">Features</a>
-              <a href="/#architecture">Architecture</a>
-              <a href="/#quickstart">Quick Start</a>
+              <Link to="/#features">Features</Link>
+              <Link to="/#architecture">Architecture</Link>
+              <Link to="/#quickstart">Quick Start</Link>
               <Link to="/docs">Documentation</Link>
             </div>
             
