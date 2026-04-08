@@ -97,8 +97,17 @@ function App() {
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
 
-        {/* Test route (public for debugging) */}
-        <Route path="/test-hls" element={<TestHlsPage />} />
+        {/* Test route (admin only) */}
+        <Route element={<Layout />}>
+          <Route
+            path="/test-hls"
+            element={
+              <RequireAdmin>
+                <TestHlsPage />
+              </RequireAdmin>
+            }
+          />
+        </Route>
 
         {/* Authenticated routes with Layout */}
         <Route element={<Layout />}>

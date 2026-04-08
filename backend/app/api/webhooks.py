@@ -28,14 +28,16 @@ async def clerk_webhook(request: Request):
     payload = await request.body()
     headers = dict(request.headers)
 
-    if settings.CLERK_WEBHOOK_SECRET:
-        try:
-            wh = Webhook(settings.CLERK_WEBHOOK_SECRET)
-            event = wh.verify(payload, headers)
-        except WebhookVerificationError:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature")
-    else:
-        event = json.loads(payload)
+    if not settings.CLERK_WEBHOOK_SECRET:
+        import logging
+        logging.getLogger(__name__).warning("CLERK_WEBHOOK_SECRET not set — rejecting unverified webhook")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Webhook secret not configured")
+
+    try:
+        wh = Webhook(settings.CLERK_WEBHOOK_SECRET)
+        event = wh.verify(payload, headers)
+    except WebhookVerificationError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature")
 
     event_type = event.get("type")
     data = event.get("data", {})
