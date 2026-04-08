@@ -22,7 +22,7 @@ function formatRelativeTime(dateString) {
 
 function SettingsPage() {
   const { getToken } = useAuth()
-  const { organization } = useOrganization()
+  const { organization, membership } = useOrganization()
   const [nodes, setNodes] = useState([])
   const [nodesLoading, setNodesLoading] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -269,9 +269,50 @@ function SettingsPage() {
 
       <div className="settings-section">
         <h2>Organization</h2>
-        <div className="org-info">
-          <p><strong>Name:</strong> {organization?.name || "Unknown"}</p>
-          <p><strong>ID:</strong> {organization?.id || "Unknown"}</p>
+        <div className="org-card">
+          <div className="org-card-header">
+            {organization?.imageUrl ? (
+              <img src={organization.imageUrl} alt="" className="org-avatar" />
+            ) : (
+              <div className="org-avatar org-avatar-fallback">
+                {(organization?.name || "O").charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="org-card-title">
+              <h3>{organization?.name || "Unknown"}</h3>
+              <span className="org-role-badge">
+                {membership?.role === "org:admin" ? "Admin" : "Member"}
+              </span>
+            </div>
+          </div>
+          <div className="org-card-details">
+            <div className="org-detail">
+              <span className="org-detail-label">Members</span>
+              <span className="org-detail-value">{organization?.membersCount || 1}</span>
+            </div>
+            <div className="org-detail">
+              <span className="org-detail-label">Created</span>
+              <span className="org-detail-value">
+                {organization?.createdAt
+                  ? new Date(organization.createdAt).toLocaleDateString()
+                  : "—"}
+              </span>
+            </div>
+            <div className="org-detail">
+              <span className="org-detail-label">Nodes</span>
+              <span className="org-detail-value">{nodes.length}</span>
+            </div>
+            <div className="org-detail">
+              <span className="org-detail-label">Cameras</span>
+              <span className="org-detail-value">
+                {nodes.reduce((sum, n) => sum + (n.camera_count || 0), 0)}
+              </span>
+            </div>
+          </div>
+          <div className="org-card-id">
+            <span className="org-detail-label">Org ID</span>
+            <code>{organization?.id || "Unknown"}</code>
+          </div>
         </div>
       </div>
 

@@ -1402,15 +1402,110 @@ body {
     min-width: 200px;
 }
 
-.org-info {
-    padding: 1rem;
+.org-card {
     background: var(--bg-secondary);
-    border-radius: 8px;
+    border-radius: 10px;
+    padding: 1.25rem;
+    border: 1px solid var(--border-color);
 }
 
-.org-info p {
-    margin-bottom: 0.5rem;
-    font-size: 0.875rem;
+.org-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.org-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.org-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--accent-green), #059669);
+    color: white;
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.org-card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.org-card-title h3 {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.org-role-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent-green);
+}
+
+.org-card-details {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.org-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.org-detail-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+.org-detail-value {
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.org-card-id {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.org-card-id code {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    user-select: all;
+}
+
+@media (max-width: 600px) {
+    .org-card-details {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 .danger-zone {
