@@ -13,6 +13,14 @@ from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install
 
 Base.metadata.create_all(bind=engine)
 
+# Migrate existing tables: add columns that create_all won't add to existing tables.
+from sqlalchemy import inspect, text
+with engine.connect() as conn:
+    columns = [c["name"] for c in inspect(engine).get_columns("stream_access_logs")]
+    if "user_email" not in columns:
+        conn.execute(text("ALTER TABLE stream_access_logs ADD COLUMN user_email VARCHAR(255) DEFAULT ''"))
+        conn.commit()
+
 limiter = Limiter(key_func=lambda: "default")
 
 app = FastAPI(
