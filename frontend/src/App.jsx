@@ -1,15 +1,19 @@
+import { lazy, Suspense } from "react"
 import { Routes, Route, Navigate } from "react-router-dom"
 import { useAuth, useOrganization, CreateOrganization } from "@clerk/clerk-react"
 import Layout from "./components/Layout.jsx"
 import PublicLayout from "./components/PublicLayout.jsx"
-import LandingPage from "./pages/LandingPage.jsx"
-import DocsPage from "./pages/DocsPage.jsx"
-import SignInPage from "./pages/SignInPage.jsx"
-import SignUpPage from "./pages/SignUpPage.jsx"
-import DashboardPage from "./pages/DashboardPage.jsx"
-import SettingsPage from "./pages/SettingsPage.jsx"
-import AdminPage from "./pages/AdminPage.jsx"
-import TestHlsPage from "./pages/TestHlsPage.jsx"
+import LoadingSpinner from "./components/LoadingSpinner.jsx"
+
+// Lazy-load pages to reduce initial bundle size
+const LandingPage = lazy(() => import("./pages/LandingPage.jsx"))
+const DocsPage = lazy(() => import("./pages/DocsPage.jsx"))
+const SignInPage = lazy(() => import("./pages/SignInPage.jsx"))
+const SignUpPage = lazy(() => import("./pages/SignUpPage.jsx"))
+const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"))
+const SettingsPage = lazy(() => import("./pages/SettingsPage.jsx"))
+const AdminPage = lazy(() => import("./pages/AdminPage.jsx"))
+const TestHlsPage = lazy(() => import("./pages/TestHlsPage.jsx"))
 
 function RequireOrg({ children }) {
   const { organization, isLoaded } = useOrganization()
@@ -83,48 +87,50 @@ function RequireAdmin({ children }) {
 
 function App() {
   return (
-    <Routes>
-      {/* Public routes with PublicLayout */}
-      <Route element={<PublicLayout />}>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/docs" element={<DocsPage />} />
-      </Route>
+    <Suspense fallback={<div className="loading-container"><LoadingSpinner /></div>}>
+      <Routes>
+        {/* Public routes with PublicLayout */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/docs" element={<DocsPage />} />
+        </Route>
 
-      {/* Auth routes (public but use Clerk components) */}
-      <Route path="/sign-in/*" element={<SignInPage />} />
-      <Route path="/sign-up/*" element={<SignUpPage />} />
+        {/* Auth routes (public but use Clerk components) */}
+        <Route path="/sign-in/*" element={<SignInPage />} />
+        <Route path="/sign-up/*" element={<SignUpPage />} />
 
-      {/* Test route (public for debugging) */}
-      <Route path="/test-hls" element={<TestHlsPage />} />
+        {/* Test route (public for debugging) */}
+        <Route path="/test-hls" element={<TestHlsPage />} />
 
-      {/* Authenticated routes with Layout */}
-      <Route element={<Layout />}>
-        <Route
-          path="/dashboard"
-          element={
-            <RequireOrg>
-              <DashboardPage />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <RequireOrg>
-              <SettingsPage />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <RequireAdmin>
-              <AdminPage />
-            </RequireAdmin>
-          }
-        />
-      </Route>
-    </Routes>
+        {/* Authenticated routes with Layout */}
+        <Route element={<Layout />}>
+          <Route
+            path="/dashboard"
+            element={
+              <RequireOrg>
+                <DashboardPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <RequireOrg>
+                <SettingsPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireAdmin>
+                <AdminPage />
+              </RequireAdmin>
+            }
+          />
+        </Route>
+      </Routes>
+    </Suspense>
   )
 }
 
