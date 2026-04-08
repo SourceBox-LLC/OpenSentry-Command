@@ -1,14 +1,19 @@
-import { useState, useRef } from "react"
-
-const NODE_API_URL = import.meta.env.VITE_API_URL || window.location.origin
+import { useState, useRef, useEffect } from "react"
 
 function AddNodeModal({ isOpen, onClose, onCreate }) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [credentials, setCredentials] = useState(null)
-  const [deploymentMode, setDeploymentMode] = useState("docker")
+  const [os, setOs] = useState("linux")
   const inputRef = useRef(null)
+
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase()
+    if (ua.includes('win')) setOs('windows')
+    else if (ua.includes('mac')) setOs('macos')
+    else setOs('linux')
+  }, [])
 
   async function handleCreateClick() {
     const name = inputRef.current?.value
@@ -32,24 +37,14 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
     }
   }
 
+  const installCommands = {
+    linux: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
+    macos: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
+    windows: 'irm https://opensentry-command.fly.dev/install.ps1 | iex',
+  }
+
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text)
-  }
-
-  const handleCopyDockerCommand = () => {
-    const cmd = `docker exec opensentry-cloudnode opensentry-cloudnode \\
-  --node-id ${credentials.node_id} \\
-  --api-key ${credentials.api_key} \\
-  --api-url ${NODE_API_URL}`
-    navigator.clipboard.writeText(cmd)
-  }
-
-  const handleCopyNativeCommand = () => {
-    const cmd = `cargo run -- \\
-  --node-id ${credentials.node_id} \\
-  --api-key ${credentials.api_key} \\
-  --api-url ${NODE_API_URL}`
-    navigator.clipboard.writeText(cmd)
   }
 
   const handleClose = () => {
@@ -160,80 +155,34 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
 
             <div className="command-section">
               <h4>Deploy Your Node</h4>
-              
-              <div className="deployment-tabs">
-                <button 
-                  className={`deployment-tab ${deploymentMode === "docker" ? "active" : ""}`}
-                  onClick={() => setDeploymentMode("docker")}
-                >
-                  Docker (Recommended)
-                </button>
-                <button 
-                  className={`deployment-tab ${deploymentMode === "native" ? "active" : ""}`}
-                  onClick={() => setDeploymentMode("native")}
-                >
-                  Native Binary
-                </button>
+
+              <div className="deployment-content">
+                <div className="command-box">
+                  <h5>1. Install CloudNode:</h5>
+                  <div className="install-tabs">
+                    <div className="install-tab-buttons">
+                      <button className={`install-tab-btn${os === 'linux' ? ' active' : ''}`} onClick={() => setOs('linux')}>Linux</button>
+                      <button className={`install-tab-btn${os === 'macos' ? ' active' : ''}`} onClick={() => setOs('macos')}>macOS</button>
+                      <button className={`install-tab-btn${os === 'windows' ? ' active' : ''}`} onClick={() => setOs('windows')}>Windows</button>
+                    </div>
+                  </div>
+                  <code>{installCommands[os]}</code>
+                  <button className="btn btn-small" onClick={() => handleCopy(installCommands[os])}>Copy</button>
+                </div>
+                <div className="command-box">
+                  <h5>2. Run the setup wizard:</h5>
+                  <code>{os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup'}</code>
+                  <button className="btn btn-small" onClick={() => handleCopy(os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup')}>Copy</button>
+                </div>
+                <div className="command-note">
+                  <strong>Tip:</strong> The setup wizard will ask for your Node ID and API Key shown above.
+                </div>
+                <div className="command-box">
+                  <h5>3. Start CloudNode:</h5>
+                  <code>{os === 'windows' ? 'opensentry-cloudnode.exe' : './opensentry-cloudnode'}</code>
+                  <button className="btn btn-small" onClick={() => handleCopy(os === 'windows' ? 'opensentry-cloudnode.exe' : './opensentry-cloudnode')}>Copy</button>
+                </div>
               </div>
-
-              {deploymentMode === "docker" && (
-                <div className="deployment-content">
-                  <p className="deployment-description">
-                    Containerized deployment with FFmpeg included. Best for production use.
-                  </p>
-                  <div className="command-box">
-                    <h5>1. Create .env file:</h5>
-                    <code style={{ whiteSpace: "pre-wrap" }}>{`OPENSENTRY_NODE_ID=${credentials.node_id}
-OPENSENTRY_API_KEY=${credentials.api_key}
-OPENSENTRY_API_URL=${NODE_API_URL}`}</code>
-                    <button
-                      className="btn btn-small"
-                      onClick={() => handleCopy(`OPENSENTRY_NODE_ID=${credentials.node_id}\nOPENSENTRY_API_KEY=${credentials.api_key}\nOPENSENTRY_API_URL=${NODE_API_URL}`)}
-                    >
-                      Copy
-                    </button>
-                  </div>
-                  <div className="command-box">
-                    <h5>2. Pull and run:</h5>
-                    <code style={{ whiteSpace: "pre-wrap" }}>{`docker pull opensentry-cloudnode:latest
-docker run -d \\
-  --name opensentry-cloudnode \\
-  --device /dev/video0 \\
-  --env-file .env \\
-  -p 8080:8080 \\
-  opensentry-cloudnode:latest`}</code>
-                    <button
-                      className="btn btn-small"
-                      onClick={() => handleCopy(`docker pull opensentry-cloudnode:latest\ndocker run -d \\\n  --name opensentry-cloudnode \\\n  --device /dev/video0 \\\n  --env-file .env \\\n  -p 8080:8080 \\\n  opensentry-cloudnode:latest`)}
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {deploymentMode === "native" && (
-                <div className="deployment-content">
-                  <p className="deployment-description">
-                    Run directly with Cargo. Requires FFmpeg installed separately. Good for development.
-                  </p>
-                  <div className="command-box">
-                    <code style={{ whiteSpace: "pre-wrap" }}>{`cargo run -- \\
-  --node-id ${credentials.node_id} \\
-  --api-key ${credentials.api_key} \\
-  --api-url ${NODE_API_URL}`}</code>
-                    <button
-                      className="btn btn-small copy-command-btn"
-                      onClick={handleCopyNativeCommand}
-                    >
-                      Copy Command
-                    </button>
-                  </div>
-                  <div className="command-note">
-                    <strong>Note:</strong> Requires Rust and FFmpeg to be installed.
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="modal-actions">

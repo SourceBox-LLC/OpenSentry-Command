@@ -1,7 +1,5 @@
 import { useState } from "react"
 
-const NODE_API_URL = import.meta.env.VITE_API_URL || window.location.origin
-
 function KeyRotationModal({ isOpen, onClose, node, onRotate }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -25,12 +23,6 @@ function KeyRotationModal({ isOpen, onClose, node, onRotate }) {
 
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text)
-  }
-
-  const handleCopyCommand = () => {
-    if (!credentials) return
-    const cmd = `cargo run -- --node-id ${credentials.node_id} --api-key ${credentials.api_key} --api-url ${NODE_API_URL}`
-    navigator.clipboard.writeText(cmd)
   }
 
   const handleClose = () => {
@@ -135,20 +127,21 @@ function KeyRotationModal({ isOpen, onClose, node, onRotate }) {
             </div>
 
             <div className="command-section">
-              <h4>Run this command on your device:</h4>
+              <h4>Update your CloudNode:</h4>
+              <p className="deployment-description">
+                Run the setup wizard on your device to update the API key:
+              </p>
               <div className="command-box">
-                <code>
-                  cargo run -- \<br/>
-                  &nbsp;&nbsp;--node-id {credentials.node_id} \<br/>
-                  &nbsp;&nbsp;--api-key {credentials.api_key} \<br/>
-                  &nbsp;&nbsp;--api-url {NODE_API_URL}
-                </code>
+                <code>opensentry-cloudnode setup</code>
                 <button
                   className="btn btn-small copy-command-btn"
-                  onClick={handleCopyCommand}
+                  onClick={() => handleCopy("opensentry-cloudnode setup")}
                 >
-                  Copy Command
+                  Copy
                 </button>
+              </div>
+              <div className="command-note">
+                <strong>Tip:</strong> The wizard will prompt you for the new API key, then restart CloudNode.
               </div>
             </div>
 

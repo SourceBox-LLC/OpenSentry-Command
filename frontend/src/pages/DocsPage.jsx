@@ -284,9 +284,9 @@ function DocsPage() {
             </p>
 
             <h3>Authentication</h3>
-            <p>All node API requests require the following header:</p>
+            <p>All node API requests require an API key header:</p>
             <div className="docs-code-block">
-              <code>X-Node-API-Key: {"{your_api_key}"}</code>
+              <code>X-API-Key: {"{your_api_key}"}</code>
             </div>
 
             <h3>Endpoints</h3>
