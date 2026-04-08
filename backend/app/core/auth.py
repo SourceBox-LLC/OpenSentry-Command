@@ -10,14 +10,16 @@ class AuthUser:
         self,
         user_id: str,
         org_id: str,
-        org_permissions: list,
+        org_role: str = "",
+        org_permissions: list = None,
         email: str = "",
         username: str = "",
     ):
         self.user_id = user_id
         self.sub = user_id
         self.org_id = org_id
-        self.org_permissions = org_permissions
+        self.org_role = org_role
+        self.org_permissions = org_permissions or []
         self.email = email
         self.username = username
 
@@ -26,13 +28,13 @@ class AuthUser:
 
     @property
     def is_admin(self) -> bool:
-        return self.has_permission("org:admin:admin") or self.has_permission(
+        return self.org_role in ("org:admin", "admin") or self.has_permission(
             "org:cameras:manage_cameras"
         )
 
     @property
     def can_view_cameras(self) -> bool:
-        return self.has_permission("org:cameras:view_cameras") or self.is_admin
+        return True  # All org members can view cameras
 
 
 def decode_v2_permissions(claims: dict) -> list:
@@ -119,9 +121,15 @@ async def get_current_user(request: Request) -> AuthUser:
             org_permissions = decode_v2_permissions(claims)
 
         user_id = claims.get("sub")
-        org_id = claims.get("org_id")
         email = claims.get("email", "")
         username = claims.get("username", "")
+
+        # Extract org_id and org_role from V1 or V2 JWT format
+        # V1: top-level org_id and org_role claims
+        # V2: compact "o" claim with id and rol fields
+        o_claim = claims.get("o", {})
+        org_id = claims.get("org_id") or o_claim.get("id", "")
+        org_role = claims.get("org_role", "") or o_claim.get("rol", "")
 
         if not user_id:
             raise HTTPException(
@@ -137,6 +145,7 @@ async def get_current_user(request: Request) -> AuthUser:
         return AuthUser(
             user_id=user_id,
             org_id=org_id,
+            org_role=org_role,
             org_permissions=org_permissions,
             email=email,
             username=username,

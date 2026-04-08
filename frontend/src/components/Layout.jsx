@@ -28,8 +28,9 @@ function Layout() {
   const { organization, isLoaded: orgLoaded, membership } = useOrganization()
   const { isSignedIn, has } = useAuth()
 
-  const isAdmin = membership?.role === "org:admin" ||
-    has?.({ permission: "org:cameras:manage_cameras" })
+  const isAdmin = has?.({ role: "org:admin" }) ||
+    membership?.role === "org:admin" ||
+    membership?.role === "admin"
 
   return (
     <div className="layout">

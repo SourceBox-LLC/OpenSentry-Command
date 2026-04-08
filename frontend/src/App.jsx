@@ -72,8 +72,9 @@ function RequireAdmin({ children }) {
     return <Navigate to="/dashboard" replace />
   }
 
-  const isAdmin = membership?.role === "org:admin" ||
-    has?.({ permission: "org:cameras:manage_cameras" })
+  const isAdmin = has?.({ role: "org:admin" }) ||
+    membership?.role === "org:admin" ||
+    membership?.role === "admin"
 
   if (!isAdmin) {
     return <Navigate to="/dashboard" replace />
