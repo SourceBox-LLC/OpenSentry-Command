@@ -91,4 +91,4 @@ if static_dir.exists():
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "version": "2.0.0"}
+    return {"status": "healthy", "version": "2.1.0"}
