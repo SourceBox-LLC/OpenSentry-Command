@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.api import cameras, webhooks, nodes, streams, audit, hls, ws
+from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install
 
 Base.metadata.create_all(bind=engine)
 
@@ -53,6 +53,7 @@ app.include_router(streams.router)
 app.include_router(audit.router)
 app.include_router(hls.router)
 app.include_router(ws.router)
+app.include_router(install.router)
 
 
 @app.on_event("startup")
@@ -73,7 +74,7 @@ if static_dir.exists():
 
     @app.middleware("http")
     async def spa_middleware(request: Request, call_next):
-        if request.url.path.startswith(("/api", "/ws")):
+        if request.url.path.startswith(("/api", "/ws", "/install.")):
             return await call_next(request)
 
         static_file = static_dir / request.url.path.lstrip("/")

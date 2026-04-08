@@ -1,8 +1,27 @@
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 
 function DocsPage() {
+  const [os, setOs] = useState('linux')
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase()
+    if (ua.includes('win')) setOs('windows')
+    else if (ua.includes('mac')) setOs('macos')
+    else setOs('linux')
+  }, [])
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const installCommands = {
+    linux: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
+    macos: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
+    windows: 'irm https://opensentry-command.fly.dev/install.ps1 | iex',
   }
 
   return (
@@ -80,13 +99,39 @@ function DocsPage() {
                 <div className="docs-step-number">3</div>
                 <div className="docs-step-content">
                   <h4>Install CloudNode</h4>
-                  <div className="docs-code-block">
-                    <code>git clone https://github.com/SourceBox-LLC/OpenSentry-CloudNode</code>
-                    <button className="docs-copy-btn" onClick={() => copyToClipboard('git clone https://github.com/SourceBox-LLC/OpenSentry-CloudNode')}>
-                      Copy
-                    </button>
+                  <div className="install-tabs">
+                    <div className="install-tab-buttons">
+                      <button
+                        className={`install-tab-btn${os === 'linux' ? ' active' : ''}`}
+                        onClick={() => setOs('linux')}
+                      >
+                        Linux
+                      </button>
+                      <button
+                        className={`install-tab-btn${os === 'macos' ? ' active' : ''}`}
+                        onClick={() => setOs('macos')}
+                      >
+                        macOS
+                      </button>
+                      <button
+                        className={`install-tab-btn${os === 'windows' ? ' active' : ''}`}
+                        onClick={() => setOs('windows')}
+                      >
+                        Windows
+                      </button>
+                    </div>
+                    <div className="install-tab-content">
+                      <div className="docs-code-block">
+                        <code>{installCommands[os]}</code>
+                        <button className="docs-copy-btn" onClick={() => copyToClipboard(installCommands[os])}>
+                          {copied ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <p>Follow the platform-specific setup instructions in the README.</p>
+                  <p>
+                    The installer will download CloudNode, check for ffmpeg, and guide you through setup.
+                  </p>
                 </div>
               </div>
               
@@ -113,27 +158,47 @@ function DocsPage() {
               and uploads HLS segments to Tigris cloud storage for global CDN delivery.
             </p>
 
-            <h3>Windows Setup</h3>
-            <div className="docs-code-block">
-              <code>.\opensentry-cloudnode.exe setup</code>
-              <button className="docs-copy-btn" onClick={() => copyToClipboard('.\\opensentry-cloudnode.exe setup')}>
-                Copy
-              </button>
+            <h3>Installation</h3>
+            <div className="install-tabs">
+              <div className="install-tab-buttons">
+                <button
+                  className={`install-tab-btn${os === 'linux' ? ' active' : ''}`}
+                  onClick={() => setOs('linux')}
+                >
+                  Linux
+                </button>
+                <button
+                  className={`install-tab-btn${os === 'macos' ? ' active' : ''}`}
+                  onClick={() => setOs('macos')}
+                >
+                  macOS
+                </button>
+                <button
+                  className={`install-tab-btn${os === 'windows' ? ' active' : ''}`}
+                  onClick={() => setOs('windows')}
+                >
+                  Windows
+                </button>
+              </div>
+              <div className="install-tab-content">
+                <div className="docs-code-block">
+                  <code>{installCommands[os]}</code>
+                  <button className="docs-copy-btn" onClick={() => copyToClipboard(installCommands[os])}>
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <p style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                  {os === 'windows'
+                    ? 'Run in PowerShell. The installer downloads CloudNode and checks for ffmpeg.'
+                    : 'Run in your terminal. The installer downloads CloudNode and checks for ffmpeg.'}
+                </p>
+              </div>
             </div>
-            <p>Run the setup wizard to configure your API key and camera settings.</p>
 
-            <h3>Linux Setup</h3>
+            <p>After installation, run the setup wizard to configure your API key:</p>
             <div className="docs-code-block">
-              <code>./opensentry-cloudnode setup</code>
-              <button className="docs-copy-btn" onClick={() => copyToClipboard('./opensentry-cloudnode setup')}>
-                Copy
-              </button>
-            </div>
-
-            <h3>macOS Setup</h3>
-            <div className="docs-code-block">
-              <code>./opensentry-cloudnode setup</code>
-              <button className="docs-copy-btn" onClick={() => copyToClipboard('./opensentry-cloudnode setup')}>
+              <code>{os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup'}</code>
+              <button className="docs-copy-btn" onClick={() => copyToClipboard(os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup')}>
                 Copy
               </button>
             </div>

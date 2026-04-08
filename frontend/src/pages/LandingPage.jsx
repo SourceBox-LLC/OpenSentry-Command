@@ -1,9 +1,28 @@
+import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import CameraGridPreview from "../components/CameraGridPreview.jsx"
 
 function LandingPage() {
+  const [os, setOs] = useState('linux')
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase()
+    if (ua.includes('win')) setOs('windows')
+    else if (ua.includes('mac')) setOs('macos')
+    else setOs('linux')
+  }, [])
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const installCommands = {
+    linux: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
+    macos: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
+    windows: 'irm https://opensentry-command.fly.dev/install.ps1 | iex',
   }
 
   return (
@@ -262,14 +281,36 @@ function LandingPage() {
               <div className="landing-step-number">2</div>
               <div className="landing-step-content">
                 <h4>Install CloudNode on your device</h4>
-                <div className="landing-code-block">
-                  <code>git clone https://github.com/SourceBox-LLC/OpenSentry-CloudNode</code>
-                  <button className="landing-copy-btn" onClick={() => copyToClipboard('git clone https://github.com/SourceBox-LLC/OpenSentry-CloudNode')}>
-                    Copy
-                  </button>
+                <div className="install-tabs install-tabs-landing">
+                  <div className="install-tab-buttons">
+                    <button
+                      className={`install-tab-btn${os === 'linux' ? ' active' : ''}`}
+                      onClick={() => setOs('linux')}
+                    >
+                      Linux
+                    </button>
+                    <button
+                      className={`install-tab-btn${os === 'macos' ? ' active' : ''}`}
+                      onClick={() => setOs('macos')}
+                    >
+                      macOS
+                    </button>
+                    <button
+                      className={`install-tab-btn${os === 'windows' ? ' active' : ''}`}
+                      onClick={() => setOs('windows')}
+                    >
+                      Windows
+                    </button>
+                  </div>
+                  <div className="landing-code-block">
+                    <code>{installCommands[os]}</code>
+                    <button className="landing-copy-btn" onClick={() => copyToClipboard(installCommands[os])}>
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
                 </div>
                 <p className="landing-step-note">
-                  Follow the setup instructions for Windows, Linux, or macOS.
+                  One command. Downloads CloudNode, checks dependencies, and guides you through setup.
                 </p>
               </div>
             </div>

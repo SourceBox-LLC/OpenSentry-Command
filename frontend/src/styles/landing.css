@@ -1093,6 +1093,75 @@
   margin-bottom: 0.5rem;
 }
 
+/* Install Tabs (shared between landing + docs) */
+.install-tabs {
+  margin: 0.75rem 0;
+}
+
+.install-tab-buttons {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+}
+
+.install-tab-btn {
+  padding: 0.5rem 1.25rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.install-tab-btn:first-child {
+  border-radius: 8px 0 0 0;
+}
+
+.install-tab-btn:last-child {
+  border-radius: 0 8px 0 0;
+}
+
+.install-tab-btn:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.install-tab-btn.active {
+  color: var(--accent-green);
+  background: #1a1b26;
+  border-color: var(--border-color);
+}
+
+.install-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #1a1b26;
+}
+
+.install-tab-content {
+  border-radius: 0 8px 8px 8px;
+}
+
+.install-tab-content .docs-code-block {
+  margin-top: 0;
+  border-radius: 0 8px 8px 8px;
+}
+
+/* Landing page variant */
+.install-tabs-landing .landing-code-block {
+  border-radius: 0 8px 8px 8px;
+  margin-bottom: 0;
+}
+
 .docs-callout {
   border-radius: 8px;
   padding: 1rem 1.25rem;
