@@ -182,18 +182,8 @@ function HlsPlayer({ cameraId, cameraName }) {
                             }
                         }
                     })
-                } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                    video.src = playlistUrl
-                    const onLoadedMetadata = () => {
-                        setLoading(false)
-                        setIsLive(true)
-                        video.play().catch(() => { })
-                    }
-                    video.addEventListener("loadedmetadata", onLoadedMetadata)
-                    // Store for cleanup
-                    video._hlsMetadataHandler = onLoadedMetadata
                 } else {
-                    setError("HLS is not supported in this browser")
+                    setError("Your browser does not support HLS streaming. Please use a modern browser (Chrome, Firefox, Edge, or Safari 13+).")
                     setLoading(false)
                 }
             } catch (err) {
@@ -214,12 +204,6 @@ function HlsPlayer({ cameraId, cameraName }) {
                 }
                 hlsRef.current.destroy()
                 hlsRef.current = null
-            }
-            // Clean up native HLS event listener (Safari fallback)
-            const vid = videoRef.current
-            if (vid && vid._hlsMetadataHandler) {
-                vid.removeEventListener("loadedmetadata", vid._hlsMetadataHandler)
-                delete vid._hlsMetadataHandler
             }
         }
     }, [cameraId, getToken])
