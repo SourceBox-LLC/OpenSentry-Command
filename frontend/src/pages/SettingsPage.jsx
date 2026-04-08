@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset } from "../services/api"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
 
@@ -30,6 +30,12 @@ function SettingsPage() {
   const [selectedNode, setSelectedNode] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Danger Zone
+  const [dangerAction, setDangerAction] = useState(null)
+  const [dangerConfirmText, setDangerConfirmText] = useState("")
+  const [dangerLoading, setDangerLoading] = useState(false)
+  const [dangerResult, setDangerResult] = useState(null)
 
   useEffect(() => {
     if (organization) {
@@ -89,6 +95,52 @@ function SettingsPage() {
   const openRotateModal = (node) => {
     setSelectedNode(node)
     setShowRotateModal(true)
+  }
+
+  const dangerActions = {
+    "wipe-logs": {
+      title: "Wipe All Stream Logs",
+      description: "This will permanently delete all stream access logs and statistics for your organization. This cannot be undone.",
+      confirmPhrase: "wipe logs",
+      handler: async () => {
+        const token = await getToken()
+        return await wipeStreamLogs(() => Promise.resolve(token))
+      },
+    },
+    "full-reset": {
+      title: "Full Organization Reset",
+      description: "This will delete ALL nodes (notifying them to wipe local data), remove all cloud storage, clear all logs, and reset all settings. Your organization will be returned to a completely fresh state. This cannot be undone.",
+      confirmPhrase: "reset everything",
+      handler: async () => {
+        const token = await getToken()
+        const result = await fullReset(() => Promise.resolve(token))
+        await loadNodes()
+        return result
+      },
+    },
+  }
+
+  const handleDangerAction = async () => {
+    const action = dangerActions[dangerAction]
+    if (!action || dangerConfirmText !== action.confirmPhrase) return
+
+    setDangerLoading(true)
+    try {
+      const result = await action.handler()
+      setDangerResult(result)
+    } catch (err) {
+      console.error("Danger action failed:", err)
+      setDangerResult({ error: err.message })
+    } finally {
+      setDangerLoading(false)
+    }
+  }
+
+  const closeDangerModal = () => {
+    setDangerAction(null)
+    setDangerConfirmText("")
+    setDangerResult(null)
+    setDangerLoading(false)
   }
 
   if (!organization) {
@@ -221,6 +273,114 @@ function SettingsPage() {
           <p><strong>Name:</strong> {organization?.name || "Unknown"}</p>
           <p><strong>ID:</strong> {organization?.id || "Unknown"}</p>
         </div>
+      </div>
+
+      <div className="settings-section danger-zone">
+        <h2>Danger Zone</h2>
+        <p className="section-description">
+          Irreversible actions that affect your entire organization.
+        </p>
+
+        <div className="danger-actions">
+          <div className="danger-item">
+            <div className="danger-info">
+              <h3>Wipe All Stream Logs</h3>
+              <p>Delete all stream access logs and usage statistics.</p>
+            </div>
+            <button
+              className="btn btn-danger"
+              onClick={() => setDangerAction("wipe-logs")}
+            >
+              Wipe Logs
+            </button>
+          </div>
+
+          <div className="danger-item">
+            <div className="danger-info">
+              <h3>Full Organization Reset</h3>
+              <p>Delete all nodes, cameras, cloud storage, logs, and settings. Nodes will be notified to wipe local data.</p>
+            </div>
+            <button
+              className="btn btn-danger"
+              onClick={() => setDangerAction("full-reset")}
+            >
+              Reset Everything
+            </button>
+          </div>
+        </div>
+
+        {dangerAction && (
+          <div className="modal-overlay" onClick={() => !dangerLoading && closeDangerModal()}>
+            <div className="modal-content small" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>{dangerActions[dangerAction].title}</h2>
+              </div>
+              <div className="modal-body">
+                {dangerResult ? (
+                  <div className="danger-result">
+                    {dangerResult.error ? (
+                      <p className="danger-error">Failed: {dangerResult.error}</p>
+                    ) : (
+                      <>
+                        <p className="danger-success">Operation completed successfully.</p>
+                        {dangerResult.nodes_deleted !== undefined && (
+                          <ul className="danger-summary">
+                            <li>{dangerResult.nodes_deleted} node(s) deleted ({dangerResult.nodes_wiped} notified)</li>
+                            <li>{dangerResult.cameras_deleted} camera(s) removed</li>
+                            <li>{dangerResult.storage_cleaned} storage object(s) cleaned</li>
+                            <li>{dangerResult.logs_deleted} log(s) deleted</li>
+                            <li>{dangerResult.settings_deleted} setting(s) reset</li>
+                          </ul>
+                        )}
+                        {dangerResult.deleted_logs !== undefined && (
+                          <p>{dangerResult.deleted_logs} log(s) deleted.</p>
+                        )}
+                      </>
+                    )}
+                    <div className="modal-actions">
+                      <button className="btn btn-secondary" onClick={closeDangerModal}>
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                ) : dangerLoading ? (
+                  <div className="delete-progress">
+                    <div className="loading-spinner" />
+                    <p>Processing... This may take a moment.</p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="danger-warning">{dangerActions[dangerAction].description}</p>
+                    <div className="danger-confirm-input">
+                      <label>
+                        Type <strong>{dangerActions[dangerAction].confirmPhrase}</strong> to confirm:
+                      </label>
+                      <input
+                        type="text"
+                        value={dangerConfirmText}
+                        onChange={(e) => setDangerConfirmText(e.target.value)}
+                        placeholder={dangerActions[dangerAction].confirmPhrase}
+                        autoFocus
+                      />
+                    </div>
+                    <div className="modal-actions">
+                      <button className="btn btn-secondary" onClick={closeDangerModal}>
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        onClick={handleDangerAction}
+                        disabled={dangerConfirmText !== dangerActions[dangerAction].confirmPhrase}
+                      >
+                        {dangerActions[dangerAction].title}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <AddNodeModal

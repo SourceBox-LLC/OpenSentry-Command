@@ -427,3 +427,79 @@ async def report_camera_codec(
     logger.info("Updated codec for camera %s: video=%s, audio=%s", camera_id, video_codec, camera.audio_codec)
 
     return {"success": True, "message": "Codec updated"}
+
+
+# ── Danger Zone ──────────────────────────────────────────────────────
+
+@router.post("/settings/danger/wipe-logs")
+async def wipe_stream_logs(
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete all stream access logs for this organization."""
+    from app.models import StreamAccessLog
+
+    count = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
+    db.commit()
+    logger.warning("Admin %s wiped %d stream access logs for org %s", user.user_id, count, user.org_id)
+    return {"success": True, "deleted_logs": count}
+
+
+@router.post("/settings/danger/full-reset")
+async def full_reset(
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Full organization reset: wipe all nodes (with CloudNode notification),
+    delete Tigris storage, clear stream logs, clear settings.
+    """
+    from app.models import StreamAccessLog, CameraNode
+    from app.services.storage import get_storage
+
+    results = {
+        "nodes_deleted": 0,
+        "nodes_wiped": 0,
+        "cameras_deleted": 0,
+        "storage_cleaned": 0,
+        "logs_deleted": 0,
+        "settings_deleted": 0,
+    }
+
+    # 1. Delete all nodes (send wipe_data to each, clean Tigris, remove from DB)
+    nodes = db.query(CameraNode).filter_by(org_id=user.org_id).all()
+    for node in nodes:
+        # Tell CloudNode to wipe local data
+        try:
+            from app.api.ws import manager
+            result = await manager.send_command(node.node_id, "wipe_data", {}, timeout=10)
+            if result and result.get("status") == "success":
+                results["nodes_wiped"] += 1
+        except Exception as e:
+            logger.warning("Could not send wipe_data to node %s: %s", node.node_id, e)
+
+        # Clean Tigris storage for each camera
+        try:
+            storage = get_storage()
+            for camera in list(node.cameras):
+                count = storage.delete_camera_storage(user.org_id, camera.camera_id)
+                results["storage_cleaned"] += count
+                results["cameras_deleted"] += 1
+        except Exception as e:
+            logger.warning("Storage cleanup failed for node %s: %s", node.node_id, e)
+
+        db.delete(node)
+        results["nodes_deleted"] += 1
+
+    # 2. Wipe stream access logs
+    results["logs_deleted"] = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
+
+    # 3. Wipe settings
+    results["settings_deleted"] = db.query(Setting).filter_by(org_id=user.org_id).delete()
+
+    # 4. Wipe audit logs
+    db.query(AuditLog).filter_by(org_id=user.org_id).delete()
+
+    db.commit()
+    logger.warning("Admin %s performed FULL RESET for org %s: %s", user.user_id, user.org_id, results)
+    return {"success": True, **results}

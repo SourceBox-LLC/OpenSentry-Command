@@ -133,3 +133,16 @@ export async function getStreamLogs(getToken, params = {}) {
 export async function getStreamStats(getToken, days = 7) {
   return fetchWithAuth(`/api/audit/stream-logs/stats?days=${days}`, getToken)
 }
+
+// Danger Zone
+export async function wipeStreamLogs(getToken) {
+  return fetchWithAuth("/api/settings/danger/wipe-logs", getToken, {
+    method: "POST"
+  })
+}
+
+export async function fullReset(getToken) {
+  return fetchWithAuth("/api/settings/danger/full-reset", getToken, {
+    method: "POST"
+  })
+}

@@ -1427,6 +1427,90 @@ body {
     color: white;
 }
 
+.danger-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.danger-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 8px;
+    gap: 1rem;
+}
+
+.danger-info h3 {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.danger-info p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+.danger-warning {
+    color: var(--accent-red);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+}
+
+.danger-confirm-input {
+    margin-bottom: 1rem;
+}
+
+.danger-confirm-input label {
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.danger-confirm-input input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    box-sizing: border-box;
+}
+
+.danger-confirm-input input:focus {
+    outline: none;
+    border-color: var(--accent-red);
+}
+
+.danger-success {
+    color: var(--accent-green);
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+}
+
+.danger-error {
+    color: var(--accent-red);
+    font-weight: 500;
+}
+
+.danger-summary {
+    list-style: none;
+    padding: 0;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.danger-summary li {
+    padding: 0.25rem 0;
+}
+
 .btn-danger:hover {
     background: linear-gradient(135deg, #dc2626, #b91c1c);
 }
