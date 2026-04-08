@@ -30,7 +30,10 @@ async def get_stream_logs(
         query = query.filter(StreamAccessLog.camera_id == camera_id)
 
     if user_id:
-        query = query.filter(StreamAccessLog.user_id == user_id)
+        query = query.filter(
+            StreamAccessLog.user_email.ilike(f"%{user_id}%")
+            | StreamAccessLog.user_id.ilike(f"%{user_id}%")
+        )
 
     total = query.count()
 
