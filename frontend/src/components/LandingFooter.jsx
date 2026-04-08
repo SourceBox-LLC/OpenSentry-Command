@@ -38,8 +38,8 @@ function LandingFooter() {
             
             <div className="landing-footer-col">
               <h5>Legal</h5>
-              <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
-                MIT License
+              <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">
+                AGPL-3.0 License
               </a>
               <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/issues" target="_blank" rel="noopener noreferrer">
                 Report Issue
@@ -49,7 +49,7 @@ function LandingFooter() {
         </div>
         
         <div className="landing-footer-bottom">
-          <p>© {new Date().getFullYear()} SourceBox LLC. Open source under MIT License.</p>
+          <p>© {new Date().getFullYear()} SourceBox LLC. Open source under AGPL-3.0.</p>
         </div>
       </div>
     </footer>
