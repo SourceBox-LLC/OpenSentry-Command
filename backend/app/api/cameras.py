@@ -397,8 +397,8 @@ async def report_camera_codec(
         codec_data = json.loads(body)
         video_codec = codec_data.get("video_codec")
         audio_codec = codec_data.get("audio_codec")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request body")
 
     if not video_codec:
         raise HTTPException(status_code=400, detail="video_codec is required")

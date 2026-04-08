@@ -152,10 +152,12 @@ async def get_current_user(request: Request) -> AuthUser:
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        import logging
+        logging.getLogger(__name__).error("Authentication failed", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication failed: {str(e)}",
+            detail="Authentication failed",
         )
 
 

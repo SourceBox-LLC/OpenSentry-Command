@@ -4,11 +4,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from slowapi import Limiter
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine
+from app.core.limiter import limiter
 from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install
 
 Base.metadata.create_all(bind=engine)
@@ -21,8 +22,6 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE stream_access_logs ADD COLUMN user_email VARCHAR(255) DEFAULT ''"))
         conn.commit()
 
-limiter = Limiter(key_func=lambda: "default")
-
 app = FastAPI(
     title="OpenSentry Command Center API",
     description="FastAPI backend with Clerk authentication for OpenSentry Command Center",
@@ -30,6 +29,7 @@ app = FastAPI(
 )
 
 app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # Get frontend URL from environment (set in fly.toml or .env)

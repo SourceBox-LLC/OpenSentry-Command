@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin
+from app.core.limiter import limiter
 from app.models.models import CameraNode, Camera
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
 from app.services.storage import get_storage
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/nodes", tags=["nodes"])
 
 
 @router.post("/validate")
+@limiter.limit("10/minute")
 async def validate_node(
     request: Request,
     db: Session = Depends(get_db),
@@ -51,6 +53,7 @@ async def validate_node(
 
 
 @router.post("/register")
+@limiter.limit("10/minute")
 async def register_node(
     request: Request,
     data: NodeRegister,
@@ -333,7 +336,9 @@ async def delete_node(
 
 
 @router.post("/{node_id}/rotate-key")
+@limiter.limit("5/minute")
 async def rotate_api_key(
+    request: Request,
     node_id: str,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),

@@ -156,7 +156,6 @@ async def get_hls_playlist(
     headers = {
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
-        "Access-Control-Allow-Origin": "*",
     }
 
     try:
@@ -197,10 +196,12 @@ async def get_hls_playlist(
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Stream not started yet")
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Storage not configured: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get playlist: {e}")
+    except ValueError:
+        logger.error("Storage not configured for playlist GET camera=%s", camera_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Storage service unavailable")
+    except Exception:
+        logger.error("Failed to get playlist for camera=%s", camera_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load stream")
 
 
 @router.get("/segment/{filename}")
@@ -241,15 +242,16 @@ async def get_hls_segment(
             media_type="video/mp2t",
             headers={
                 "Cache-Control": "public, max-age=3600",
-                "Access-Control-Allow-Origin": "*",
             },
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Segment not found")
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Storage not configured: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get segment: {e}")
+    except ValueError:
+        logger.error("Storage not configured for segment GET camera=%s", camera_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Storage service unavailable")
+    except Exception:
+        logger.error("Failed to get segment %s for camera=%s", filename, camera_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load segment")
 
 
 @router.post("/playlist")
@@ -316,10 +318,12 @@ async def update_hls_playlist(
             )
 
         return {"success": True, "message": "Playlist updated"}
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Storage not configured: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save playlist: {e}")
+    except ValueError:
+        logger.error("Storage not configured for playlist POST camera=%s", camera_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Storage service unavailable")
+    except Exception:
+        logger.error("Failed to save playlist for camera=%s", camera_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save playlist")
 
 
 async def _cleanup_old_segments(org_id: str, camera_id: str):

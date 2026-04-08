@@ -63,8 +63,9 @@ async def get_batch_upload_urls(
 
     try:
         storage = get_storage()
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Storage not configured: {e}")
+    except ValueError:
+        logger.error("Storage not configured for upload-urls camera=%s", camera_id, exc_info=True)
+        raise HTTPException(status_code=500, detail="Storage service unavailable")
 
     # Generate presigned URLs for segments and the playlist
     urls = []
