@@ -1,84 +1,11 @@
-from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
-from app.models.models import Alert, Camera, CameraGroup, Media
-
-
-class CameraCreate(BaseModel):
-    camera_id: str
-    name: str
-    node_type: Optional[str] = "unknown"
-    capabilities: Optional[List[str]] = []
-    notes: Optional[str] = None
-
-
-class CameraUpdate(BaseModel):
-    name: Optional[str] = None
-    notes: Optional[str] = None
-    group_id: Optional[int] = None
-
-
-class CameraResponse(BaseModel):
-    camera_id: str
-    name: str
-    node_type: str
-    capabilities: List[str]
-    group: Optional[str] = None
-    status: str
-    last_seen: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
 
 
 class CameraGroupCreate(BaseModel):
     name: str
     color: Optional[str] = "#22c55e"
     icon: Optional[str] = "📁"
-
-
-class CameraGroupResponse(BaseModel):
-    id: int
-    name: str
-    color: str
-    icon: str
-    camera_count: int
-
-    class Config:
-        from_attributes = True
-
-
-class MediaResponse(BaseModel):
-    id: int
-    camera_id: Optional[str] = None
-    type: str
-    filename: str
-    size: int
-    duration: Optional[float] = None
-    tags: List[str]
-    created: float
-    url: str
-
-    class Config:
-        from_attributes = True
-
-
-class AlertResponse(BaseModel):
-    id: int
-    camera_id: str
-    type: str
-    confidence: Optional[float] = None
-    region: Optional[dict] = None
-    timestamp: Optional[str] = None
-    processed: bool
-
-    class Config:
-        from_attributes = True
-
-
-class SettingUpdate(BaseModel):
-    key: str
-    value: str
 
 
 class RecordingSettings(BaseModel):
@@ -97,20 +24,6 @@ class NotificationSettings(BaseModel):
     face_notifications: bool = True
     object_notifications: bool = True
     toast_notifications: bool = True
-
-
-class CameraCommand(BaseModel):
-    command: str
-
-
-class AlertCreate(BaseModel):
-    camera_id: str
-    detection_type: str
-    confidence: Optional[float] = None
-    region_x: Optional[int] = None
-    region_y: Optional[int] = None
-    region_width: Optional[int] = None
-    region_height: Optional[int] = None
 
 
 class CameraReport(BaseModel):
@@ -134,10 +47,15 @@ class NodeRegister(BaseModel):
     audio_codec: Optional[str] = None
 
 
+class CameraStatus(BaseModel):
+    camera_id: str
+    status: str
+
+
 class NodeHeartbeat(BaseModel):
     node_id: str
     local_ip: Optional[str] = None
-    cameras: Optional[List[dict]] = []
+    cameras: Optional[List[CameraStatus]] = []
 
 
 class NodeCreate(BaseModel):

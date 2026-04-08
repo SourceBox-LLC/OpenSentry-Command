@@ -1,256 +1,99 @@
-import uuid
 import hashlib
-import secrets
-from datetime import datetime, timedelta
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Request, Header
-from fastapi.responses import JSONResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
 from app.core.config import settings
-from app.models import Camera, CameraNode, StreamAccessLog, PendingUpload
-from app.services.storage import get_storage, TigrisStorage
+from app.models import Camera, CameraNode
+from app.services.storage import get_storage
 
-limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api", tags=["streams"])
+logger = logging.getLogger(__name__)
+
+# ─── Batch upload URLs ────────────────────────────────────────────────
+# The old per-segment flow required 3 HTTP round-trips per 2-second
+# segment (get-url, PUT, confirm). With network variance, total
+# processing time could exceed segment duration, causing the pipeline
+# to fall behind and never recover ("buffer wall").
+#
+# The batch endpoint returns N presigned URLs in a single request.
+# The CloudNode uploads segments directly to Tigris without any
+# per-segment backend calls. One request covers ~60s of streaming.
 
 
-def log_stream_access(
-    db: Session,
-    user_id: str,
-    org_id: str,
+@router.post("/cameras/{camera_id}/upload-urls")
+async def get_batch_upload_urls(
     camera_id: str,
-    node_id: str,
-    ip_address: Optional[str],
-    user_agent: Optional[str],
-):
-    """Log a stream access event."""
-    log = StreamAccessLog(
-        user_id=user_id,
-        org_id=org_id,
-        camera_id=camera_id,
-        node_id=node_id,
-        ip_address=ip_address,
-        user_agent=user_agent[:500] if user_agent else None,
-    )
-    db.add(log)
-    db.commit()
-
-    cleanup_old_logs(db, org_id)
-
-
-def cleanup_old_logs(db: Session, org_id: str):
-    """Delete logs older than retention period (7 days by default)."""
-    retention_days = settings.AUDIT_LOG_RETENTION_DAYS
-    cutoff = datetime.utcnow() - timedelta(days=retention_days)
-    db.query(StreamAccessLog).filter(
-        StreamAccessLog.org_id == org_id,
-        StreamAccessLog.accessed_at < cutoff,
-    ).delete()
-    db.commit()
-
-
-@router.get("/cameras/{camera_id}/stream-url")
-@limiter.limit("10/minute")
-async def get_stream_url(
-    request: Request,
-    camera_id: str,
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """
-    Get a signed URL for streaming camera video.
-    Rate limited to 10 requests per minute per IP.
-    """
-    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
-    if not camera:
-        raise HTTPException(status_code=404, detail="Camera not found")
-
-    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
-    if not node:
-        raise HTTPException(status_code=404, detail="Camera node not found")
-
-    if node.org_id != user.org_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    try:
-        storage = get_storage()
-        stream_url = storage.generate_stream_url(
-            camera_id=camera_id,
-            org_id=user.org_id,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=f"Storage not configured: {e}")
-
-    log_stream_access(
-        db=db,
-        user_id=user.sub,
-        org_id=user.org_id,
-        camera_id=camera_id,
-        node_id=node.node_id,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-
-    return {"url": stream_url, "expires_in": settings.STREAM_URL_EXPIRY_SECONDS}
-
-
-@router.post("/cameras/{camera_id}/upload-url")
-async def get_upload_url(
-    camera_id: str,
-    filename: str,
-    checksum: str,
     request: Request,
     db: Session = Depends(get_db),
 ):
     """
-    Get a signed URL for uploading a video segment.
-    Called by CloudNode with its API key.
+    Get a batch of presigned upload URLs for streaming segments.
+    Called once by CloudNode, covers ~60 seconds of streaming.
+    CloudNode requests a new batch when running low.
 
-    Args:
-        filename: The actual segment filename (e.g., "segment_00000.ts")
-        checksum: BLAKE3 hash of the segment content
+    Body JSON: { "start_sequence": 0, "count": 30 }
     """
-    # Get API key from multiple possible headers
     node_api_key = (
         request.headers.get("X-Node-API-Key")
         or request.headers.get("X-API-Key")
         or request.headers.get("Authorization", "").replace("Bearer ", "")
     )
 
-    print(f"[upload-url] Request for camera={camera_id}, filename={filename}")
-    print(f"[upload-url] API key present: {bool(node_api_key)}")
-
     if not node_api_key:
-        print(f"[upload-url] ERROR: No API key provided")
         raise HTTPException(status_code=401, detail="API key required")
 
     api_key_hash = hashlib.sha256(node_api_key.encode()).hexdigest()
-    print(f"[upload-url] Looking up node by API key hash")
-
     node = db.query(CameraNode).filter_by(api_key_hash=api_key_hash).first()
     if not node:
-        print(f"[upload-url] ERROR: Invalid API key (no matching node)")
         raise HTTPException(status_code=401, detail="Invalid API key")
-
-    print(f"[upload-url] Found node: node_id={node.node_id}, org_id={node.org_id}")
 
     camera = db.query(Camera).filter_by(camera_id=camera_id).first()
     if not camera:
-        print(f"[upload-url] ERROR: Camera not found: {camera_id}")
         raise HTTPException(status_code=404, detail="Camera not found")
 
     if camera.node_id != node.id:
-        print(
-            f"[upload-url] ERROR: Camera node_id={camera.node_id} doesn't match node.id={node.id}"
-        )
-        raise HTTPException(
-            status_code=403, detail="Camera does not belong to this node"
-        )
+        raise HTTPException(status_code=403, detail="Camera does not belong to this node")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    start_seq = body.get("start_sequence", 0)
+    count = min(body.get("count", 30), 100)  # Cap at 100
 
     try:
         storage = get_storage()
     except ValueError as e:
-        print(f"[upload-url] ERROR: Storage not configured: {e}")
         raise HTTPException(status_code=500, detail=f"Storage not configured: {e}")
 
-    upload_id = str(uuid.uuid4())
-    expires_at = datetime.utcnow() + timedelta(minutes=settings.UPLOAD_TIMEOUT_MINUTES)
+    # Generate presigned URLs for segments and the playlist
+    urls = []
+    for i in range(count):
+        seq = start_seq + i
+        filename = f"segment_{seq:05d}.ts"
+        upload_url, s3_key = storage.generate_upload_url(
+            camera_id=camera_id,
+            org_id=node.org_id,
+            filename=filename,
+        )
+        urls.append({
+            "sequence": seq,
+            "filename": filename,
+            "upload_url": upload_url,
+        })
 
-    upload_url, s3_key = storage.generate_upload_url(
+    # Also generate a presigned URL for the playlist
+    playlist_url, _ = storage.generate_upload_url(
         camera_id=camera_id,
         org_id=node.org_id,
-        filename=filename,
+        filename="stream.m3u8",
     )
-
-    pending = PendingUpload(
-        upload_id=upload_id,
-        camera_id=camera_id,
-        org_id=node.org_id,
-        node_id=node.node_id,
-        s3_key=s3_key,
-        expected_checksum=checksum,
-        expires_at=expires_at,
-    )
-    db.add(pending)
-    db.commit()
-
-    print(f"[upload-url] Success: upload_id={upload_id}, url generated")
 
     return {
-        "upload_id": upload_id,
-        "upload_url": upload_url,
+        "urls": urls,
+        "playlist_upload_url": playlist_url,
         "expires_in": settings.UPLOAD_URL_EXPIRY_SECONDS,
     }
-
-
-@router.post("/cameras/{camera_id}/upload-complete")
-async def confirm_upload(
-    camera_id: str,
-    upload_id: str,
-    node_api_key: str = Header(alias="X-Node-API-Key"),
-    db: Session = Depends(get_db),
-):
-    """
-    Confirm that a segment upload completed.
-    Called by CloudNode after uploading to Tigris.
-
-    Note: We trust the checksum header (x-amz-content-sha256) sent during upload.
-    S3-compatible storage validates this automatically, so we don't need to
-    verify again. This reduces latency for live streaming.
-    """
-    api_key_hash = hashlib.sha256(node_api_key.encode()).hexdigest()
-
-    node = db.query(CameraNode).filter_by(api_key_hash=api_key_hash).first()
-    if not node:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-
-    pending = (
-        db.query(PendingUpload)
-        .filter_by(
-            upload_id=upload_id,
-            camera_id=camera_id,
-        )
-        .first()
-    )
-
-    if not pending:
-        raise HTTPException(status_code=404, detail="Upload not found")
-
-    if pending.completed:
-        raise HTTPException(status_code=400, detail="Upload already completed")
-
-    if pending.node_id != node.node_id:
-        raise HTTPException(
-            status_code=403, detail="Upload does not belong to this node"
-        )
-
-    if pending.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Upload has expired")
-
-    # Mark upload as complete
-    # Note: S3-compatible storage already verified checksum via x-amz-content-sha256 header
-    pending.completed = True
-
-    node.upload_count = (node.upload_count or 0) + 1
-    db.commit()
-
-    if node.upload_count % settings.CLEANUP_INTERVAL == 0:
-        try:
-            storage = get_storage()
-            storage.cleanup_old_segments(
-                org_id=node.org_id,
-                camera_id=camera_id,
-                keep_count=settings.SEGMENT_RETENTION_COUNT,
-            )
-            print(
-                f"[cleanup] Removed old segments for camera {camera_id}, keeping last {settings.SEGMENT_RETENTION_COUNT}"
-            )
-        except Exception as e:
-            print(f"[cleanup] WARNING: Cleanup failed: {e}")
-
-    return {"success": True, "message": "Upload confirmed"}

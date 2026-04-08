@@ -23,10 +23,11 @@ Fixes #
 
 <!-- Mark all that apply -->
 
-- [ ] Command Center (Dashboard/Web UI)
-- [ ] Command Center (API)
-- [ ] Command Center (MQTT)
-- [ ] Camera Node(s)
+- [ ] Frontend (React/Vite)
+- [ ] Backend (FastAPI API)
+- [ ] CloudNode (Rust)
+- [ ] Authentication (Clerk)
+- [ ] Storage (Tigris/S3)
 - [ ] Docker/Deployment
 - [ ] Documentation
 

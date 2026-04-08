@@ -1,0 +1,36 @@
+{
+  "name": "opensentry-frontend",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "author": "SourceBox LLC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SourceBox-LLC/OpenSentry-Command"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@clerk/clerk-react": "^5.61.4",
+    "hls.js": "^1.6.15",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.4.0",
+    "vite": "^8.0.1"
+  }
+}

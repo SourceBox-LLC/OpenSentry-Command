@@ -1,6 +1,6 @@
 # OpenSentry Command - Agent Documentation
 
-##  Project Overview
+## Project Overview
 
 OpenSentry is a cloud-hosted multi-tenant security camera system with two main components:
 
@@ -13,20 +13,216 @@ OpenSentry is a cloud-hosted multi-tenant security camera system with two main c
 
 ---
 
-## 🔐 Clerk Authentication Setup (CRITICAL)
+## Architecture
 
-### JWT V2 Token Format
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  CloudNode      │────▶│  Tigris/S3      │◀────│  Command Center │
+│  (Rust)         │     │  (Video Storage) │     │  (FastAPI)       │
+│  USB Camera     │     │                  │     │  + React         │
+│  Codec Detect   │     │  - HLS Segments  │     │  + Clerk Auth    │
+│  Segment Upload │     │  - M3U8 Playlist │     │                  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
 
-OpenSentry uses **Clerk JWT V2 format** which encodes permissions differently than V1:
+**Video Flow:**
+1. CloudNode captures USB camera video
+2. CloudNode detects codecs during setup (H.264 Baseline/Main, AAC)
+3. CloudNode uploads HLS segments to Tigris via presigned URLs
+4. CloudNode updates M3U8 playlist in Tigris
+5. Browser requests M3U8 from Command Center
+6. Command Center serves M3U8 with stored codec info
+7. Browser plays HLS stream via HLS.js
 
-**V1 Format (Deprecated):**
-```json
+---
+
+## Key Files
+
+### Backend (Python)
+
+| File | Purpose |
+|------|---------|
+| `backend/app/main.py` | FastAPI app entry point |
+| `backend/app/api/cameras.py` | Camera CRUD, settings, alerts, audit logs |
+| `backend/app/api/nodes.py` | CloudNode registration, heartbeat, validation |
+| `backend/app/api/hls.py` | HLS playlist/segment serving with codec injection |
+| `backend/app/api/streams.py` | Upload URL generation, segment cleanup |
+| `backend/app/core/auth.py` | Clerk JWT V2 verification, permission decoding |
+| `backend/app/services/storage.py` | Tigris/S3 operations (upload, download, cleanup) |
+| `backend/app/models/models.py` | SQLAlchemy models (CameraNode, Camera, etc.) |
+| `backend/app/schemas/schemas.py` | Pydantic request/response schemas |
+
+### Frontend (React)
+
+| File | Purpose |
+|------|---------|
+| `frontend/src/App.jsx` | Routes and auth setup |
+| `frontend/src/pages/DashboardPage.jsx` | Camera grid view |
+| `frontend/src/pages/SettingsPage.jsx` | Node management |
+| `frontend/src/components/HlsPlayer.jsx` | HLS.js video player |
+| `frontend/src/components/CameraCard.jsx` | Camera feed card |
+| `frontend/src/services/api.js` | API client with auth |
+
+### CloudNode (Rust)
+
+| File | Purpose |
+|------|---------|
+| `src/streaming/codec_detector.rs` | Codec detection from camera |
+| `src/streaming/hls_uploader.rs` | Segment upload to Tigris |
+| `src/api/client.rs` | HTTP client for Command Center API |
+| `src/node/runner.rs` | Main node runner, registration |
+| `src/setup/tui.rs` | Terminal UI setup wizard |
+| `src/setup/validator.rs` | Credential validation |
+
+---
+
+## Database Schema
+
+### CameraNode
+```
+node_id: String (unique)
+name: String
+org_id: String
+api_key_hash: String (SHA256)
+status: String (online/offline)
+upload_count: Integer
+video_codec: String (e.g., "avc1.42e01e")
+audio_codec: String (e.g., "mp4a.40.2")
+created_at: DateTime
+```
+
+### Camera
+```
+camera_id: String (unique)
+name: String
+node_id: Integer (FK to CameraNode)
+org_id: String
+status: String (online/offline/streaming)
+video_codec: String
+audio_codec: String
+codec_detected_at: DateTime
+last_seen: DateTime
+```
+
+---
+
+## API Endpoints
+
+### Authentication Required (Clerk JWT Bearer Token)
+
+**Cameras:**
+- `GET /api/cameras` - List all cameras
+- `GET /api/cameras/{id}` - Get camera details
+- `POST /api/cameras/{id}/group` - Assign camera to group
+
+**Camera Groups:**
+- `GET /api/camera-groups` - List groups
+- `POST /api/camera-groups` - Create group
+- `DELETE /api/camera-groups/{id}` - Delete group
+
+**Settings:**
+- `GET /api/settings` - Get all settings
+- `POST /api/settings/recording` - Update recording settings
+- `POST /api/settings/notifications` - Update notification settings
+
+**Nodes:**
+- `GET /api/nodes` - List all nodes
+- `POST /api/nodes` - Create new node (returns API key)
+- `GET /api/nodes/{id}` - Get node details
+- `DELETE /api/nodes/{id}` - Delete node
+- `POST /api/nodes/{id}/rotate-key` - Regenerate API key
+
+**HLS Streaming:**
+- `GET /api/cameras/{id}/stream.m3u8` - Get HLS playlist with auth
+- `GET /api/cameras/{id}/segment/{filename}` - Get HLS segment with auth
+
+**Admin:**
+- `GET /api/audit-logs` - List audit logs (admin only)
+- `GET /api/audit/stream-logs` - List stream access logs
+- `GET /api/audit/stream-logs/stats` - Get stream statistics
+
+### Node Authentication (X-API-Key Header)
+
+- `POST /api/nodes/register` - Register CloudNode, send codecs
+- `POST /api/nodes/heartbeat` - Node heartbeat, update status
+- `POST /api/nodes/validate` - Validate credentials during setup
+- `POST /api/cameras/{camera_id}/upload-url` - Get presigned upload URL
+- `POST /api/cameras/{camera_id}/upload-complete` - Confirm segment uploaded
+- `POST /api/cameras/{camera_id}/playlist` - Update M3U8 playlist
+- `POST /api/cameras/{camera_id}/codec` - Report detected codec (also updates node codec if missing)
+
+---
+
+## Codec Detection Flow
+
+### CloudNode Setup
+
+```rust
+// 1. Detect codec from camera during setup
+let codec_info = detect_codec_from_camera(&device_path)?;
+// Returns: CodecInfo { video_codec: "avc1.42e01e", audio_codec: "mp4a.40.2" }
+
+// 2. Send during registration
+POST /api/nodes/register
 {
-  "org_permissions": ["org:admin", "org:cameras:manage"]
+  "node_id": "abc123",
+  "name": "Home",
+  "cameras": [{ "device_path": "/dev/video0", ... }],
+  "video_codec": "avc1.42e01e",
+  "audio_codec": "mp4a.40.2"
 }
 ```
 
-**V2 Format (Current):**
+### CloudNode Streaming
+
+```rust
+// 3. Detect codec from first successful segment upload (most accurate)
+let codec_info = detect_codec(segment_path)?;
+// POST /api/cameras/{camera_id}/codec
+// Updates: camera.video_codec, camera.audio_codec
+// Also updates: node.video_codec if node has no codec yet
+```
+
+### HLS Manifest Generation
+
+```python
+# Backend hls.py
+# Priority: camera codec > node codec > default
+video_codec = camera.video_codec or node.video_codec or "avc1.42e01e"
+audio_codec = camera.audio_codec or node.audio_codec or "mp4a.40.2"
+
+# Inject codecs into M3U8
+playlist_text = re.sub(
+    r"(#EXT-X-VERSION:\d+)",
+    rf"\1\n#EXT-X-CODECS:{video_codec},{audio_codec}",
+    playlist_text,
+)
+```
+
+**Codec String Format (RFC 6381):**
+- H.264 Baseline Level 3.0: `avc1.42e01e` (lowercase hex!)
+- H.264 Baseline Level 3.1: `avc1.42e01f`
+- H.264 Main Level 4.1: `avc1.4da029`
+- AAC-LC: `mp4a.40.2`
+
+---
+
+## Segment Cleanup
+
+Automatic cleanup runs every 20 uploads, keeps last 60 segments:
+
+```python
+# streams.py
+if node.upload_count % settings.CLEANUP_INTERVAL == 0:
+    storage.cleanup_old_segments(org_id, camera_id, keep_count=60)
+```
+
+---
+
+## Clerk Authentication
+
+### V2 JWT Format
+
 ```json
 {
   "fea": "o:admin,o:cameras",
@@ -34,357 +230,135 @@ OpenSentry uses **Clerk JWT V2 format** which encodes permissions differently th
     "id": "org_123",
     "per": "admin,manage_cameras,view_cameras",
     "fpm": "1,3",
-    "rol": "admin",
-    "slg": "org-slug"
+    "rol": "admin"
   }
 }
 ```
 
-### Backend Permission Decoding
-
-The backend includes a V2 permission decoder in `backend/app/core/auth.py`:
+### Permission Decoding
 
 ```python
 def decode_v2_permissions(claims: dict) -> list:
-    """
-    Decode permissions from Clerk V2 JWT format.
-    V2 uses compact o claim with permission bitmap.
-    """
     o_claim = claims.get("o", {})
-    fea_claim = claims.get("fea", "")
-    
-    # Get permission names from o.per
     per_str = o_claim.get("per", "")
     permission_names = per_str.split(",") if per_str else []
     
-    # Get features from fea (strip 'o:' prefix)
+    fea_claim = claims.get("fea", "")
     features = [f[2:] if f.startswith("o:") else f for f in fea_claim.split(",")]
     
-    # Get feature-permission map from o.fpm
-    fpm_str = o_claim.get("fpm", "")
-    fpm_values = [int(x) for x in fpm_str.split(",")] if fpm_str else []
-    
-    # Reconstruct full permission keys: org:{feature}:{permission}
+    # Reconstruct: org:{feature}:{permission}
     permissions = []
     for i, feature in enumerate(features):
-        if i < len(fpm_values):
-            fpm_value = fpm_values[i]
-            for j, perm_name in enumerate(permission_names):
-                if fpm_value & (1 << j):
-                    permissions.append(f"org:{feature}:{perm_name}")
+        for j, perm_name in enumerate(permission_names):
+            if fpm_values[i] & (1 << j):
+                permissions.append(f"org:{feature}:{perm_name}")
     
     return permissions
 ```
 
-### Permission Key Format
+### Required Permissions
 
-Your Clerk permissions must match this format in the code:
-
-```python
-@property
-def is_admin(self) -> bool:
-    return self.has_permission("org:admin:admin") or self.has_permission(
-        "org:cameras:manage_cameras"
-    )
-
-@property
-def can_view_cameras(self) -> bool:
-    return self.has_permission("org:cameras:view_cameras") or self.is_admin
-```
-
-### Clerk Dashboard Configuration
-
-#### 1. Create Features and Permissions
-
-Go to **Configure** → **Organizations** → **Roles & Permissions**:
-
-**Features to create:**
-- `admin` (Key: `admin`) - Full admin access
-- `cameras` (Key: `cameras`) - Camera management permissions
-
-**Permissions under `admin` feature:**
-- `Admin` (Key: `admin`) → `org:admin:admin`
-
-**Permissions under `cameras` feature:**
-- `Manage Cameras` (Key: `manage_cameras`) → `org:cameras:manage_cameras`
-- `View Cameras` (Key: `view_cameras`) → `org:cameras:view_cameras`
-
-#### 2. Assign Permissions to Roles
-
-Go to **All roles** tab → Edit **Admin** role:
-- ✅ Check `org:admin:admin`
-- ✅ Check `org:cameras:manage_cameras`
-- ✅ Check `org:cameras:view_cameras`
-
-#### 3. Configure Role Set
-
-Go to **Role Sets** tab:
-- Ensure **Default role set** includes the **Admin** role
-- Make sure the role set is active for your organization
-
-#### 4. JWT Template Configuration
-
-Go to **Configure** → **JWT Templates** → **default**:
-
-**Claims field:** Set to `{}` (empty object)
-- This allows Clerk to use default V2 claims
-- Do NOT add custom `org_permissions` claims - V2 handles this automatically
-
-**Important:** After changing JWT template settings:
-1. Save the template
-2. Sign out of your app completely
-3. Sign back in to get a fresh JWT token
-
-#### 5. Assign User to Admin Role
-
-Go to **Organizations** → Select your organization → Members:
-- Find your user
-- Set role to **Admin** (not just `org:admin`, but your custom Admin role)
+- `org:admin:admin` - Full admin access
+- `org:cameras:manage_cameras` - Create/delete nodes, manage cameras
+- `org:cameras:view_cameras` - View camera feeds
 
 ---
 
-## 🏗️ Architecture
+## Common Tasks
 
-### Frontend → Backend Communication
+### Create a New Node
 
-```
-Browser (localhost:5173) → Backend (localhost:8000) ← ngrok ← Rust Camera Nodes (external)
-```
+1. User clicks "Add Node" in Settings
+2. Frontend calls `POST /api/nodes` with auth token
+3. Backend generates `node_id` and `api_key`
+4. Backend stores `api_key_hash` (SHA256), returns plain key once
+5. User runs CloudNode with `--node-id` and `--api-key`
+6. CloudNode validates credentials, detects codecs, registers
 
-**Key Points:**
-- Frontend talks directly to backend on same machine (no CORS issues)
-- ngrok is ONLY for external Rust camera nodes to reach the backend
-- `VITE_API_URL` should be `http://localhost:8000` (not ngrok URL)
+### Debug HLS Playback
 
-### CORS Configuration
+1. Check backend logs: `[HLS] Using stored codec: avc1.42e01e,mp4a.40.2`
+2. Check CloudNode logs: `[Codec] Detected from camera /dev/video0: video=avc1.42e01e`
+3. Verify database: `select video_codec, audio_codec from camera_nodes;`
+4. Check browser console: HLS.js will show `BufferCodecsChange` event
 
-Backend CORS in `backend/app/main.py`:
+### Debug Registration
 
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://ulises-nonruinable-shapelessly.ngrok-free.dev",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-
-**Important:** Cannot use `allow_origins=["*"]` with `allow_credentials=True` - violates CORS spec.
+1. CloudNode sends: `POST /api/nodes/validate` to test credentials
+2. If 404: "Node not found, create in Command Center first"
+3. If 401: "Invalid API key, copy from Settings page"
+4. If 200: Credentials valid, CloudNode continues setup
 
 ---
 
-## 📁 Key Files
+## Environment Variables
 
-### Backend
+### Backend (.env)
 
-| File | Purpose |
-|------|---------|
-| `backend/app/main.py` | FastAPI app, CORS middleware |
-| `backend/app/core/auth.py` | Clerk authentication, V2 permission decoder |
-| `backend/app/core/clerk.py` | Clerk client initialization |
-| `backend/app/core/config.py` | Configuration from environment |
-| `backend/app/api/nodes.py` | Node CRUD endpoints |
-| `backend/app/models/models.py` | SQLAlchemy models (CameraNode, Camera) |
-| `backend/app/schemas/schemas.py` | Pydantic schemas |
+```env
+# Clerk
+CLERK_SECRET_KEY=sk_test_xxx
+CLERK_PUBLISHABLE_KEY=pk_test_xxx
+CLERK_JWKS_URL=https://xxx.clerk.accounts.dev/.well-known/jwks.json
 
-### Frontend
+# Tigris/S3
+AWS_ACCESS_KEY_ID=xxx
+AWS_SECRET_ACCESS_KEY=xxx
+AWS_ENDPOINT_URL_S3=https://fly.storage.tigris.dev
+AWS_REGION=auto
+TIGRIS_BUCKET_NAME=opensentry-storage
 
-| File | Purpose |
-|------|---------|
-| `frontend/src/components/AddNodeModal.jsx` | Node creation modal (uses onClick, not form submit) |
-| `frontend/src/pages/SettingsPage.jsx` | Settings page with node management |
-| `frontend/src/services/api.js` | API client with auth token handling |
-| `frontend/src/index.css` | Modal and node list styles |
+# Database
+DATABASE_URL=sqlite:///./opensentry.db
+
+# Frontend CORS
+FRONTEND_URL=http://localhost:5173
+
+# Storage Settings
+UPLOAD_URL_EXPIRY_SECONDS=3600
+STREAM_URL_EXPIRY_SECONDS=300
+SEGMENT_RETENTION_COUNT=60
+CLEANUP_INTERVAL=20
+```
+
+### Frontend (.env)
+
+```env
+VITE_API_URL=http://localhost:8000
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxx
+```
 
 ---
 
-## 🔧 Development Notes
+## Deployment
 
-### React 19 Form Handling
-
-**Problem:** React 19's form handling can cause full page refreshes with traditional `onSubmit`.
-
-**Solution:** Use `onClick` handler instead of form submission:
-
-```jsx
-function AddNodeModal({ isOpen, onClose, onCreate }) {
-  const [loading, setLoading] = useState(false)
-  const inputRef = useRef(null)
-
-  async function handleCreateClick() {
-    const name = inputRef.current?.value
-    setLoading(true)
-    try {
-      const result = await onCreate(name.trim())
-      // Handle result
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <input ref={inputRef} type="text" />
-    <button onClick={handleCreateClick} disabled={loading}>
-      Create Node
-    </button>
-  )
-}
-```
-
-**Avoid:**
-- `<form onSubmit={...}>` patterns in React 19
-- Using `action` prop without proper React 19 server actions setup
-
-### Authentication Debugging
-
-Add logging to `backend/app/core/auth.py`:
-
-```python
-print(f"[Auth] JWT claims: {list(claims.keys())}")
-print(f"[Auth] V2 debug - fea: {claims.get('fea')}")
-print(f"[Auth] V2 debug - o claim: {claims.get('o')}")
-print(f"[Auth] Decoded permissions: {org_permissions}")
-```
-
-Expected output after successful auth:
-```
-[Auth] V2 debug - fea: o:admin,o:cameras
-[Auth] V2 debug - o claim: {'fpm': '1,6', 'per': 'admin,manage_cameras,view_cameras'}
-[Auth] Decoded permissions: ['org:admin:admin', 'org:cameras:manage_cameras', 'org:cameras:view_cameras']
-```
-
-### Common Issues
-
-#### 403 Forbidden on Node Creation
-
-**Cause:** Permissions not decoded from V2 JWT token.
-
-**Fix:**
-1. Verify JWT template claims is `{}`
-2. Sign out and back in
-3. Check backend logs for `permissions=None` vs actual array
-4. Verify V2 decoder is working
-
-#### Page Refresh on Form Submit
-
-**Cause:** React 19 form handling issue.
-
-**Fix:**
-1. Use `onClick` instead of `onSubmit`
-2. Or ensure `e.preventDefault()` is called synchronously
-3. Avoid `action` prop unless using React 19 server actions
-
-#### CORS Errors
-
-**Cause:** Using ngrok URL for frontend→backend communication.
-
-**Fix:**
-1. Set `VITE_API_URL=http://localhost:8000`
-2. Only use ngrok URL for external Rust nodes
-3. Verify CORS origins in `backend/app/main.py`
-
----
-
-##  Node Creation Flow
-
-### Steps
-
-1. User clicks "Add Node" in Settings page
-2. Modal opens with node name input
-3. User enters name and clicks "Create Node"
-4. Frontend calls `POST /api/nodes` with auth token
-5. Backend:
-   - Validates Clerk JWT token
-   - Decodes V2 permissions
-   - Checks `require_admin` permission
-   - Generates `node_id` and `api_key`
-   - Saves to database with hashed API key
-6. Response includes:
-   - `node_id` (e.g., `cf394d69`)
-   - `api_key` (e.g., `f3eda4fd-7810-4577-94a8-290fbb6d9523`)
-   - Warning: "Store this API key securely. It cannot be retrieved again."
-7. Modal shows credentials with copy buttons
-8. User copies credentials for Rust node configuration
-
-### API Endpoints
-
-```
-POST /api/nodes
-Headers: Authorization: Bearer <jwt_token>
-Body: { "name": "Home" }
-
-Response: {
-  "success": true,
-  "node_id": "cf394d69",
-  "name": "Home",
-  "api_key": "f3eda4fd-7810-4577-94a8-290fbb6d9523",
-  "warning": "Store this API key securely..."
-}
-```
-
-### Rust Node Usage
-
-The generated credentials are used with the Rust CloudNode:
+### Fly.io
 
 ```bash
-cargo run -- \
-  --node-id cf394d69 \
-  --api-key f3eda4fd-7810-4577-94a8-290fbb6d9523 \
-  --api-url https://ulises-nonruinable-shapelessly.ngrok-free.dev
+flyctl deploy
+```
+
+### Database Migrations
+
+```bash
+cd backend
+uv run alembic revision --autogenerate -m "description"
+uv run alembic upgrade head
 ```
 
 ---
 
-## 📝 Testing Checklist
+## Recent Cleanup
 
-### Authentication
-
-- [ ] Sign out and sign back in after JWT template changes
-- [ ] Check backend logs for decoded permissions
-- [ ] Verify `org:admin:admin` permission is present
-- [ ] Test with non-admin user (should get 403)
-
-### Node Creation
-
-- [ ] Modal opens without errors
-- [ ] Form submission doesn't refresh page
-- [ ] API call includes auth token
-- [ ] Node appears in database
-- [ ] Node appears in Settings page list
-- [ ] API key is shown only once
-- [ ] Copy buttons work
-
-### Node Registration (Rust)
-
-- [ ] Rust node can register with API key
-- [ ] Node status updates to "online"
-- [ ] Heartbeat endpoint works
-- [ ] Cameras are auto-created from registration
+Removed dead code:
+- `backend/app/services/codec_prober.py` - Codec detection moved to CloudNode
+- `storage.py`: `generate_segment_url()`, `verify_upload()`, `save_segment()` - Unused
+- `schemas.py`: `CameraCreate`, `CameraUpdate`, `CameraResponse`, `MediaResponse`, `AlertResponse`, etc.
+- `frontend/src/components/`: `StatusBadge.jsx`, `RecordingIndicator.jsx`, `DetectionBadge.jsx`
+- `frontend/src/hooks/`: `useVideoFeed.js`, `useCameraControls.js`
+- `frontend/src/pages/MediaPage.jsx`
+- Removed legacy Flask codebase (`opensentry_command/`)
 
 ---
 
-## 🔐 Security Best Practices
-
-1. **API Keys:** Hash with SHA256 before storing in database
-2. **JWT Tokens:** Validate with Clerk's JWKS endpoint
-3. **CORS:** Explicit origins only, never `*` with credentials
-4. **Permissions:** Always check on backend, never trust frontend
-5. **ngrok:** Use only for external node access, not frontend
-
----
-
-## 📚 References
-
-- Clerk V2 JWT Format: https://clerk.com/docs/guides/sessions/session-tokens
-- Clerk Organizations: https://clerk.com/docs/guides/organizations/overview
-- Clerk Permissions: https://clerk.com/docs/guides/organizations/control-access/roles-and-permissions
-- React 19 Forms: https://react.dev/reference/react-dom/components/form
-
----
-
-**Last Updated:** March 30, 2026  
-**Status:** ✅ Node creation flow fully functional with Clerk V2 authentication
+Last Updated: April 2026

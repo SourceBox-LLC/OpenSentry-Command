@@ -1,0 +1,36 @@
+# fly.toml app configuration file generated for OpenSentry Command
+#
+# See https://fly.io/docs/reference/configuration/ for information about settings
+
+app = "opensentry-command"
+primary_region = "sjc"
+
+[build]
+
+[env]
+  FRONTEND_URL = "https://opensentry-command.fly.dev"
+  DATABASE_URL = "sqlite:////data/opensentry.db"
+
+[[mounts]]
+  source = "opensentry_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "10s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

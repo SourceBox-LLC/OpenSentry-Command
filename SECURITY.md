@@ -1,128 +1,82 @@
 # Security Policy
 
-OpenSentry is a security-focused application and we take security vulnerabilities seriously. We appreciate your efforts to responsibly disclose your findings.
+OpenSentry is a security-focused application and we take vulnerabilities seriously.
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| latest  | :white_check_mark: |
-| < 1.0   | :x:                |
+| Version | Supported |
+|---------|-----------|
+| 2.0.x (FastAPI) | :white_check_mark: |
+| < 2.0 (Flask) | :x: |
 
-We recommend always running the latest version of OpenSentry.
+Always run the latest version.
 
 ## Security Features
 
-OpenSentry implements multiple layers of security:
-
 | Feature | Description |
 |---------|-------------|
-| **HTTPS** | Web dashboard encrypted with TLS (port 5000) |
-| **RTSPS** | Video streams encrypted with TLS (port 8322) |
-| **MQTT/TLS** | Control commands encrypted (port 8883) |
-| **Password Hashing** | Bcrypt with automatic salt |
-| **Session Security** | Secure cookies, configurable timeout |
-| **CSRF Protection** | Token-based protection on forms |
-| **Rate Limiting** | Brute force protection on login |
-| **Account Lockout** | Automatic lockout after failed attempts |
-| **Input Validation** | Whitelist-based command validation |
-| **Security Headers** | CSP, X-Frame-Options, X-Content-Type-Options |
+| **Clerk Authentication** | JWT-based authentication with organization-scoped permissions |
+| **API Key Hashing** | CloudNode API keys stored as SHA-256 hashes |
+| **Presigned URLs** | Time-limited S3 URLs for all video content (default 5 min) |
+| **Tenant Isolation** | All queries scoped by `org_id` -- no cross-org data access |
+| **Rate Limiting** | Stream URL generation capped at 10 req/min per IP |
+| **CORS** | Explicit origin allowlist (no wildcards with credentials) |
+| **Audit Logging** | Stream access tracked with user ID, IP, and user agent |
+| **Encrypted Storage** | CloudNode encrypts API key at rest with AES-256-GCM |
+| **Webhook Verification** | Clerk webhooks verified via Svix signature |
 
 ## Reporting a Vulnerability
 
-### DO NOT
+### Do NOT
 
 - Open a public GitHub issue for security vulnerabilities
-- Disclose the vulnerability publicly before it's fixed
-- Access or modify other users' data without permission
+- Disclose the vulnerability publicly before it is fixed
 
-### DO
+### Do
 
-1. **Report via our website**: https://www.sourceboxai.com/security
+1. **Report via**: https://www.sourceboxai.com/security
 
-2. **Include in your report:**
+2. **Include:**
    - Description of the vulnerability
    - Steps to reproduce
    - Potential impact
    - Suggested fix (if any)
-   - Your contact information
 
-3. **Allow time for response:**
-   - We will acknowledge receipt within 48 hours
-   - We will provide a detailed response within 7 days
-   - We will keep you informed of our progress
-
-### What to Expect
-
-1. **Acknowledgment** - We'll confirm we received your report
-2. **Assessment** - We'll investigate and assess the severity
-3. **Fix Development** - We'll develop and test a fix
-4. **Release** - We'll release the fix and credit you (if desired)
-5. **Disclosure** - We'll coordinate public disclosure timing with you
+3. **Response timeline:**
+   - Acknowledgment within 48 hours
+   - Assessment within 7 days
+   - Fix coordinated with reporter
 
 ## Scope
 
 ### In Scope
 
-- OpenSentry Command Center (web application, API)
-- Camera Node communication protocols
+- Command Center API and web application
+- CloudNode-to-backend communication
 - Authentication and authorization
-- Data storage and encryption
-- Docker container security
+- Data storage and tenant isolation
+- Presigned URL generation and expiry
 
 ### Out of Scope
 
 - Denial of Service attacks
 - Social engineering
-- Physical security
-- Third-party dependencies (report to upstream)
-- Issues requiring physical access to the device
+- Physical access to devices
+- Third-party dependencies (report upstream)
 
-## Security Best Practices for Users
+## Best Practices for Deployment
 
-### Deployment
-
-1. **Use strong passwords** - Minimum 12 characters with mixed case, numbers, symbols
-2. **Keep software updated** - Run `git pull && docker compose up --build -d` regularly
-3. **Use a firewall** - Only expose necessary ports
-4. **Use Tailscale** - For remote access instead of port forwarding
-5. **Change default credentials** - Never use default usernames/passwords in production
-
-### Network Security
-
-1. **Isolate IoT devices** - Use a separate VLAN for cameras if possible
-2. **Disable UPnP** - Prevent automatic port forwarding
-3. **Monitor access logs** - Check for unauthorized access attempts
-
-### Data Security
-
-1. **Backup your database** - Regular backups of `data/opensentry.db`
-2. **Rotate secrets** - Regenerate `OPENSENTRY_SECRET` periodically
-3. **Audit users** - Remove unused accounts
-
-## Known Security Considerations
-
-### Self-Signed Certificates
-
-OpenSentry generates self-signed SSL certificates by default. While encrypted, these are not verified by a trusted CA. For production deployments with external access, consider:
-
-- Using a reverse proxy (nginx, Caddy) with Let's Encrypt certificates
-- Adding the CA certificate to your trust store
-
-### Local Network Trust
-
-OpenSentry is designed for local network deployment. The threat model assumes:
-
-- Your local network is trusted
-- Cameras and Command Center are on the same network
-- Remote access is through VPN (Tailscale recommended)
-
-If deploying on an untrusted network, additional security measures are recommended.
+1. **Keep software updated** -- pull latest and rebuild regularly
+2. **Use strong Clerk passwords** -- enforce via Clerk dashboard settings
+3. **Rotate API keys** -- use the key rotation endpoint for CloudNodes periodically
+4. **Restrict CORS** -- set `FRONTEND_URL` to your actual domain
+5. **Monitor audit logs** -- review stream access logs for unauthorized access
+6. **Use HTTPS** -- deploy behind a reverse proxy with TLS (Fly.io handles this)
+7. **Backup your database** -- regular backups of the application database
 
 ## Security Updates
 
-Security updates are released as soon as possible after a vulnerability is confirmed. Monitor:
-
+Monitor:
 - [GitHub Releases](https://github.com/SourceBox-LLC/OpenSentry-Command/releases)
 - [GitHub Security Advisories](https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories)
 
@@ -131,7 +85,3 @@ Security updates are released as soon as possible after a vulnerability is confi
 - **Security issues**: https://www.sourceboxai.com/security
 - **General questions**: [GitHub Discussions](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions)
 - **Bug reports**: [GitHub Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues)
-
----
-
-Thank you for helping keep OpenSentry secure!

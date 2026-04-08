@@ -1,5 +1,4 @@
-import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import (
     Column,
     String,
@@ -7,9 +6,7 @@ from sqlalchemy import (
     DateTime,
     Integer,
     Boolean,
-    Float,
     ForeignKey,
-    LargeBinary,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -28,17 +25,26 @@ class Camera(Base):
     group_id = Column(Integer, ForeignKey("camera_groups.id"), nullable=True)
     last_seen = Column(DateTime)
     status = Column(String(20), default="offline")
-    notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Codec detection fields
-    video_codec = Column(String(50), nullable=True)  # e.g., "avc1.42001E"
+    video_codec = Column(String(50), nullable=True)  # e.g., "avc1.42e01e"
     audio_codec = Column(String(50), nullable=True)  # e.g., "mp4a.40.2"
     codec_detected_at = Column(DateTime, nullable=True)
 
-    media = relationship("Media", back_populates="camera", cascade="all, delete-orphan")
     group = relationship("CameraGroup", back_populates="cameras")
     node = relationship("CameraNode", back_populates="cameras")
+
+    @property
+    def effective_status(self) -> str:
+        """Return the real-time status based on last_seen.
+        If no heartbeat in 90s (3 missed), the camera is offline."""
+        if not self.last_seen or self.status == "offline":
+            return "offline"
+        age = datetime.utcnow() - self.last_seen
+        if age > timedelta(seconds=90):
+            return "offline"
+        return self.status
 
     def to_dict(self):
         return {
@@ -47,7 +53,7 @@ class Camera(Base):
             "node_type": self.node_type,
             "capabilities": self.capabilities.split(",") if self.capabilities else [],
             "group": self.group.name if self.group else None,
-            "status": self.status,
+            "status": self.effective_status,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
         }
 
@@ -71,74 +77,6 @@ class CameraGroup(Base):
             "color": self.color,
             "icon": self.icon,
             "camera_count": len(self.cameras) if self.cameras else 0,
-        }
-
-
-class Media(Base):
-    __tablename__ = "media"
-
-    id = Column(Integer, primary_key=True)
-    camera_id = Column(Integer, ForeignKey("cameras.id"), nullable=True)
-    org_id = Column(String(100), nullable=False, index=True)
-    media_type = Column(String(20), nullable=False)
-    filename = Column(String(255), unique=True, nullable=False, index=True)
-    mimetype = Column(String(50), default="application/octet-stream")
-    data = Column(LargeBinary, nullable=False)
-    size = Column(Integer, default=0)
-    duration = Column(Float, nullable=True)
-    thumbnail = Column(LargeBinary, nullable=True)
-    tags = Column(String(500), default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    camera = relationship("Camera", back_populates="media")
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "camera_id": self.camera.camera_id if self.camera else None,
-            "type": self.media_type,
-            "filename": self.filename,
-            "size": self.size,
-            "duration": self.duration,
-            "tags": self.tags.split(",") if self.tags else [],
-            "created": self.created_at.timestamp(),
-            "url": f"/api/{'snapshots' if self.media_type == 'snapshot' else 'recordings'}/{self.id}",
-        }
-
-
-class Alert(Base):
-    __tablename__ = "alerts"
-
-    id = Column(Integer, primary_key=True)
-    org_id = Column(String(100), nullable=False, index=True)
-    camera_id = Column(String(100), nullable=False, index=True)
-    detection_type = Column(String(20), nullable=False)
-    confidence = Column(Float, nullable=True)
-    thumbnail_path = Column(String(500), nullable=True)
-    region_x = Column(Integer, nullable=True)
-    region_y = Column(Integer, nullable=True)
-    region_width = Column(Integer, nullable=True)
-    region_height = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    processed = Column(Boolean, default=False)
-
-    def to_dict(self):
-        region = None
-        if self.region_x is not None:
-            region = {
-                "x": self.region_x,
-                "y": self.region_y,
-                "width": self.region_width,
-                "height": self.region_height,
-            }
-        return {
-            "id": self.id,
-            "camera_id": self.camera_id,
-            "type": self.detection_type,
-            "confidence": self.confidence,
-            "region": region,
-            "timestamp": self.created_at.isoformat() if self.created_at else None,
-            "processed": self.processed,
         }
 
 
@@ -215,6 +153,17 @@ class CameraNode(Base):
         "Camera", back_populates="node", cascade="all, delete-orphan"
     )
 
+    @property
+    def effective_status(self) -> str:
+        """Return the real-time status based on last_seen.
+        If no heartbeat in 90s (3 missed), the node is offline."""
+        if not self.last_seen or self.status in ("offline", "pending"):
+            return self.status or "offline"
+        age = datetime.utcnow() - self.last_seen
+        if age > timedelta(seconds=90):
+            return "offline"
+        return self.status
+
     def to_dict(self):
         return {
             "node_id": self.node_id,
@@ -222,7 +171,7 @@ class CameraNode(Base):
             "hostname": self.hostname,
             "local_ip": self.local_ip,
             "http_port": self.http_port,
-            "status": self.status,
+            "status": self.effective_status,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "key_rotated_at": self.key_rotated_at.isoformat()
             if self.key_rotated_at

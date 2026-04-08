@@ -30,3 +30,10 @@ certs/
 
 # Docker data volume
 data/
+
+# Claude Code
+.claude/
+
+# Frontend build output (built during Docker build)
+frontend/dist/
+frontend/node_modules/

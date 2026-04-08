@@ -1,20 +1,19 @@
+import logging
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_view, require_admin, get_current_user
-from app.models.models import Camera, CameraGroup, Media, Setting, Alert
+from app.models.models import Camera, CameraGroup, Setting, AuditLog
 from app.schemas.schemas import (
     CameraGroupCreate,
-    CameraGroupResponse,
-    MediaResponse,
-    AlertResponse,
     RecordingSettings,
     NotificationSettings,
 )
 
 router = APIRouter(prefix="/api", tags=["api"])
+logger = logging.getLogger(__name__)
 
 
 # Camera CRUD
@@ -23,11 +22,25 @@ async def list_cameras(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """List all cameras for the user's organization."""
+    from app.models.models import CameraNode
+
     cameras = db.query(Camera).filter_by(org_id=user.org_id).all()
+
+    # Check for orphaned cameras in a single query instead of N+1
+    if cameras:
+        node_ids = {cam.node_id for cam in cameras if cam.node_id}
+        if node_ids:
+            existing_node_ids = {
+                n.id for n in db.query(CameraNode.id).filter(CameraNode.id.in_(node_ids)).all()
+            }
+            for cam in cameras:
+                if cam.node_id and cam.node_id not in existing_node_ids:
+                    logger.warning(
+                        "Orphan camera %s (node_id=%s not found)", cam.camera_id, cam.node_id
+                    )
+
     result = [c.to_dict() for c in cameras]
-    print(f"[cameras] Returning {len(result)} cameras for org {user.org_id}")
-    for cam in result:
-        print(f"[cameras]   - camera_id={cam.get('camera_id')}, name={cam.get('name')}")
+    logger.debug("Returning %d cameras for org %s", len(result), user.org_id)
     return result
 
 
@@ -42,6 +55,77 @@ async def get_camera(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     return camera.to_dict()
+
+
+@router.post("/cameras/{camera_id}/snapshot")
+async def take_snapshot(
+    camera_id: str,
+    user: AuthUser = Depends(require_view),
+    db: Session = Depends(get_db),
+):
+    """Tell the camera node to capture and store a snapshot locally."""
+    from app.models.models import CameraNode
+    from app.api.ws import manager
+
+    camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    if not camera.node_id:
+        raise HTTPException(status_code=400, detail="Camera has no assigned node")
+
+    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
+    if not node:
+        raise HTTPException(status_code=400, detail="Camera node not found")
+    if not manager.is_connected(node.node_id):
+        raise HTTPException(status_code=503, detail="Camera node is offline")
+
+    try:
+        result = await manager.send_command(
+            node.node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
+        )
+        return result
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Snapshot request timed out")
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/cameras/{camera_id}/recording")
+async def toggle_recording(
+    camera_id: str,
+    request: Request,
+    user: AuthUser = Depends(require_view),
+    db: Session = Depends(get_db),
+):
+    """Start or stop recording on the camera node."""
+    from app.models.models import CameraNode
+    from app.api.ws import manager
+
+    body = await request.json()
+    recording = body.get("recording", False)
+
+    camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    if not camera.node_id:
+        raise HTTPException(status_code=400, detail="Camera has no assigned node")
+
+    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
+    if not node:
+        raise HTTPException(status_code=400, detail="Camera node not found")
+    if not manager.is_connected(node.node_id):
+        raise HTTPException(status_code=503, detail="Camera node is offline")
+
+    command = "start_recording" if recording else "stop_recording"
+    try:
+        result = await manager.send_command(
+            node.node_id, command, {"camera_id": camera_id}, timeout=10.0,
+        )
+        return result
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Recording command timed out")
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 # Camera Groups
@@ -258,103 +342,6 @@ async def update_recording_settings(
     return {"success": True}
 
 
-# Alerts
-@router.get("/alerts")
-async def list_alerts(
-    user: AuthUser = Depends(require_view),
-    db: Session = Depends(get_db),
-    detection_type: str = None,
-    camera_id: str = None,
-    since_hours: int = 24,
-    limit: int = 100,
-):
-    """List alerts for the user's organization."""
-    query = db.query(Alert).filter_by(org_id=user.org_id)
-
-    if detection_type:
-        if detection_type not in ["motion", "face", "object"]:
-            raise HTTPException(status_code=400, detail="Invalid detection type")
-        query = query.filter_by(detection_type=detection_type)
-
-    if camera_id:
-        query = query.filter_by(camera_id=camera_id)
-
-    since_time = datetime.utcnow() - timedelta(hours=since_hours)
-    query = query.filter(Alert.created_at >= since_time)
-
-    alerts = query.order_by(Alert.created_at.desc()).limit(limit).all()
-    return [a.to_dict() for a in alerts]
-
-
-@router.get("/alerts/{alert_id}")
-async def get_alert(
-    alert_id: int, user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """Get a specific alert."""
-    alert = db.query(Alert).filter_by(id=alert_id, org_id=user.org_id).first()
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    return alert.to_dict()
-
-
-@router.delete("/alerts/{alert_id}")
-async def delete_alert(
-    alert_id: int,
-    user: AuthUser = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """Delete an alert."""
-    alert = db.query(Alert).filter_by(id=alert_id, org_id=user.org_id).first()
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-
-    db.delete(alert)
-    db.commit()
-    return {"success": True, "deleted": alert_id}
-
-
-# Media (snapshots/recordings metadata stored in database)
-@router.get("/media")
-async def list_media(
-    user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """List all media for the user's organization."""
-    media_list = (
-        db.query(Media)
-        .filter_by(org_id=user.org_id)
-        .order_by(Media.created_at.desc())
-        .all()
-    )
-    return [m.to_dict() for m in media_list]
-
-
-@router.get("/media/{media_id}")
-async def get_media(
-    media_id: int, user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """Get media metadata."""
-    media = db.query(Media).filter_by(id=media_id, org_id=user.org_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    return media.to_dict()
-
-
-@router.delete("/media/{media_id}")
-async def delete_media(
-    media_id: int,
-    user: AuthUser = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """Delete media."""
-    media = db.query(Media).filter_by(id=media_id, org_id=user.org_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-
-    db.delete(media)
-    db.commit()
-    return {"success": True, "deleted": media_id}
-
-
 # Audit Logs
 @router.get("/audit-logs")
 async def list_audit_logs(
@@ -421,20 +408,22 @@ async def report_camera_codec(
     if not video_codec:
         raise HTTPException(status_code=400, detail="video_codec is required")
 
-    # Update codec fields
+    # Update camera codec fields
     camera.video_codec = video_codec
     camera.audio_codec = audio_codec or "mp4a.40.2"  # Default to AAC-LC
     camera.codec_detected_at = datetime.utcnow()
+
+    # Also update node codec if this is the first camera to detect
+    if node and not node.video_codec:
+        node.video_codec = video_codec
+        node.audio_codec = camera.audio_codec
+        node.codec_detected_at = datetime.utcnow()
+        logger.info(
+            "Updated node %s codec: video=%s, audio=%s", node.node_id, video_codec, camera.audio_codec
+        )
+
     db.commit()
 
-    print(
-        f"[codec] Updated codec for camera {camera_id}: video={video_codec}, audio={camera.audio_codec}"
-    )
+    logger.info("Updated codec for camera %s: video=%s, audio=%s", camera_id, video_codec, camera.audio_codec)
 
     return {"success": True, "message": "Codec updated"}
-
-
-@router.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring."""
-    return {"status": "healthy", "service": "OpenSentry Command Center API"}

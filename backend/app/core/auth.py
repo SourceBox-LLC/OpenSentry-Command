@@ -34,10 +34,6 @@ class AuthUser:
     def can_view_cameras(self) -> bool:
         return self.has_permission("org:cameras:view_cameras") or self.is_admin
 
-    @property
-    def can_manage_cameras(self) -> bool:
-        return self.has_permission("org:cameras:manage_cameras") or self.is_admin
-
 
 def decode_v2_permissions(claims: dict) -> list:
     """
@@ -104,17 +100,11 @@ async def get_current_user(request: Request) -> AuthUser:
 
     httpx_request = convert_to_httpx_request(request)
 
-    print(f"[Auth] Incoming request origin: {request.headers.get('origin')}")
-    print(f"[Auth] Authorized parties: [{settings.FRONTEND_URL}]")
-    print(f"[Auth] Request headers: {list(request.headers.keys())}")
-
     try:
         request_state = clerk.authenticate_request(
             httpx_request,
             AuthenticateRequestOptions(authorized_parties=[settings.FRONTEND_URL]),
         )
-
-        print(f"[Auth] Clerk auth result: is_signed_in={request_state.is_signed_in}")
 
         if not request_state.is_signed_in:
             raise HTTPException(
@@ -122,17 +112,11 @@ async def get_current_user(request: Request) -> AuthUser:
             )
 
         claims = request_state.payload
-        print(f"[Auth] JWT claims: {list(claims.keys())}")
-        print(f"[Auth] V2 debug - fea: {claims.get('fea')}")
-        print(f"[Auth] V2 debug - o claim: {claims.get('o')}")
 
         # Decode permissions: try V1 format first, then V2 format
         org_permissions = claims.get("org_permissions") or claims.get("permissions")
         if not org_permissions:
             org_permissions = decode_v2_permissions(claims)
-            print(f"[Auth] V2 decoded permissions: {org_permissions}")
-        else:
-            print(f"[Auth] V1 permissions: {org_permissions}")
 
         user_id = claims.get("sub")
         org_id = claims.get("org_id")
@@ -160,7 +144,6 @@ async def get_current_user(request: Request) -> AuthUser:
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[Auth] Clerk authentication error: {type(e).__name__}: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Authentication failed: {str(e)}",
@@ -181,6 +164,3 @@ async def require_admin(user: AuthUser = Depends(get_current_user)) -> AuthUser:
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin permission required"
         )
     return user
-
-
-User = AuthUser

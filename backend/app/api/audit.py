@@ -1,20 +1,13 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.auth import get_current_user, User
+from app.core.auth import require_admin, AuthUser
 from app.models import StreamAccessLog
 
 router = APIRouter(prefix="/api", tags=["audit"])
-
-
-def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Require admin role for access."""
-    if not user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return user
 
 
 @router.get("/audit/stream-logs")
@@ -23,7 +16,7 @@ async def get_stream_logs(
     user_id: Optional[str] = None,
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
-    admin: User = Depends(require_admin),
+    admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -59,7 +52,7 @@ async def get_stream_logs(
 @router.get("/audit/stream-logs/stats")
 async def get_stream_stats(
     days: int = Query(default=7, le=30),
-    admin: User = Depends(require_admin),
+    admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """

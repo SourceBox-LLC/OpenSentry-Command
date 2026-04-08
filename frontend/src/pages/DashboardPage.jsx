@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getCameras, sendCameraCommand, forgetCamera, startRecording, stopRecording, getRecordingStatus } from "../services/api"
+import { getCameras } from "../services/api"
 import CameraCard from "../components/CameraCard.jsx"
 
 function DashboardPage() {
@@ -9,34 +9,34 @@ function DashboardPage() {
   const [cameras, setCameras] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [recordingStatus, setRecordingStatus] = useState({})
+  const prevCamerasRef = useRef(null)
 
   const loadCameras = useCallback(async () => {
     if (!organization) return
     
     try {
-      setLoading(true)
       setError(null)
       const token = await getToken()
       const data = await getCameras(() => Promise.resolve(token))
-      console.log("[Dashboard] Received cameras data:", data)
-      console.log("[Dashboard] Data type:", typeof data, "isArray:", Array.isArray(data))
-      if (Array.isArray(data)) {
-        console.log("[Dashboard] First camera (if any):", data[0])
-      }
+      
       const camerasMap = Array.isArray(data)
         ? data.reduce((acc, camera) => {
-            console.log("[Dashboard] Processing camera:", camera)
             if (camera.camera_id) {
               acc[camera.camera_id] = camera
-            } else {
-              console.warn("[Dashboard] Camera missing camera_id:", camera)
             }
             return acc
           }, {})
         : data
-      console.log("[Dashboard] Final camerasMap keys:", Object.keys(camerasMap))
-      setCameras(camerasMap)
+      
+      // Only update state if data actually changed
+      const prevKeys = prevCamerasRef.current ? Object.keys(prevCamerasRef.current).join(',') : ''
+      const newKeys = Object.keys(camerasMap).join(',')
+      
+      if (prevKeys !== newKeys || 
+          JSON.stringify(prevCamerasRef.current) !== JSON.stringify(camerasMap)) {
+        prevCamerasRef.current = camerasMap
+        setCameras(camerasMap)
+      }
     } catch (err) {
       console.error("[Dashboard] Error loading cameras:", err)
       setError(err.message)
@@ -46,69 +46,13 @@ function DashboardPage() {
   }, [organization, getToken])
 
   useEffect(() => {
-    if (organization) {
-      loadCameras()
-      const interval = setInterval(loadCameras, 5000)
-      return () => clearInterval(interval)
-    }
+    if (!organization) return
+    
+    loadCameras()
+    const interval = setInterval(loadCameras, 5000)
+    return () => clearInterval(interval)
   }, [organization, loadCameras])
 
-  const handleCommand = async (cameraId, command) => {
-    const token = await getToken()
-    try {
-      await sendCameraCommand(() => Promise.resolve(token), cameraId, command)
-      setTimeout(loadCameras, 1000)
-    } catch (err) {
-      console.error("Command failed:", err)
-    }
-  }
-
-  const handleForget = async (cameraId) => {
-    if (window.confirm("Are you sure you want to forget this camera?")) {
-      const token = await getToken()
-      try {
-        await forgetCamera(() => Promise.resolve(token), cameraId)
-        loadCameras()
-      } catch (err) {
-        console.error("Forget failed:", err)
-      }
-    }
-  }
-
-  const handleStartRecording = async (cameraId) => {
-    const token = await getToken()
-    try {
-      await startRecording(() => Promise.resolve(token), cameraId)
-      const status = await getRecordingStatus(() => Promise.resolve(token), cameraId)
-      setRecordingStatus(prev => ({ ...prev, [cameraId]: status }))
-    } catch (err) {
-      console.error("Start recording failed:", err)
-    }
-  }
-
-  const handleStopRecording = async (cameraId) => {
-    const token = await getToken()
-    try {
-      await stopRecording(() => Promise.resolve(token), cameraId)
-      setRecordingStatus(prev => ({ ...prev, [cameraId]: { recording: false } }))
-    } catch (err) {
-      console.error("Stop recording failed:", err)
-    }
-  }
-
-  const handleSnapshot = async (cameraId) => {
-    const token = await getToken()
-    try {
-      await fetch(`/api/camera/${cameraId}/snapshot`, {
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      })
-    } catch (err) {
-      console.error("Snapshot failed:", err)
-    }
-  }
 
   const getStats = () => {
     const cameraList = Object.values(cameras)
@@ -142,7 +86,7 @@ function DashboardPage() {
           <div className="stat-value green">{stats.active}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Total Nodes</div>
+          <div className="stat-label">Total Cameras</div>
           <div className="stat-value blue">{stats.total}</div>
         </div>
         <div className="stat-card">
@@ -194,12 +138,6 @@ function DashboardPage() {
               key={cameraId}
               cameraId={cameraId}
               camera={camera}
-              onCommand={handleCommand}
-              onForget={() => handleForget(cameraId)}
-              onSnapshot={() => handleSnapshot(cameraId)}
-              onStartRecording={() => handleStartRecording(cameraId)}
-              onStopRecording={() => handleStopRecording(cameraId)}
-              recordingStatus={recordingStatus[cameraId] || { recording: false }}
             />
           ))}
         </div>

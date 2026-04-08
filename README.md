@@ -1,26 +1,47 @@
-# 🛡️ OpenSentry Command Center
+# OpenSentry Command Center
 
-**View and control all your security cameras from one dashboard with real-time detection alerts.**
+**Cloud-hosted security camera management with real-time HLS streaming.**
 
-**Built with FastAPI + React + Clerk Authentication**
-
-**🔒 Fully Encrypted:** HTTPS web UI, RTSPS video streams, MQTT over TLS  
-**🎯 Smart Detection:** Motion, face, and object detection with real-time alerts  
-**👥 Organization-Based:** Multi-tenant with role-based access control via Clerk
+Built with **FastAPI + React + Clerk Authentication + Tigris Storage**
 
 ---
 
-## 🚀 Quick Start (Development Mode)
+## Architecture
 
-The fastest way to get started is using **Development Mode**, which requires no authentication setup.
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│  CloudNode      │────▶│  Tigris/S3      │◀────│  Command Center │
+│  (Rust)         │     │  (Video Storage) │     │  (FastAPI)       │
+│  USB Camera     │     │                  │     │  + React         │
+│  Codec Detect   │     │  - HLS Segments  │     │  + Clerk Auth    │
+│  Segment Upload │     │  - M3U8 Playlist │     │                  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+        │                                                │
+        │ POST /upload-url                              │ GET /stream.m3u8
+        │ POST /upload-complete                         │ GET /segment/{id}
+        │ POST /playlist                                │
+        │ POST /register (codec info)                   │
+        └────────────────────────────────────────────────┘
+```
+
+**Key Components:**
+- **CloudNode** (Rust) - Captures USB camera, detects codec, uploads HLS segments to Tigris
+- **Command Center** (FastAPI) - Serves HLS manifests with codec info, handles authentication
+- **Tigris/S3** - Object storage for video segments and playlists
+- **Clerk** - Multi-tenant authentication with organization-based access
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-- **Node.js** >= 18
-- **Python** >= 3.10
-- **uv** (Python package manager)
+- Python 3.10+
+- Node.js 18+
+- uv (Python package manager)
+- Tigris/S3 bucket for video storage
 
-### 1. Backend Setup
+### Backend Setup
 
 ```bash
 cd backend
@@ -28,29 +49,29 @@ cd backend
 # Copy environment file
 cp .env.example .env
 
+# Edit .env with your settings
+# Required: CLERK_SECRET_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+# Required: AWS_ENDPOINT_URL_S3 (Tigris endpoint)
+# Required: TIGRIS_BUCKET_NAME
+
 # Install dependencies
 uv sync
 
-# Run development server (DEV_MODE=true by default)
-uv run python start.py
+# Run development server
+uv run fastapi dev app/main.py
 ```
 
-The API will be available at `http://localhost:8000`
-
-You'll see:
-```
-🚀 OpenSentry Command Center started (DEV MODE - No auth required)
-   DEV_USER_ID: dev-user-123
-   DEV_ORG_ID: dev-org-123
-```
-
-### 2. Frontend Setup
+### Frontend Setup
 
 ```bash
 cd frontend
 
-# Copy environment file (leave VITE_CLERK_PUBLISHABLE_KEY empty for dev mode)
+# Copy environment file
 cp .env.example .env
+
+# Edit .env
+# Set VITE_API_URL=http://localhost:8000
+# Set VITE_CLERK_PUBLISHABLE_KEY (from Clerk dashboard)
 
 # Install dependencies
 npm install
@@ -61,106 +82,24 @@ npm run dev
 
 The app will be available at `http://localhost:5173`
 
-**No Clerk account or API keys needed!** The app runs with a mock user and organization.
-
 ---
 
-## 🔐 Production Setup (Clerk Authentication)
+## Environment Variables
 
-For production with multi-tenant authentication, set up Clerk:
-
-### 1. Create a Clerk Account
-
-1. Go to [clerk.com](https://clerk.com) and create an account
-2. Create a new application
-3. Enable Organizations
-4. Copy your **Publishable Key** and **Secret Key**
-5. Set up a webhook endpoint for subscription events (optional for billing)
-
-### 2. Configure Backend
-
-```bash
-cd backend
-
-# Edit .env
-CLERK_SECRET_KEY=your_secret_key
-CLERK_PUBLISHABLE_KEY=your_publishable_key
-CLERK_JWKS_URL=https://your-instance.clerk.accounts.dev/.well-known/jwks.json
-CLERK_WEBHOOK_SECRET=your_webhook_secret
-DEV_MODE=false
-
-# Install with Clerk support
-uv sync --extra clerk
-
-# Run server
-uv run python start.py
-```
-
-### 3. Configure Frontend
-
-```bash
-cd frontend
-
-# Edit .env
-VITE_CLERK_PUBLISHABLE_KEY=your_publishable_key
-VITE_API_URL=http://localhost:8000
-
-npm run dev
-```
-
----
-
-## 🏗️ Architecture
-
-### System Architecture
-
-```
-Browser (localhost:5173) → Backend (localhost:8000) ← ngrok ← Rust Camera Nodes (external)
-```
-
-**Key Points:**
-- Frontend talks directly to backend on same machine (no CORS issues)
-- ngrok is ONLY for external Rust camera nodes to reach the backend
-- `VITE_API_URL` should be `http://localhost:8000` (not ngrok URL)
-
-### Frontend
-- **React 19** - UI framework
-- **Vite** - Build tool
-- **React Router** - Client-side routing
-- **Clerk** - Authentication & organization management (optional)
-- **CSS** - Styling
-
-### Backend
-- **FastAPI** - Python web framework
-- **SQLAlchemy** - ORM
-- **SQLite** - Database (development)
-- **Clerk Backend API** - Auth verification (optional)
-- **Svix** - Webhook handling
-
-### CloudNode (Rust)
-- **OpenSentry CloudNode** - Local camera capture and streaming
-- Captures USB camera video
-- Streams to cloud Command Center via HTTPS
-- Auto-registers cameras on first connection
-
----
-
-## 🔑 Environment Variables
-
-### Backend (.env)
+### Backend (`.env`)
 
 ```env
-# Development Mode (set to "false" for production with Clerk)
-DEV_MODE=true
-DEV_USER_ID=dev-user-123
-DEV_USER_EMAIL=dev@example.com
-DEV_ORG_ID=dev-org-123
+# Clerk Authentication
+CLERK_SECRET_KEY=sk_test_xxx
+CLERK_PUBLISHABLE_KEY=pk_test_xxx
+CLERK_JWKS_URL=https://xxx.clerk.accounts.dev/.well-known/jwks.json
 
-# Clerk Authentication (leave empty for DEV_MODE=true)
-CLERK_SECRET_KEY=
-CLERK_PUBLISHABLE_KEY=
-CLERK_JWKS_URL=
-CLERK_WEBHOOK_SECRET=
+# Tigris/S3 Storage
+AWS_ACCESS_KEY_ID=xxx
+AWS_SECRET_ACCESS_KEY=xxx
+AWS_ENDPOINT_URL_S3=https://fly.storage.tigris.dev
+AWS_REGION=auto
+TIGRIS_BUCKET_NAME=opensentry-storage
 
 # Database
 DATABASE_URL=sqlite:///./opensentry.db
@@ -168,226 +107,230 @@ DATABASE_URL=sqlite:///./opensentry.db
 # Frontend URL (for CORS)
 FRONTEND_URL=http://localhost:5173
 
-# OpenSentry Security Secret (for camera node authentication)
-OPENSENTRY_SECRET=your_secret_key_here
+# Upload/Stream URL Expiry
+UPLOAD_URL_EXPIRY_SECONDS=3600
+STREAM_URL_EXPIRY_SECONDS=300
 
-# MQTT Configuration
-MQTT_BROKER=localhost
-MQTT_PORT=1883
-MQTT_USE_TLS=false
-MQTT_USERNAME=opensentry
-MQTT_PASSWORD=opensentry
-
-# RTSP Credentials
-RTSP_USERNAME=opensentry
-RTSP_PASSWORD=opensentry
-
-# Session timeout (minutes)
-SESSION_TIMEOUT=30
+# Segment Cleanup
+SEGMENT_RETENTION_COUNT=60
+CLEANUP_INTERVAL=20
 ```
 
-### Frontend (.env)
+### Frontend (`.env`)
 
 ```env
-# Leave empty for Development Mode
-# VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-
-# Backend API URL
 VITE_API_URL=http://localhost:8000
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxx
 ```
 
 ---
 
-## 📷 Adding Cameras
-
-### Cloud-Hosted Mode (Production)
-
-1. **Create a Camera Node:**
-   - Go to Settings → Camera Nodes
-   - Click "Add Node"
-   - Enter a name (e.g., "Home", "Office")
-   - Copy the Node ID and API key
-
-2. **Run the Rust CloudNode:**
-   ```bash
-   cargo run -- \
-     --node-id <your-node-id> \
-     --api-key <your-api-key> \
-     --api-url https://your-ngrok-url.ngrok-free.dev
-   ```
-
-3. **Cameras auto-register** when the CloudNode connects with USB cameras
-
-### Local Mode (Development)
-
-1. Cameras auto-discover within 30 seconds when OpenSentry Camera Nodes are on the same network via mDNS
-2. Control cameras from the dashboard (start, stop, record, snapshot)
-
----
-
-## 🎯 Features
-
-### Camera Management
-- **Live Streaming** - View all cameras in real-time
-- **Recording** - Start/stop video recordings
-- **Snapshots** - Capture still images
-- **Detection Events** - Motion, face, and object detection
-
-### Organization-Based Access
-- Multiple organizations (managed via Clerk)
-- Role-based permissions
-- Multi-tenant data isolation
-
-### Media Library
-- View saved snapshots and recordings
-- Download or delete media
-- Automatic H.264 transcoding for browser playback
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
-├── backend/                    # FastAPI backend
-│   ├── app/
-│   │   ├── api/               # API routes
-│   │   │   ├── cameras.py     # Camera endpoints
-│   │   │   ├── video.py      # Video streaming
-│   │   │   └── webhooks.py    # Clerk webhooks
-│   │   ├── core/             # Core modules
-│   │   │   ├── config.py     # Configuration
-│   │   │   ├── database.py   # Database setup
-│   │   │   ├── auth.py       # Authentication
-│   │   │   └── clerk.py      # Clerk client
-│   │   ├── models/           # SQLAlchemy models
-│   │   │   └── models.py
-│   │   ├── schemas/          # Pydantic schemas
-│   │   │   └── schemas.py
-│   │   ├── services/         # Business logic
-│   │   │   ├── camera.py     # Camera streaming
-│   │   │   ├── mqtt.py       # MQTT client
-│   │   │   └── discovery.py  # mDNS discovery
-│   │   └── main.py           # FastAPI app
-│   ├── .env.example
-│   └── pyproject.toml
-│
-├── frontend/                   # React frontend
-│   ├── src/
-│   │   ├── components/       # Reusable UI components
-│   │   │   ├── Layout.jsx
-│   │   │   └── CameraCard.jsx
-│   │   ├── hooks/            # Custom React hooks
-│   │   │   ├── useDevMode.jsx
-│   │   │   ├── useAuthCompat.jsx
-│   │   │   └── useOrganizationCompat.jsx
-│   │   ├── pages/            # Page components
-│   │   │   ├── HomePage.jsx
-│   │   │   ├── DashboardPage.jsx
-│   │   │   ├── SettingsPage.jsx
-│   │   │   └── MediaPage.jsx
-│   │   ├── services/         # API client
-│   │   │   └── api.js
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── index.css
-│   ├── .env.example
-│   ├── package.json
-│   └── vite.config.js
-│
-└── README.md
+backend/
+├── app/
+│   ├── api/
+│   │   ├── cameras.py      # Camera CRUD, settings, alerts
+│   │   ├── hls.py          # HLS playlist/segment serving
+│   │   ├── nodes.py        # CloudNode registration, heartbeat
+│   │   ├── streams.py      # Upload URL generation, cleanup
+│   │   ├── audit.py        # Stream access logs
+│   │   └── webhooks.py     # Clerk webhooks
+│   ├── core/
+│   │   ├── auth.py         # Clerk JWT verification, permissions
+│   │   ├── config.py       # Settings from environment
+│   │   ├── database.py     # SQLAlchemy setup
+│   │   └── clerk.py        # Clerk client
+│   ├── models/
+│   │   └── models.py       # SQLAlchemy models
+│   ├── schemas/
+│   │   └── schemas.py      # Pydantic request/response schemas
+│   ├── services/
+│   │   └── storage.py      # Tigris/S3 operations
+│   └── main.py             # FastAPI app entry
+├── .env.example
+└── pyproject.toml
+
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── HlsPlayer.jsx     # HLS.js video player
+│   │   ├── CameraCard.jsx    # Camera feed display
+│   │   ├── AddNodeModal.jsx  # Node creation
+│   │   └── ...
+│   ├── pages/
+│   │   ├── DashboardPage.jsx # Camera grid view
+│   │   ├── SettingsPage.jsx  # Node management
+│   │   ├── AdminPage.jsx     # Stream logs
+│   │   └── ...
+│   ├── services/
+│   │   └── api.js            # API client
+│   └── App.jsx               # Routes and auth
+├── .env.example
+└── package.json
 ```
 
 ---
 
-## 📡 API Endpoints
+## API Endpoints
 
-### Cameras
+### Authentication Required (Clerk JWT)
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/cameras` | List all cameras with status |
-| GET | `/api/camera/{id}/status` | Get specific camera status |
-| POST | `/api/camera/{id}/command` | Send command (start/stop/shutdown) |
-| DELETE | `/api/camera/{id}/forget` | Remove camera from system |
-| GET | `/api/camera/{id}/snapshot` | Take a snapshot |
-| POST | `/api/camera/{id}/recording/start` | Start recording |
-| POST | `/api/camera/{id}/recording/stop` | Stop recording |
-
-### Media
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/snapshots` | List all snapshots |
-| GET | `/api/snapshots/{id}` | Download snapshot |
-| DELETE | `/api/snapshots/{id}` | Delete snapshot |
-| GET | `/api/recordings` | List all recordings |
-| GET | `/api/recordings/{id}` | Stream/download recording |
-| DELETE | `/api/recordings/{id}` | Delete recording |
-
-### Settings
-| Method | Endpoint | Description |
-|--------|----------|-------------|
+| GET | `/api/cameras` | List cameras |
+| GET | `/api/cameras/{id}` | Get camera details |
+| GET | `/api/camera-groups` | List camera groups |
+| POST | `/api/camera-groups` | Create group |
+| DELETE | `/api/camera-groups/{id}` | Delete group |
+| PUT | `/api/cameras/{id}/group` | Assign camera to group |
 | GET | `/api/settings` | Get all settings |
-| GET | `/api/settings/recording` | Get recording settings |
 | POST | `/api/settings/recording` | Update recording settings |
-| GET | `/api/settings/notifications` | Get notification settings |
 | POST | `/api/settings/notifications` | Update notification settings |
-
-### Webhooks
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/webhooks/clerk` | Handle Clerk webhook events |
-
-### Camera Nodes
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/nodes` | List all nodes for organization |
-| POST | `/api/nodes` | Create a new camera node |
+| GET | `/api/nodes` | List nodes |
+| POST | `/api/nodes` | Create node |
 | GET | `/api/nodes/{id}` | Get node details |
-| DELETE | `/api/nodes/{id}` | Delete a node |
-| POST | `/api/nodes/{id}/generate-key` | Regenerate API key |
-| POST | `/api/nodes/register` | Register node (Rust CloudNode) |
-| POST | `/api/nodes/heartbeat` | Node heartbeat (Rust CloudNode) |
+| DELETE | `/api/nodes/{id}` | Delete node |
+| POST | `/api/nodes/{id}/rotate-key` | Regenerate API key |
+
+### Node Authentication (API Key)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/nodes/register` | Register CloudNode |
+| POST | `/api/nodes/heartbeat` | Node heartbeat |
+| POST | `/api/nodes/validate` | Validate credentials |
+| POST | `/api/cameras/{id}/upload-url` | Get presigned upload URL |
+| POST | `/api/cameras/{id}/upload-complete` | Confirm segment upload |
+| POST | `/api/cameras/{id}/playlist` | Update HLS playlist |
+| POST | `/api/cameras/{id}/codec` | Report detected codec |
+
+### HLS Streaming (Clerk JWT)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cameras/{id}/stream.m3u8` | Get HLS playlist |
+| GET | `/api/cameras/{id}/segment/{filename}` | Get HLS segment |
 
 ---
 
-## 🔒 Permissions
+## CloudNode Integration
 
-Clerk organizations support custom permissions (V2 format):
+The Rust CloudNode sends:
 
-| Permission Key | Description |
-|----------------|-------------|
-| `org:admin:admin` | Full admin access |
-| `org:cameras:manage_cameras` | Manage cameras and nodes |
-| `org:cameras:view_cameras` | View cameras and live feeds |
+1. **Registration** (`POST /api/nodes/register`)
+   - Node ID, API key, camera list
+   - Detected video/audio codecs
 
-**Important:** Permissions use the V2 format `org:{feature}:{permission}`. See AGENTS.md for complete Clerk setup instructions.
+2. **Heartbeat** (`POST /api/nodes/heartbeat`)
+   - Camera status updates
+
+3. **Segment Upload**
+   - Request presigned URL (`POST /api/cameras/{id}/upload-url`)
+   - Upload to Tigris
+   - Confirm upload (`POST /api/cameras/{id}/upload-complete`)
+   - Update playlist (`POST /api/cameras/{id}/playlist`)
 
 ---
 
-## 🎨 Development
+## Codec Detection
 
-### Backend
+CloudNode detects codecs during setup and stores them in the database:
+
+```rust
+// CloudNode setup
+let codec_info = detect_codec_from_camera(&camera_device)?;
+// Returns: { video_codec: "avc1.42e01e", audio_codec: "mp4a.40.2" }
+
+// Sent during registration
+POST /api/nodes/register
+{
+  "node_id": "...",
+  "cameras": [...],
+  "video_codec": "avc1.42e01e",
+  "audio_codec": "mp4a.40.2"
+}
+```
+
+Backend uses stored codecs in HLS manifest:
+```python
+# hls.py
+video_codec = node.video_codec or "avc1.42e01e"
+audio_codec = node.audio_codec or "mp4a.40.2"
+playlist_text = re.sub(
+    r"(#EXT-X-VERSION:\d+)",
+    rf"\1\n#EXT-X-CODECS:{video_codec},{audio_codec}",
+    playlist_text,
+)
+```
+
+---
+
+## Permissions
+
+Clerk V2 JWT format:
+
+```python
+# Required permissions:
+org:admin:admin           # Full admin access
+org:cameras:manage_cameras # Create/delete nodes
+org:cameras:view_cameras  # View camera feeds
+```
+
+---
+
+## Deployment
+
+### Fly.io
 
 ```bash
+# Install flyctl
+flyctl deploy
+```
+
+Environment variables set in `fly.toml` or via `flyctl secrets set`
+
+### Docker
+
+```bash
+docker build -t opensentry-command .
+docker run -p 8000:8000 --env-file .env opensentry-command
+```
+
+---
+
+## Development
+
+```bash
+# Backend - FastAPI with auto-reload
 cd backend
-uv run python start.py     # Development server
-uv run uvicorn app.main:app --reload  # Alternative
-```
+uv run fastapi dev app/main.py
 
-### Frontend
-
-```bash
+# Frontend - Vite with hot reload
 cd frontend
-npm run dev     # Development server
-npm run build   # Production build
-npm run lint    # Lint code
+npm run dev
+
+# Run tests (if present)
+cd backend
+uv run pytest
 ```
 
 ---
 
-## 📜 License
+## Cleaned Up
 
-MIT - Free for personal and commercial use.
+- Removed legacy Flask codebase (`opensentry_command/`)
+- Removed outdated Docker files
+- Removed unused Pygame/RTSP code
+- Consolidated to FastAPI + React architecture
 
 ---
 
-**Built with ❤️ using FastAPI, React, and Clerk**
+## License
+
+GNU General Public License v3.0 - See [LICENSE](LICENSE)
+
+---
+
+**Built with FastAPI, React, Clerk, and Tigris Object Storage**

@@ -1,8 +1,6 @@
 from .models import (
     Camera,
     CameraGroup,
-    Media,
-    Alert,
     Setting,
     AuditLog,
     CameraNode,
@@ -13,8 +11,6 @@ from .models import (
 __all__ = [
     "Camera",
     "CameraGroup",
-    "Media",
-    "Alert",
     "Setting",
     "AuditLog",
     "CameraNode",

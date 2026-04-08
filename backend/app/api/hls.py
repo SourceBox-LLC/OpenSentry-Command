@@ -1,17 +1,121 @@
+import asyncio
 import hashlib
-import os
 import re
-from urllib.parse import quote
+import time
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.auth import get_current_user
-from app.models import Camera, CameraNode
+from app.models import Camera, CameraNode, StreamAccessLog
 from app.services.storage import get_storage
 
 router = APIRouter(prefix="/api/cameras/{camera_id}", tags=["streaming"])
+logger = logging.getLogger(__name__)
+
+# Pre-compiled regex patterns — avoids recompilation on every request.
+_RE_SEGMENT = re.compile(r"^(segment_\d+\.ts)$", re.MULTILINE)
+_RE_CODECS = re.compile(r"^#EXT-X-CODECS:.*$", re.MULTILINE)
+_RE_VERSION = re.compile(r"(#EXT-X-VERSION:\d+)")
+
+# ── Rewritten playlist cache ──────────────────────────────────────────
+# Stores the fully-rewritten playlist (with presigned segment URLs and
+# codec headers) so that browser polls are served instantly — no Tigris
+# fetch and no presigned-URL crypto on every request.
+#
+# The cache is populated in update_hls_playlist() when the CloudNode
+# pushes a new playlist. Browser GET requests just serve the cached
+# string. If no cache exists yet (first request before any push), we
+# fall back to fetching from Tigris and rewriting on the fly.
+#
+# {camera_id: (rewritten_playlist_text, timestamp)}
+_playlist_cache: dict[str, tuple[str, float]] = {}
+# Presigned URLs are valid for 15 minutes (900s). Refresh the cached
+# playlist periodically even if the CloudNode hasn't pushed an update,
+# so that segment URLs never expire while still in the playlist.
+_PLAYLIST_CACHE_MAX_AGE = 300.0  # 5 minutes — well within 15-min URL expiry
+
+# Track playlist update count per camera to trigger periodic Tigris cleanup.
+# Old segments pile up on Tigris since batch uploads have no confirm step.
+_playlist_update_count: dict[str, int] = {}
+
+# ── Stream access logging (rate-limited) ─────────────────────────────
+# HLS.js polls the playlist every ~1s. Logging every request would flood
+# the DB.  Instead, we log at most once per user+camera per 5 minutes,
+# which captures distinct "viewing sessions" without noise.
+#
+# {(user_id, camera_id): monotonic_timestamp_of_last_log}
+_ACCESS_LOG_INTERVAL = 300.0  # 5 minutes
+_last_access_logged: dict[tuple[str, str], float] = {}
+
+
+def _maybe_log_access(
+    db: Session,
+    user_id: str,
+    org_id: str,
+    camera_id: str,
+    node_id: str,
+    ip_address: str,
+    user_agent: str,
+) -> None:
+    """Create a StreamAccessLog entry if enough time has passed."""
+    now = time.monotonic()
+    key = (user_id, camera_id)
+    last = _last_access_logged.get(key, 0.0)
+    if now - last < _ACCESS_LOG_INTERVAL:
+        return
+
+    _last_access_logged[key] = now
+
+    try:
+        from datetime import datetime
+        log_entry = StreamAccessLog(
+            user_id=user_id,
+            org_id=org_id,
+            camera_id=camera_id,
+            node_id=node_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            accessed_at=datetime.utcnow(),
+        )
+        db.add(log_entry)
+        db.commit()
+    except Exception as e:
+        logger.warning("Failed to log stream access: %s", e)
+        db.rollback()
+
+
+def _rewrite_playlist(
+    raw_playlist: str,
+    camera_id: str,
+    org_id: str,
+    video_codec: str = "avc1.42e01e",
+    audio_codec: str = "mp4a.40.2",
+) -> str:
+    """
+    Rewrite raw HLS playlist: replace segment filenames with presigned
+    Tigris GET URLs and inject codec headers. Pure function — no I/O
+    except presigned URL generation (local HMAC, no network call).
+    """
+    storage = get_storage()
+
+    def _make_presigned(match):
+        filename = match.group(1)
+        return storage.generate_segment_url(camera_id, org_id, filename)
+
+    playlist_text = _RE_SEGMENT.sub(_make_presigned, raw_playlist)
+
+    # Remove any existing CODECS line then inject after VERSION.
+    playlist_text = _RE_CODECS.sub("", playlist_text)
+    playlist_text = _RE_VERSION.sub(
+        rf"\1\n#EXT-X-CODECS:{video_codec},{audio_codec}",
+        playlist_text,
+    )
+
+    return playlist_text
 
 
 @router.get("/stream.m3u8")
@@ -23,7 +127,9 @@ async def get_hls_playlist(
 ):
     """
     Get HLS playlist for a camera stream.
-    Returns the playlist from storage with authentication.
+    Returns the pre-rewritten playlist from cache. The cache is populated
+    when the CloudNode pushes a playlist update, so this endpoint does
+    zero Tigris I/O and zero presigned-URL generation in the hot path.
     """
     camera = db.query(Camera).filter_by(camera_id=camera_id).first()
     if not camera:
@@ -36,57 +142,58 @@ async def get_hls_playlist(
     if node.org_id != user.org_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
+    # Log stream access (rate-limited — at most once per user+camera per 5 min)
+    _maybe_log_access(
+        db=db,
+        user_id=user.user_id,
+        org_id=user.org_id,
+        camera_id=camera_id,
+        node_id=str(node.id),
+        ip_address=request.client.host if request.client else "unknown",
+        user_agent=request.headers.get("user-agent", "")[:500],
+    )
+
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Access-Control-Allow-Origin": "*",
+    }
+
     try:
+        # Fast path: serve from cache (populated by update_hls_playlist).
+        now = time.monotonic()
+        cached = _playlist_cache.get(camera_id)
+        if cached and (now - cached[1]) < _PLAYLIST_CACHE_MAX_AGE:
+            return Response(
+                content=cached[0],
+                media_type="application/vnd.apple.mpegurl",
+                headers=headers,
+            )
+
+        # Slow path: cache miss (first request or cache expired).
+        # Fetch from Tigris and rewrite. boto3 is blocking, so run
+        # in a thread to avoid freezing the async event loop.
         storage = get_storage()
-        playlist_data = storage.get_playlist(
+        playlist_data = await asyncio.to_thread(
+            storage.get_playlist,
             camera_id=camera_id,
             org_id=user.org_id,
         )
 
-        playlist_text = playlist_data.decode("utf-8")
+        raw_playlist = playlist_data.decode("utf-8")
+        video_codec = camera.video_codec or (node.video_codec if node else None) or "avc1.42e01e"
+        audio_codec = camera.audio_codec or (node.audio_codec if node else None) or "mp4a.40.2"
 
-        base_url = os.environ.get(
-            "FRONTEND_URL",
-            f"https://{request.headers.get('host', 'opensentry-command.fly.dev')}",
-        ).rstrip("/")
-
-        print(f"[HLS] Original playlist for camera {camera_id}:")
-        print(f"[HLS] {playlist_text[:500]}")
-
-        encoded_camera_id = quote(camera_id, safe="")
-
-        playlist_text = re.sub(
-            r"^(segment_\d+\.ts)$",
-            rf"{base_url}/api/cameras/{encoded_camera_id}/segment/\1",
-            playlist_text,
-            flags=re.MULTILINE,
+        playlist_text = _rewrite_playlist(
+            raw_playlist, camera_id, user.org_id, video_codec, audio_codec
         )
 
-        video_codec = node.video_codec or "avc1.42e01e"
-        audio_codec = node.audio_codec or "mp4a.40.2"
-
-        if node.video_codec:
-            print(f"[HLS] Using stored codec: {video_codec},{audio_codec}")
-        else:
-            print(f"[HLS] No codec stored, using defaults: {video_codec},{audio_codec}")
-
-        playlist_text = re.sub(
-            r"(#EXT-X-VERSION:\d+)",
-            rf"\1\n#EXT-X-CODECS:{video_codec},{audio_codec}",
-            playlist_text,
-        )
-        print(f"[HLS] Added codec to manifest: {video_codec},{audio_codec}")
-
-        print(f"[HLS] Rewritten playlist for camera {camera_id}:")
-        print(f"[HLS] {playlist_text[:500]}")
+        _playlist_cache[camera_id] = (playlist_text, now)
 
         return Response(
             content=playlist_text,
             media_type="application/vnd.apple.mpegurl",
-            headers={
-                "Cache-Control": "no-cache",
-                "Access-Control-Allow-Origin": "*",
-            },
+            headers=headers,
         )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Stream not started yet")
@@ -105,8 +212,9 @@ async def get_hls_segment(
     db: Session = Depends(get_db),
 ):
     """
-    Get HLS segment for a camera stream.
-    Returns the segment from storage with authentication.
+    Fallback segment endpoint — proxies a segment from Tigris.
+    Not used by the primary playlist flow (which issues presigned URLs),
+    but kept for direct segment access if needed.
     """
     camera = db.query(Camera).filter_by(camera_id=camera_id).first()
     if not camera:
@@ -124,7 +232,8 @@ async def get_hls_segment(
 
     try:
         storage = get_storage()
-        segment_data = storage.get_segment(
+        segment_data = await asyncio.to_thread(
+            storage.get_segment,
             camera_id=camera_id,
             org_id=user.org_id,
             filename=filename,
@@ -156,6 +265,11 @@ async def update_hls_playlist(
     Update the HLS playlist for a camera.
     Called by CloudNode when new segments are generated.
     Expects playlist content in request body (text/plain).
+
+    This is the HOT PATH for streaming efficiency: we pre-compute the
+    rewritten playlist (with presigned segment URLs) here so that
+    browser GET requests serve the cached result instantly — zero
+    Tigris I/O and zero crypto per browser poll.
     """
     node_api_key = request.headers.get("X-Node-API-Key")
     if not node_api_key:
@@ -183,13 +297,49 @@ async def update_hls_playlist(
 
     try:
         storage = get_storage()
-        storage.save_playlist(
+        await asyncio.to_thread(
+            storage.save_playlist,
             camera_id=camera_id,
             org_id=node.org_id,
             content=playlist_content,
         )
+
+        # Pre-compute the rewritten playlist with presigned segment URLs
+        # and cache it. Browser polls will serve this instantly.
+        video_codec = camera.video_codec or (node.video_codec if node else None) or "avc1.42e01e"
+        audio_codec = camera.audio_codec or (node.audio_codec if node else None) or "mp4a.40.2"
+
+        rewritten = _rewrite_playlist(
+            playlist_content, camera_id, node.org_id, video_codec, audio_codec
+        )
+        _playlist_cache[camera_id] = (rewritten, time.monotonic())
+
+        # Periodically clean up old segments on Tigris. Batch uploads
+        # don't have a confirm step, so segments pile up indefinitely.
+        count = _playlist_update_count.get(camera_id, 0) + 1
+        _playlist_update_count[camera_id] = count
+        if count % settings.CLEANUP_INTERVAL == 0:
+            asyncio.ensure_future(
+                _cleanup_old_segments(node.org_id, camera_id)
+            )
+
         return {"success": True, "message": "Playlist updated"}
     except ValueError as e:
         raise HTTPException(status_code=500, detail=f"Storage not configured: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save playlist: {e}")
+
+
+async def _cleanup_old_segments(org_id: str, camera_id: str):
+    """Delete old segments from Tigris in the background."""
+    try:
+        storage = get_storage()
+        await asyncio.to_thread(
+            storage.cleanup_old_segments,
+            org_id=org_id,
+            camera_id=camera_id,
+            keep_count=settings.SEGMENT_RETENTION_COUNT,
+        )
+        logger.debug("Cleaned old segments for camera %s", camera_id)
+    except Exception as e:
+        logger.warning("Cleanup failed for camera %s: %s", camera_id, e)

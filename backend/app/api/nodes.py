@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -8,9 +9,45 @@ from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin
 from app.models.models import CameraNode, Camera
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
+from app.services.storage import get_storage
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
+
+
+@router.post("/validate")
+async def validate_node(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """
+    Validate a node_id + API key pair.
+    Called by the CloudNode setup wizard before saving configuration.
+    Returns the node name on success so the wizard can confirm the right node.
+    """
+    api_key = request.headers.get("X-API-Key")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    node_id = body.get("node_id")
+    if not node_id:
+        raise HTTPException(status_code=400, detail="node_id is required")
+
+    node = db.query(CameraNode).filter_by(node_id=node_id).first()
+    if not node:
+        raise HTTPException(status_code=404, detail=f"Node '{node_id}' not found")
+
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    if node.api_key_hash != api_key_hash:
+        raise HTTPException(status_code=403, detail="Invalid API key for this node")
+
+    return {"success": True, "node_id": node.node_id, "name": node.name}
 
 
 @router.post("/register")
@@ -19,15 +56,15 @@ async def register_node(
     data: NodeRegister,
     db: Session = Depends(get_db),
 ):
-    print(f"[register] Registration attempt from node_id={data.node_id}")
+    logger.info("Registration attempt from node_id=%s", data.node_id)
     api_key = request.headers.get("X-API-Key") or request.headers.get(
         "Authorization", ""
     ).replace("Bearer ", "")
 
-    print(f"[register] API key present: {bool(api_key)}")
+    logger.debug("API key present: %s", bool(api_key))
 
     if not api_key:
-        print(f"[register] ERROR: No API key provided")
+        logger.warning("Registration rejected: no API key provided")
         raise HTTPException(status_code=401, detail="API key required")
 
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
@@ -35,11 +72,9 @@ async def register_node(
     existing_node = db.query(CameraNode).filter_by(node_id=data.node_id).first()
 
     if existing_node:
-        print(
-            f"[register] Found existing node with id={existing_node.id}, org_id={existing_node.org_id}"
-        )
+        logger.info("Found existing node id=%s, org=%s", existing_node.id, existing_node.org_id)
         if existing_node.api_key_hash != api_key_hash:
-            print(f"[register] ERROR: API key mismatch for existing node")
+            logger.warning("Registration rejected: API key mismatch for node %s", data.node_id)
             raise HTTPException(status_code=403, detail="Invalid API key for this node")
 
         existing_node.hostname = data.hostname or existing_node.hostname
@@ -59,21 +94,23 @@ async def register_node(
         for cam_data in data.cameras or []:
             # Generate camera_id from node_id and device_path
             device_path = cam_data.device_path or cam_data.camera_id or "unknown"
-            # Sanitize device_path for use as camera_id
+            # Sanitize device_path for use as camera_id.
+            # Replace path separators AND spaces so IDs are URL-safe.
             sanitized_device = (
-                device_path.replace("/", "_").replace("\\", "_").strip("_")
+                device_path.replace("/", "_")
+                .replace("\\", "_")
+                .replace(" ", "_")
+                .strip("_")
             )
             camera_id = f"{data.node_id}_{sanitized_device}"
 
-            print(
-                f"[register] Processing camera: device_path={device_path} -> camera_id={camera_id}"
-            )
+            logger.debug("Processing camera: device_path=%s -> camera_id=%s", device_path, camera_id)
 
             camera_mapping[device_path] = camera_id
 
             existing_cam = db.query(Camera).filter_by(camera_id=camera_id).first()
             if existing_cam:
-                print(f"[register] Updating existing camera {camera_id}")
+                logger.debug("Updating existing camera %s", camera_id)
                 existing_cam.name = cam_data.name or existing_cam.name
                 existing_cam.last_seen = datetime.utcnow()
                 existing_cam.status = "online"
@@ -81,7 +118,7 @@ async def register_node(
                     existing_cam.video_codec = data.video_codec
                     existing_cam.audio_codec = data.audio_codec
             else:
-                print(f"[register] Creating new camera {camera_id}")
+                logger.debug("Creating new camera %s", camera_id)
                 new_cam = Camera(
                     camera_id=camera_id,
                     org_id=existing_node.org_id,
@@ -99,8 +136,25 @@ async def register_node(
                 )
                 db.add(new_cam)
 
+        # Remove stale camera records that are no longer reported by this node.
+        # This handles cases where old camera_ids (e.g. with spaces) linger after
+        # a sanitization fix or a device is removed.
+        current_camera_ids = set(camera_mapping.values())
+        all_node_cameras = db.query(Camera).filter_by(node_id=existing_node.id).all()
+        for stale_cam in all_node_cameras:
+            if stale_cam.camera_id not in current_camera_ids:
+                logger.info("Removing stale camera record: %s", stale_cam.camera_id)
+                try:
+                    storage = get_storage()
+                    storage.delete_camera_storage(
+                        existing_node.org_id, stale_cam.camera_id
+                    )
+                except Exception as e:
+                    logger.warning("Could not clean Tigris storage for %s: %s", stale_cam.camera_id, e)
+                db.delete(stale_cam)
+
         db.commit()
-        print(f"[register] Node re-registered successfully. Cameras: {camera_mapping}")
+        logger.info("Node %s re-registered successfully with %d cameras", data.node_id, len(camera_mapping))
 
         return {
             "success": True,
@@ -111,14 +165,11 @@ async def register_node(
             "cameras": camera_mapping,
         }
 
-    print(f"[register] ERROR: Node not found in database")
-    return {
-        "success": False,
-        "node_id": data.node_id,
-        "status": "pending",
-        "node_secret": "",
-        "message": "Node not found. Please register this node in the dashboard first.",
-    }
+    logger.warning("Registration failed: node_id=%s not found in database", data.node_id)
+    raise HTTPException(
+        status_code=404,
+        detail="Node not found. Create this node in the dashboard first.",
+    )
 
 
 @router.post("/heartbeat")
@@ -127,45 +178,41 @@ async def node_heartbeat(
     data: NodeHeartbeat,
     db: Session = Depends(get_db),
 ):
-    print(f"[heartbeat] Received heartbeat from node_id={data.node_id}")
+    logger.debug("Heartbeat received from node_id=%s", data.node_id)
     api_key = request.headers.get("X-API-Key") or request.headers.get(
         "Authorization", ""
     ).replace("Bearer ", "")
 
-    print(f"[heartbeat] API key header present: {bool(api_key)}")
-
     if not api_key:
-        print(f"[heartbeat] ERROR: No API key provided")
+        logger.warning("Heartbeat rejected: no API key provided for node %s", data.node_id)
         raise HTTPException(status_code=401, detail="API key required")
 
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-    print(f"[heartbeat] Looking up node with node_id={data.node_id}")
-
     node = db.query(CameraNode).filter_by(node_id=data.node_id).first()
 
     if not node:
-        print(f"[heartbeat] ERROR: Node not found in database")
-        print(
-            f"[heartbeat] Available nodes: {[(n.node_id, n.id) for n in db.query(CameraNode).all()]}"
-        )
         raise HTTPException(status_code=404, detail="Node not found")
 
     if node.api_key_hash != api_key_hash:
-        print(f"[heartbeat] ERROR: API key mismatch")
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     node.status = "online"
     node.last_seen = datetime.utcnow()
     node.local_ip = data.local_ip or node.local_ip
 
-    for cam_status in data.cameras or []:
-        cam = db.query(Camera).filter_by(camera_id=cam_status.camera_id).first()
-        if cam:
-            cam.status = cam_status.status
-            cam.last_seen = datetime.utcnow()
+    camera_updates = data.cameras or []
+    if camera_updates:
+        camera_ids = [cs.camera_id for cs in camera_updates]
+        cams = db.query(Camera).filter(Camera.camera_id.in_(camera_ids)).all()
+        cam_map = {c.camera_id: c for c in cams}
+        now = datetime.utcnow()
+        for cam_status in camera_updates:
+            cam = cam_map.get(cam_status.camera_id)
+            if cam:
+                cam.status = cam_status.status
+                cam.last_seen = now
 
     db.commit()
-    print(f"[heartbeat] Heartbeat successful for node {data.node_id}")
 
     return {"success": True, "timestamp": datetime.utcnow().isoformat()}
 
@@ -185,15 +232,9 @@ async def create_node(
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    print(
-        f"[nodes] create_node called: name={data.name}, org_id={user.org_id}, user_id={user.user_id}"
-    )
-
     node_id = str(uuid.uuid4())[:8]
     api_key = str(uuid.uuid4())
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-
-    print(f"[nodes] Generated node_id={node_id}")
 
     node = CameraNode(
         node_id=node_id,
@@ -205,18 +246,27 @@ async def create_node(
     db.add(node)
     db.commit()
 
-    print(f"[nodes] Node saved to database: node_id={node_id}, name={node.name}")
+    logger.info("Node created: node_id=%s, name=%s, org=%s", node_id, node.name, user.org_id)
 
-    response_data = {
+    return {
         "success": True,
         "node_id": node_id,
         "name": node.name,
         "api_key": api_key,
         "warning": "Store this API key securely. It cannot be retrieved again.",
     }
-    print(f"[nodes] Returning response: {response_data}")
 
-    return response_data
+
+@router.get("/ws-status")
+async def ws_status(
+    user: AuthUser = Depends(require_admin),
+):
+    """Check which nodes are connected via WebSocket."""
+    from app.api.ws import manager
+    return {
+        "connected_nodes": manager.connected_nodes,
+        "count": len(manager.connected_nodes),
+    }
 
 
 @router.get("/{node_id}")
@@ -241,10 +291,38 @@ async def delete_node(
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
 
+    # Tell the node to wipe all its local data before we delete server-side records.
+    node_wiped = False
+    try:
+        from app.api.ws import manager
+        result = await manager.send_command(node_id, "wipe_data", {}, timeout=10)
+        if result and result.get("status") == "success":
+            node_wiped = True
+            logger.info("Node %s acknowledged local data wipe", node_id)
+        else:
+            logger.warning("Node %s wipe_data returned: %s", node_id, result)
+    except Exception as e:
+        # Node may be offline — proceed with server-side cleanup anyway.
+        logger.warning("Could not send wipe_data to node %s (may be offline): %s", node_id, e)
+
+    # Clean up Tigris storage for every camera on this node before deleting DB records.
+    cameras_deleted = []
+    try:
+        storage = get_storage()
+        for camera in list(node.cameras):
+            count = storage.delete_camera_storage(user.org_id, camera.camera_id)
+            cameras_deleted.append(
+                {"camera_id": camera.camera_id, "objects_deleted": count}
+            )
+            logger.info("Deleted %d storage objects for camera %s", count, camera.camera_id)
+    except Exception as e:
+        # Don't block the delete if storage cleanup fails — log and continue.
+        logger.warning("Storage cleanup failed for node %s: %s", node_id, e)
+
     db.delete(node)
     db.commit()
 
-    return {"success": True, "deleted": node_id}
+    return {"success": True, "deleted": node_id, "storage_cleaned": cameras_deleted, "node_wiped": node_wiped}
 
 
 @router.post("/{node_id}/rotate-key")

@@ -38,10 +38,12 @@ body:
       label: Component
       description: Which part of OpenSentry would this affect?
       options:
-        - Command Center (Dashboard/Web UI)
-        - Command Center (API)
-        - Camera Nodes
-        - New Node Type
+        - Frontend (React Dashboard)
+        - Backend (FastAPI API)
+        - CloudNode (Rust)
+        - Authentication (Clerk)
+        - HLS Streaming
+        - Storage (Tigris/S3)
         - Docker/Deployment
         - Documentation
         - Other
