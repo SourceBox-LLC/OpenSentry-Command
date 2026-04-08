@@ -20,11 +20,6 @@ with engine.connect() as conn:
     if "user_email" not in columns:
         conn.execute(text("ALTER TABLE stream_access_logs ADD COLUMN user_email VARCHAR(255) DEFAULT ''"))
         conn.commit()
-    else:
-        # Clear old test data that has no email (one-time cleanup)
-        result = conn.execute(text("DELETE FROM stream_access_logs WHERE user_email = '' OR user_email IS NULL"))
-        if result.rowcount > 0:
-            conn.commit()
 
 limiter = Limiter(key_func=lambda: "default")
 
