@@ -13,7 +13,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-REPO="SourceBox-LLC/OpenSentry-CloudNode"
+REPO="SourceBox-LLC/opensentry-cloud-node"
 INSTALL_DIR="${OPENSENTRY_INSTALL_DIR:-$HOME/.opensentry}"
 
 # ── Banner ──────────────────────────────────────────────────────────

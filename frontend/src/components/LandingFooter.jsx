@@ -28,7 +28,7 @@ function LandingFooter() {
               <a href="https://github.com/SourceBox-LLC/OpenSentry-Command" target="_blank" rel="noopener noreferrer">
                 Command Center
               </a>
-              <a href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode" target="_blank" rel="noopener noreferrer">
+              <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node" target="_blank" rel="noopener noreferrer">
                 CloudNode
               </a>
               <a href="https://github.com/SourceBox-LLC" target="_blank" rel="noopener noreferrer">

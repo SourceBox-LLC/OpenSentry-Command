@@ -181,7 +181,7 @@ function LandingPage() {
                 </li>
               </ul>
               <a 
-                href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode" 
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="landing-arch-cta landing-arch-cta-primary"
@@ -426,7 +426,7 @@ function LandingPage() {
                 Get Command Center
               </Link>
               <a 
-                href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode" 
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="landing-btn landing-btn-outline landing-btn-lg"

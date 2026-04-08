@@ -361,7 +361,7 @@ function DocsPage() {
                 <p>Fork the repository on GitHub</p>
               </a>
               <a 
-                href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode" 
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="docs-resource-card"

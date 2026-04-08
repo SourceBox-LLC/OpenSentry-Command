@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$Repo = "SourceBox-LLC/OpenSentry-CloudNode"
+$Repo = "SourceBox-LLC/opensentry-cloud-node"
 $InstallDir = if ($env:OPENSENTRY_INSTALL_DIR) { $env:OPENSENTRY_INSTALL_DIR } else { "$env:LOCALAPPDATA\OpenSentry" }
 
 Write-Host ""

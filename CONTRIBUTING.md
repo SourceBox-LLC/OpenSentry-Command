@@ -13,7 +13,7 @@ OpenSentry has two main components:
 | Component | Language | Repository |
 |-----------|----------|------------|
 | **Command Center** | Python (FastAPI) + React | [OpenSentry-Command](https://github.com/SourceBox-LLC/OpenSentry-Command) |
-| **CloudNode** | Rust | [OpenSentry-CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) |
+| **CloudNode** | Rust | [OpenSentry-CloudNode](https://github.com/SourceBox-LLC/opensentry-cloud-node) |
 
 ## How to Contribute
 
@@ -44,12 +44,12 @@ npm run dev                   # http://localhost:5173
 ### CloudNode
 
 ```bash
-cd OpenSentry-CloudNode
+cd opensentry-cloud-node
 cargo build --release
 ./target/release/opensentry-cloudnode setup
 ```
 
-See the [CloudNode README](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) for full setup instructions.
+See the [CloudNode README](https://github.com/SourceBox-LLC/opensentry-cloud-node) for full setup instructions.
 
 ## Project Structure
 
