@@ -55,6 +55,7 @@ _last_access_logged: dict[tuple[str, str], float] = {}
 def _maybe_log_access(
     db: Session,
     user_id: str,
+    user_email: str,
     org_id: str,
     camera_id: str,
     node_id: str,
@@ -74,6 +75,7 @@ def _maybe_log_access(
         from datetime import datetime
         log_entry = StreamAccessLog(
             user_id=user_id,
+            user_email=user_email,
             org_id=org_id,
             camera_id=camera_id,
             node_id=node_id,
@@ -146,6 +148,7 @@ async def get_hls_playlist(
     _maybe_log_access(
         db=db,
         user_id=user.user_id,
+        user_email=user.email,
         org_id=user.org_id,
         camera_id=camera_id,
         node_id=str(node.id),

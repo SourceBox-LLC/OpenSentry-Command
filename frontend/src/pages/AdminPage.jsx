@@ -145,10 +145,10 @@ function AdminPage() {
           </div>
 
           <div className="filter-group">
-            <label>User ID</label>
+            <label>User Email</label>
             <input
               type="text"
-              placeholder="Filter by user ID"
+              placeholder="Filter by email"
               value={filters.user_id}
               onChange={(e) => handleFilterChange("user_id", e.target.value)}
             />
@@ -192,7 +192,7 @@ function AdminPage() {
                       {new Date(log.accessed_at).toLocaleString()}
                     </td>
                     <td>{log.camera_id}</td>
-                    <td className="user-id">{log.user_id.substring(0, 8)}...</td>
+                    <td className="user-id">{log.user_email || log.user_id.substring(0, 8) + "..."}</td>
                     <td className="ip-address">{log.ip_address || "Unknown"}</td>
                   </tr>
                 ))}
@@ -271,7 +271,7 @@ function AdminPage() {
               <ul className="stat-list">
                 {stats?.by_user?.slice(0, 5).map(item => (
                   <li key={item.user_id}>
-                    <span className="stat-name">{item.user_id.substring(0, 12)}...</span>
+                    <span className="stat-name">{item.user_email || item.user_id.substring(0, 12) + "..."}</span>
                     <span className="stat-count">{item.count}</span>
                   </li>
                 ))}

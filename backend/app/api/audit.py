@@ -80,9 +80,11 @@ async def get_stream_stats(
 
     by_user = (
         base_query.with_entities(
-            StreamAccessLog.user_id, func.count(StreamAccessLog.id).label("count")
+            StreamAccessLog.user_id,
+            StreamAccessLog.user_email,
+            func.count(StreamAccessLog.id).label("count"),
         )
-        .group_by(StreamAccessLog.user_id)
+        .group_by(StreamAccessLog.user_id, StreamAccessLog.user_email)
         .order_by(func.count(StreamAccessLog.id).desc())
         .limit(10)
         .all()
@@ -102,6 +104,6 @@ async def get_stream_stats(
         "days": days,
         "total_accesses": base_query.count(),
         "by_camera": [{"camera_id": c, "count": n} for c, n in by_camera],
-        "by_user": [{"user_id": u, "count": n} for u, n in by_user],
+        "by_user": [{"user_id": u, "user_email": e or "", "count": n} for u, e, n in by_user],
         "by_day": [{"date": str(d), "count": n} for d, n in by_day],
     }

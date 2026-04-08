@@ -188,6 +188,7 @@ class StreamAccessLog(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(String(100), nullable=False, index=True)
+    user_email = Column(String(255), default="")
     org_id = Column(String(100), nullable=False, index=True)
     camera_id = Column(String(100), nullable=False, index=True)
     node_id = Column(String(100), nullable=False)
@@ -199,6 +200,7 @@ class StreamAccessLog(Base):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "user_email": self.user_email or "",
             "org_id": self.org_id,
             "camera_id": self.camera_id,
             "node_id": self.node_id,
