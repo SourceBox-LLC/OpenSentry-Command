@@ -203,7 +203,10 @@ async def node_heartbeat(
     camera_updates = data.cameras or []
     if camera_updates:
         camera_ids = [cs.camera_id for cs in camera_updates]
-        cams = db.query(Camera).filter(Camera.camera_id.in_(camera_ids)).all()
+        cams = db.query(Camera).filter(
+            Camera.camera_id.in_(camera_ids),
+            Camera.node_id == node.id,
+        ).all()
         cam_map = {c.camera_id: c for c in cams}
         now = datetime.utcnow()
         for cam_status in camera_updates:
@@ -260,12 +263,16 @@ async def create_node(
 @router.get("/ws-status")
 async def ws_status(
     user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
 ):
-    """Check which nodes are connected via WebSocket."""
+    """Check which nodes are connected via WebSocket (filtered to this org)."""
     from app.api.ws import manager
+    org_nodes = db.query(CameraNode.node_id).filter_by(org_id=user.org_id).all()
+    org_node_ids = {n[0] for n in org_nodes}
+    connected = [nid for nid in manager.connected_nodes if nid in org_node_ids]
     return {
-        "connected_nodes": manager.connected_nodes,
-        "count": len(manager.connected_nodes),
+        "connected_nodes": connected,
+        "count": len(connected),
     }
 
 

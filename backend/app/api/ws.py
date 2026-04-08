@@ -199,7 +199,10 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
         if cameras:
             camera_ids = [c["camera_id"] for c in cameras if "camera_id" in c]
             if camera_ids:
-                cams = db.query(Camera).filter(Camera.camera_id.in_(camera_ids)).all()
+                cams = db.query(Camera).filter(
+                    Camera.camera_id.in_(camera_ids),
+                    Camera.node_id == node_db_id,
+                ).all()
                 cam_map = {c.camera_id: c for c in cams}
                 now = datetime.utcnow()
                 for cam_data in cameras:

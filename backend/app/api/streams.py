@@ -49,12 +49,9 @@ async def get_batch_upload_urls(
     if not node:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
+    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-
-    if camera.node_id != node.id:
-        raise HTTPException(status_code=403, detail="Camera does not belong to this node")
 
     try:
         body = await request.json()

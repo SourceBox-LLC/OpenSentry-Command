@@ -385,14 +385,9 @@ async def report_camera_codec(
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Verify camera belongs to this node
-    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
+    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-
-    if camera.node_id != node.id:
-        raise HTTPException(
-            status_code=403, detail="Camera does not belong to this node"
-        )
 
     # Parse codec info from request body
     import json

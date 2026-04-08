@@ -133,16 +133,13 @@ async def get_hls_playlist(
     when the CloudNode pushes a playlist update, so this endpoint does
     zero Tigris I/O and zero presigned-URL generation in the hot path.
     """
-    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
+    camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
+    node = db.query(CameraNode).filter_by(id=camera.node_id, org_id=user.org_id).first()
     if not node:
         raise HTTPException(status_code=404, detail="Camera node not found")
-
-    if node.org_id != user.org_id:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     # Log stream access (rate-limited — at most once per user+camera per 5 min)
     _maybe_log_access(
@@ -219,16 +216,13 @@ async def get_hls_segment(
     Not used by the primary playlist flow (which issues presigned URLs),
     but kept for direct segment access if needed.
     """
-    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
+    camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
-    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
+    node = db.query(CameraNode).filter_by(id=camera.node_id, org_id=user.org_id).first()
     if not node:
         raise HTTPException(status_code=404, detail="Camera node not found")
-
-    if node.org_id != user.org_id:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     if not filename.endswith(".ts") or not filename.startswith("segment_"):
         raise HTTPException(status_code=400, detail="Invalid segment filename")
@@ -284,14 +278,9 @@ async def update_hls_playlist(
     if not node:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
+    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-
-    if camera.node_id != node.id:
-        raise HTTPException(
-            status_code=403, detail="Camera does not belong to this node"
-        )
 
     try:
         playlist_content = (await request.body()).decode("utf-8")
