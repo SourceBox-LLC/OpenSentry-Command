@@ -279,10 +279,10 @@ async def get_notification_settings(
 @router.post("/settings/notifications")
 async def update_notification_settings(
     data: NotificationSettings,
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Update notification settings."""
+    """Update notification settings. Requires admin."""
     Setting.set(
         db, user.org_id, "motion_notifications", str(data.motion_notifications).lower()
     )
@@ -325,10 +325,10 @@ async def get_recording_settings(
 @router.post("/settings/recording")
 async def update_recording_settings(
     data: RecordingSettings,
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Update recording settings."""
+    """Update recording settings. Requires admin."""
     Setting.set(db, user.org_id, "motion_recording", str(data.motion_recording).lower())
     Setting.set(db, user.org_id, "face_recording", str(data.face_recording).lower())
     Setting.set(db, user.org_id, "object_recording", str(data.object_recording).lower())

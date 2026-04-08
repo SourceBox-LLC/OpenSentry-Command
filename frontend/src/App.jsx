@@ -54,7 +54,7 @@ function RequireOrg({ children }) {
 
 function RequireAdmin({ children }) {
   const { organization, membership, isLoaded } = useOrganization()
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, has } = useAuth()
 
   if (!isLoaded) {
     return (
@@ -72,11 +72,8 @@ function RequireAdmin({ children }) {
     return <Navigate to="/dashboard" replace />
   }
 
-  const isAdmin = membership?.role === "org:admin" || 
-    membership?.publicUserData?.permissions?.some?.(p => 
-      p === "org:admin:admin" || 
-      p === "org:cameras:manage_cameras"
-    )
+  const isAdmin = membership?.role === "org:admin" ||
+    has?.({ permission: "org:cameras:manage_cameras" })
 
   if (!isAdmin) {
     return <Navigate to="/dashboard" replace />
@@ -115,9 +112,9 @@ function App() {
           <Route
             path="/settings"
             element={
-              <RequireOrg>
+              <RequireAdmin>
                 <SettingsPage />
-              </RequireOrg>
+              </RequireAdmin>
             }
           />
           <Route

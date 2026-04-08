@@ -26,13 +26,10 @@ const AdminIcon = () => (
 
 function Layout() {
   const { organization, isLoaded: orgLoaded, membership } = useOrganization()
-  const { isSignedIn } = useAuth()
+  const { isSignedIn, has } = useAuth()
 
-  const isAdmin = membership?.role === "org:admin" || 
-    membership?.publicUserData?.permissions?.some?.(p => 
-      p === "org:admin:admin" || 
-      p === "org:cameras:manage_cameras"
-    )
+  const isAdmin = membership?.role === "org:admin" ||
+    has?.({ permission: "org:cameras:manage_cameras" })
 
   return (
     <div className="layout">
@@ -64,17 +61,19 @@ function Layout() {
                     labelIcon={<DashboardIcon />}
                     href="/dashboard"
                   />
-                  <UserButton.Link
-                    label="Settings"
-                    labelIcon={<SettingsIcon />}
-                    href="/settings"
-                  />
                   {isAdmin && (
-                    <UserButton.Link
-                      label="Admin"
-                      labelIcon={<AdminIcon />}
-                      href="/admin"
-                    />
+                    <>
+                      <UserButton.Link
+                        label="Settings"
+                        labelIcon={<SettingsIcon />}
+                        href="/settings"
+                      />
+                      <UserButton.Link
+                        label="Admin"
+                        labelIcon={<AdminIcon />}
+                        href="/admin"
+                      />
+                    </>
                   )}
                 </UserButton.MenuItems>
               </UserButton>
