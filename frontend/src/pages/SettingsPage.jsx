@@ -185,8 +185,8 @@ function SettingsPage() {
 
   const dangerActions = {
     "wipe-logs": {
-      title: "Wipe All Stream Logs",
-      description: "This will permanently delete all stream access logs and statistics for your organization. This cannot be undone.",
+      title: "Wipe All Logs",
+      description: "This will permanently delete all stream access logs, MCP activity logs, and statistics for your organization. This cannot be undone.",
       confirmPhrase: "wipe logs",
       handler: async () => {
         const token = await getToken()
@@ -550,8 +550,8 @@ function SettingsPage() {
         <div className="danger-actions">
           <div className="danger-item">
             <div className="danger-info">
-              <h3>Wipe All Stream Logs</h3>
-              <p>Delete all stream access logs and usage statistics.</p>
+              <h3>Wipe All Logs</h3>
+              <p>Delete all stream access logs, MCP activity logs, and usage statistics.</p>
             </div>
             <button
               className="btn btn-danger"
@@ -595,12 +595,18 @@ function SettingsPage() {
                             <li>{dangerResult.nodes_deleted} node(s) deleted ({dangerResult.nodes_wiped} notified)</li>
                             <li>{dangerResult.cameras_deleted} camera(s) removed</li>
                             <li>{dangerResult.storage_cleaned} storage object(s) cleaned</li>
-                            <li>{dangerResult.logs_deleted} log(s) deleted</li>
+                            <li>{dangerResult.logs_deleted} stream log(s) deleted</li>
+                            <li>{dangerResult.mcp_logs_deleted || 0} MCP log(s) deleted</li>
                             <li>{dangerResult.settings_deleted} setting(s) reset</li>
                           </ul>
                         )}
                         {dangerResult.deleted_logs !== undefined && (
-                          <p>{dangerResult.deleted_logs} log(s) deleted.</p>
+                          <ul className="danger-summary">
+                            <li>{dangerResult.deleted_logs} stream log(s) deleted</li>
+                            {dangerResult.deleted_mcp_logs > 0 && (
+                              <li>{dangerResult.deleted_mcp_logs} MCP activity log(s) deleted</li>
+                            )}
+                          </ul>
                         )}
                       </>
                     )}

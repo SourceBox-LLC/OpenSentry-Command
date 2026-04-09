@@ -440,9 +440,11 @@ async def wipe_stream_logs(
     from app.models import StreamAccessLog
 
     count = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
+    from app.models.models import McpActivityLog
+    mcp_count = db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
     db.commit()
-    logger.warning("Admin %s wiped %d stream access logs for org %s", user.user_id, count, user.org_id)
-    return {"success": True, "deleted_logs": count}
+    logger.warning("Admin %s wiped %d stream + %d MCP logs for org %s", user.user_id, count, mcp_count, user.org_id)
+    return {"success": True, "deleted_logs": count, "deleted_mcp_logs": mcp_count}
 
 
 @router.post("/settings/danger/full-reset")
@@ -499,10 +501,14 @@ async def full_reset(
     # 2. Wipe stream access logs
     results["logs_deleted"] = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
 
-    # 3. Wipe settings
+    # 3. Wipe MCP activity logs
+    from app.models.models import McpActivityLog
+    results["mcp_logs_deleted"] = db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
+
+    # 4. Wipe settings
     results["settings_deleted"] = db.query(Setting).filter_by(org_id=user.org_id).delete()
 
-    # 4. Wipe audit logs
+    # 5. Wipe audit logs
     db.query(AuditLog).filter_by(org_id=user.org_id).delete()
 
     db.commit()

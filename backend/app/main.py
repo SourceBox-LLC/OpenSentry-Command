@@ -1,4 +1,7 @@
+import asyncio
+import logging
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,10 +11,12 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
 from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install, mcp_keys, mcp_activity
 from app.mcp.server import mcp
+
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
@@ -74,10 +79,42 @@ app.include_router(mcp_activity.router)
 app.mount("/mcp", mcp_app)
 
 
+# Default retention: 90 days for all log types
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
+LOG_CLEANUP_INTERVAL_HOURS = 24  # Run once per day
+
+
+async def _log_cleanup_loop():
+    """Background task: delete logs older than retention period."""
+    from app.models.models import StreamAccessLog, McpActivityLog, AuditLog
+
+    while True:
+        await asyncio.sleep(LOG_CLEANUP_INTERVAL_HOURS * 3600)
+        try:
+            cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=LOG_RETENTION_DAYS)
+            db = SessionLocal()
+            try:
+                stream_count = db.query(StreamAccessLog).filter(StreamAccessLog.accessed_at < cutoff).delete()
+                mcp_count = db.query(McpActivityLog).filter(McpActivityLog.timestamp < cutoff).delete()
+                audit_count = db.query(AuditLog).filter(AuditLog.timestamp < cutoff).delete()
+                db.commit()
+                total = stream_count + mcp_count + audit_count
+                if total > 0:
+                    logger.info(
+                        "[Cleanup] Deleted %d old logs (stream=%d, mcp=%d, audit=%d, retention=%dd)",
+                        total, stream_count, mcp_count, audit_count, LOG_RETENTION_DAYS,
+                    )
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("[Cleanup] Log cleanup failed")
+
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize application."""
-    print("[App] OpenSentry Command Center started (Clerk Auth enabled)")
+    asyncio.create_task(_log_cleanup_loop())
+    print(f"[App] OpenSentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
 
 
 @app.on_event("shutdown")
