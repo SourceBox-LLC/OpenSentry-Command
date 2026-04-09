@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getStreamLogs, getStreamStats, getNodes, getPlanInfo } from "../services/api"
+import { getStreamLogs, getStreamStats, getNodes, getPlanInfo, getMcpLogs, getMcpLogStats } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 
@@ -26,6 +26,21 @@ function AdminPage() {
   const [total, setTotal] = useState(0)
   const [days, setDays] = useState(7)
 
+  // MCP activity state
+  const [mcpLogs, setMcpLogs] = useState([])
+  const [mcpStats, setMcpStats] = useState(null)
+  const [mcpLoading, setMcpLoading] = useState(true)
+  const [mcpStatsLoading, setMcpStatsLoading] = useState(true)
+  const [mcpFilters, setMcpFilters] = useState({
+    tool_name: "",
+    key_name: "",
+    status: "",
+    limit: 50,
+    offset: 0,
+  })
+  const [mcpTotal, setMcpTotal] = useState(0)
+  const [mcpDays, setMcpDays] = useState(7)
+
   useEffect(() => {
     if (organization) {
       loadPlanInfo()
@@ -38,6 +53,8 @@ function AdminPage() {
       loadNodes()
       loadLogs()
       loadStats()
+      loadMcpLogs()
+      loadMcpStats()
     }
   }, [planInfo])
 
@@ -130,6 +147,54 @@ function AdminPage() {
       loadStats()
     }
   }, [days])
+
+  // MCP activity loaders
+  const loadMcpLogs = async () => {
+    try {
+      setMcpLoading(true)
+      const token = await getToken()
+      const data = await getMcpLogs(() => Promise.resolve(token), mcpFilters)
+      setMcpLogs(data.logs || [])
+      setMcpTotal(data.total || 0)
+    } catch (err) {
+      console.error("Failed to load MCP logs:", err)
+    } finally {
+      setMcpLoading(false)
+    }
+  }
+
+  const loadMcpStats = async () => {
+    try {
+      setMcpStatsLoading(true)
+      const token = await getToken()
+      const data = await getMcpLogStats(() => Promise.resolve(token), mcpDays)
+      setMcpStats(data)
+    } catch (err) {
+      console.error("Failed to load MCP stats:", err)
+    } finally {
+      setMcpStatsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (organization && planInfo?.features?.includes("admin")) {
+      loadMcpLogs()
+    }
+  }, [mcpFilters])
+
+  useEffect(() => {
+    if (organization && planInfo?.features?.includes("admin")) {
+      loadMcpStats()
+    }
+  }, [mcpDays])
+
+  const handleMcpFilterChange = (key, value) => {
+    setMcpFilters(prev => ({ ...prev, [key]: value, offset: 0 }))
+  }
+
+  const handleMcpPageChange = (newOffset) => {
+    setMcpFilters(prev => ({ ...prev, offset: newOffset }))
+  }
 
   if (!organization) {
     return (
@@ -351,6 +416,211 @@ function AdminPage() {
                   </li>
                 ))}
                 {(!stats?.by_day || stats.by_day.length === 0) && (
+                  <li><span className="stat-name">No data</span></li>
+                )}
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* MCP Activity Logs */}
+      <div className="audit-section">
+        <h2>MCP Tool Activity</h2>
+        <p className="section-description">
+          AI tool call history — see what MCP clients have done with your cameras and data.
+        </p>
+
+        <div className="audit-filters">
+          <div className="filter-group">
+            <label>Tool</label>
+            <select
+              value={mcpFilters.tool_name}
+              onChange={(e) => handleMcpFilterChange("tool_name", e.target.value)}
+            >
+              <option value="">All Tools</option>
+              <option value="view_camera">view_camera</option>
+              <option value="watch_camera">watch_camera</option>
+              <option value="list_cameras">list_cameras</option>
+              <option value="get_camera">get_camera</option>
+              <option value="get_stream_url">get_stream_url</option>
+              <option value="list_nodes">list_nodes</option>
+              <option value="get_node">get_node</option>
+              <option value="list_camera_groups">list_camera_groups</option>
+              <option value="get_recording_settings">get_recording_settings</option>
+              <option value="get_stream_logs">get_stream_logs</option>
+              <option value="get_stream_stats">get_stream_stats</option>
+              <option value="get_system_status">get_system_status</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>API Key</label>
+            <input
+              type="text"
+              placeholder="Filter by key name"
+              value={mcpFilters.key_name}
+              onChange={(e) => handleMcpFilterChange("key_name", e.target.value)}
+            />
+          </div>
+
+          <div className="filter-group">
+            <label>Status</label>
+            <select
+              value={mcpFilters.status}
+              onChange={(e) => handleMcpFilterChange("status", e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="completed">Completed</option>
+              <option value="error">Error</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>Per Page</label>
+            <select
+              value={mcpFilters.limit}
+              onChange={(e) => handleMcpFilterChange("limit", parseInt(e.target.value))}
+            >
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
+
+        {mcpLoading ? (
+          <div className="loading-spinner"></div>
+        ) : mcpLogs.length === 0 ? (
+          <div className="audit-empty">
+            <div className="audit-empty-icon">🤖</div>
+            <p>No MCP activity logs yet.</p>
+          </div>
+        ) : (
+          <>
+            <table className="audit-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Tool</th>
+                  <th>API Key</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mcpLogs.map(log => (
+                  <tr key={log.id} className={log.status === "error" ? "row-error" : ""}>
+                    <td className="timestamp">
+                      {new Date(log.timestamp).toLocaleString()}
+                    </td>
+                    <td><code>{log.tool_name}</code></td>
+                    <td>{log.key_name}</td>
+                    <td>
+                      <span className={`status-badge status-${log.status}`}>
+                        {log.status}
+                      </span>
+                    </td>
+                    <td>{log.duration_ms != null ? `${log.duration_ms}ms` : "—"}</td>
+                    <td className="details-cell">
+                      {log.error || log.args_summary || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {Math.ceil(mcpTotal / mcpFilters.limit) > 1 && (
+              <div className="audit-pagination">
+                <button
+                  onClick={() => handleMcpPageChange(mcpFilters.offset - mcpFilters.limit)}
+                  disabled={mcpFilters.offset === 0}
+                >
+                  Previous
+                </button>
+                <span className="page-info">
+                  Page {Math.floor(mcpFilters.offset / mcpFilters.limit) + 1} of {Math.ceil(mcpTotal / mcpFilters.limit)}
+                </span>
+                <button
+                  onClick={() => handleMcpPageChange(mcpFilters.offset + mcpFilters.limit)}
+                  disabled={mcpFilters.offset + mcpFilters.limit >= mcpTotal}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* MCP Statistics */}
+      <div className="audit-section">
+        <div className="stats-header">
+          <h2>MCP Statistics</h2>
+          <select
+            value={mcpDays}
+            onChange={(e) => setMcpDays(parseInt(e.target.value))}
+          >
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="14">Last 14 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+        </div>
+
+        {mcpStatsLoading ? (
+          <div className="loading-spinner"></div>
+        ) : (
+          <div className="stats-grid">
+            <div className="stat-card">
+              <h3>Total MCP Calls</h3>
+              <div className="stat-value">{mcpStats?.total_calls || 0}</div>
+              {mcpStats?.total_errors > 0 && (
+                <div className="stat-sub error">{mcpStats.total_errors} errors</div>
+              )}
+            </div>
+
+            <div className="stat-card">
+              <h3>Top Tools</h3>
+              <ul className="stat-list">
+                {mcpStats?.by_tool?.slice(0, 5).map(item => (
+                  <li key={item.tool_name}>
+                    <span className="stat-name"><code>{item.tool_name}</code></span>
+                    <span className="stat-count">{item.count}</span>
+                  </li>
+                ))}
+                {(!mcpStats?.by_tool || mcpStats.by_tool.length === 0) && (
+                  <li><span className="stat-name">No data</span></li>
+                )}
+              </ul>
+            </div>
+
+            <div className="stat-card">
+              <h3>By API Key</h3>
+              <ul className="stat-list">
+                {mcpStats?.by_key?.slice(0, 5).map(item => (
+                  <li key={item.key_name}>
+                    <span className="stat-name">{item.key_name}</span>
+                    <span className="stat-count">{item.count}</span>
+                  </li>
+                ))}
+                {(!mcpStats?.by_key || mcpStats.by_key.length === 0) && (
+                  <li><span className="stat-name">No data</span></li>
+                )}
+              </ul>
+            </div>
+
+            <div className="stat-card">
+              <h3>MCP Daily Activity</h3>
+              <ul className="stat-list">
+                {mcpStats?.by_day?.slice(0, 7).map(item => (
+                  <li key={item.date}>
+                    <span className="stat-name">{item.date}</span>
+                    <span className="stat-count">{item.count}</span>
+                  </li>
+                ))}
+                {(!mcpStats?.by_day || mcpStats.by_day.length === 0) && (
                   <li><span className="stat-name">No data</span></li>
                 )}
               </ul>

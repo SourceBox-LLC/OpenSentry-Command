@@ -230,6 +230,33 @@ class McpApiKey(Base):
         }
 
 
+class McpActivityLog(Base):
+    __tablename__ = "mcp_activity_logs"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    tool_name = Column(String(100), nullable=False, index=True)
+    key_name = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False)
+    duration_ms = Column(Integer)
+    args_summary = Column(String(500))
+    error = Column(String(500))
+    timestamp = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "tool_name": self.tool_name,
+            "key_name": self.key_name,
+            "status": self.status,
+            "duration_ms": self.duration_ms,
+            "args_summary": self.args_summary,
+            "error": self.error,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
+
+
 class PendingUpload(Base):
     __tablename__ = "pending_uploads"
 

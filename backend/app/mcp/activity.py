@@ -1,8 +1,9 @@
 """
-MCP Activity Tracker — in-memory event log for real-time monitoring.
+MCP Activity Tracker — in-memory event log + DB persistence.
 
 Tracks every MCP tool invocation, maintains session info,
-and publishes events to SSE subscribers (the MCP dashboard).
+publishes events to SSE subscribers (the MCP dashboard),
+and persists completed events to the database for audit.
 """
 
 import asyncio
@@ -13,9 +14,36 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _persist_event(event: "McpEvent"):
+    """Write an MCP event to the database (runs in background thread)."""
+    try:
+        from app.core.database import SessionLocal
+        from app.models.models import McpActivityLog
+
+        db = SessionLocal()
+        try:
+            log = McpActivityLog(
+                org_id=event.org_id,
+                tool_name=event.tool_name,
+                key_name=event.key_name,
+                status=event.status,
+                duration_ms=int(event.duration_ms) if event.duration_ms else None,
+                args_summary=event.args_summary,
+                error=event.error,
+                timestamp=datetime.fromtimestamp(event.timestamp, tz=timezone.utc).replace(tzinfo=None),
+            )
+            db.add(log)
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("[Activity] Failed to persist MCP event to DB")
 
 
 @dataclass
@@ -69,6 +97,9 @@ class McpActivityTracker:
 
             # Track total calls
             self._total_calls[event.org_id] = self._total_calls.get(event.org_id, 0) + 1
+
+        # Persist to DB in background thread (non-blocking)
+        threading.Thread(target=_persist_event, args=(event,), daemon=True).start()
 
         # Notify SSE subscribers (non-blocking)
         self._notify(event)

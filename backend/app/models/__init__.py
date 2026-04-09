@@ -5,6 +5,7 @@ from .models import (
     AuditLog,
     CameraNode,
     StreamAccessLog,
+    McpActivityLog,
     PendingUpload,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "AuditLog",
     "CameraNode",
     "StreamAccessLog",
+    "McpActivityLog",
     "PendingUpload",
 ]

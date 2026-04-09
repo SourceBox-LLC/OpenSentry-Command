@@ -181,3 +181,15 @@ export async function getMcpSessions(getToken) {
 export async function getMcpStats(getToken) {
   return fetchWithAuth("/api/mcp/activity/stats", getToken)
 }
+
+// MCP Activity Logs (DB-backed, for admin dashboard)
+export async function getMcpLogs(getToken, params = {}) {
+  const queryString = new URLSearchParams(
+    Object.entries(params).filter(([_, v]) => v != null && v !== "")
+  ).toString()
+  return fetchWithAuth(`/api/mcp/activity/logs?${queryString}`, getToken)
+}
+
+export async function getMcpLogStats(getToken, days = 7) {
+  return fetchWithAuth(`/api/mcp/activity/logs/stats?days=${days}`, getToken)
+}
