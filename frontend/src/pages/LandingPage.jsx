@@ -143,8 +143,8 @@ function LandingPage() {
               <div className="landing-feature-icon">{"</>"}</div>
               <h3>MCP Integration</h3>
               <p>
-                Connect Claude Code or any AI tool directly to your cameras via the
-                Model Context Protocol. Control everything through natural language.
+                Give AI tools direct visual access to your cameras via the
+                Model Context Protocol. See what cameras see and control everything through natural language.
               </p>
               <span className="landing-feature-badge">PRO</span>
             </div>
@@ -448,9 +448,9 @@ function LandingPage() {
                 to their organization's cameras, nodes, and settings.
               </p>
               <div className="landing-mcp-examples">
-                <div className="landing-mcp-example">"List all my cameras"</div>
-                <div className="landing-mcp-example">"Get a stream URL for the garage"</div>
-                <div className="landing-mcp-example">"Enable 24/7 recording"</div>
+                <div className="landing-mcp-example">"Show me what the front door camera sees"</div>
+                <div className="landing-mcp-example">"Watch the garage cam for 30 seconds"</div>
+                <div className="landing-mcp-example">"Enable 24/7 recording on all nodes"</div>
               </div>
               <Link to="/sign-up" className="landing-btn landing-btn-primary">
                 Try It Free
@@ -477,7 +477,7 @@ function LandingPage() {
 }`}</pre>
               </div>
               <div className="landing-mcp-tools-count">
-                <span>13</span> tools available
+                <span>15</span> tools available
               </div>
             </div>
           </div>

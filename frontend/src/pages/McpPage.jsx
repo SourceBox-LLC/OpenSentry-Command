@@ -7,6 +7,8 @@ import UpgradeModal from "../components/UpgradeModal.jsx"
 const MCP_URL = `${window.location.origin}/mcp`
 
 const TOOLS = [
+  { name: "view_camera", desc: "See what a camera sees — returns a live JPEG snapshot", highlight: true },
+  { name: "watch_camera", desc: "Take multiple snapshots over time to observe activity", highlight: true },
   { name: "list_cameras", desc: "List all cameras with status and codec info" },
   { name: "get_camera", desc: "Get details for a specific camera" },
   { name: "get_stream_url", desc: "Get a temporary HLS stream URL" },
@@ -153,9 +155,9 @@ function McpPage() {
             </p>
 
             <div className="mcp-locked-examples">
+              <div className="mcp-example">"Show me what the front door camera sees"</div>
+              <div className="mcp-example">"Watch the garage cam for 30 seconds"</div>
               <div className="mcp-example">"List all my cameras and their status"</div>
-              <div className="mcp-example">"Get the stream URL for the garage cam"</div>
-              <div className="mcp-example">"Enable 24/7 recording on all nodes"</div>
             </div>
 
             <button className="mcp-upgrade-btn" onClick={() => setShowUpgrade(true)}>
@@ -168,9 +170,10 @@ function McpPage() {
             <h3><span>{TOOLS.length}</span> tools included with Pro</h3>
             <div className="mcp-tools-grid">
               {TOOLS.map((tool) => (
-                <div key={tool.name} className="mcp-tool-card mcp-tool-locked">
+                <div key={tool.name} className={`mcp-tool-card mcp-tool-locked${tool.highlight ? " mcp-tool-visual" : ""}`}>
                   <code>{tool.name}</code>
                   <span>{tool.desc}</span>
+                  {tool.highlight && <span className="mcp-tool-badge">VISUAL</span>}
                 </div>
               ))}
             </div>
@@ -337,9 +340,10 @@ function McpPage() {
         <h3>Available Tools ({TOOLS.length})</h3>
         <div className="mcp-tools-grid">
           {TOOLS.map((tool) => (
-            <div key={tool.name} className="mcp-tool-card">
+            <div key={tool.name} className={`mcp-tool-card${tool.highlight ? " mcp-tool-visual" : ""}`}>
               <code>{tool.name}</code>
               <span>{tool.desc}</span>
+              {tool.highlight && <span className="mcp-tool-badge">VISUAL</span>}
             </div>
           ))}
         </div>

@@ -297,6 +297,18 @@ function DocsPage() {
             <h3>Available Tools</h3>
             <div className="docs-mcp-tools">
               <div className="docs-endpoint">
+                <span className="docs-endpoint-method get">VISUAL</span>
+                <span className="docs-endpoint-path">view_camera</span>
+              </div>
+              <p>See what a camera sees right now. Returns a live JPEG snapshot image that the AI can analyze.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method get">VISUAL</span>
+                <span className="docs-endpoint-path">watch_camera</span>
+              </div>
+              <p>Take multiple snapshots over time (2-10 frames, 1-30s interval). Useful for observing activity or changes.</p>
+
+              <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">list_cameras</span>
               </div>

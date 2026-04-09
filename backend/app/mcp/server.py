@@ -6,6 +6,8 @@ Mounted inside the main FastAPI app at /mcp.
 Auth: Bearer token using org-scoped MCP API keys.
 """
 
+import asyncio
+import base64
 import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
@@ -14,6 +16,7 @@ from typing import Annotated
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.exceptions import ToolError
+from fastmcp.utilities.types import Image
 from pydantic import Field
 from sqlalchemy.orm import Session
 
@@ -38,7 +41,8 @@ mcp = FastMCP(
     "OpenSentry",
     instructions=(
         "You are connected to an OpenSentry Command Center organization. "
-        "You can list cameras, check node status, get stream URLs, manage "
+        "You can SEE what cameras see via view_camera (returns a live JPEG "
+        "snapshot), list cameras, check node status, get stream URLs, manage "
         "recording settings, and view audit logs. All operations are scoped "
         "to the authenticated organization."
     ),
@@ -164,6 +168,121 @@ def get_stream_url(
         }
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Visual Access Tools
+# ---------------------------------------------------------------------------
+
+@mcp.tool(
+    name="view_camera",
+    description=(
+        "See what a camera sees RIGHT NOW. Returns a live JPEG snapshot image "
+        "from the camera. The camera node must be online and actively streaming. "
+        "Use this to visually inspect a camera feed."
+    ),
+    annotations={"readOnlyHint": True},
+)
+async def view_camera(
+    camera_id: Annotated[str, "The camera_id to view (e.g. 'node1-video0')"],
+) -> Image:
+    org_id, db = _auth()
+    try:
+        cam = (
+            db.query(Camera)
+            .filter_by(org_id=org_id, camera_id=camera_id)
+            .first()
+        )
+        if not cam:
+            raise ToolError(f"Camera '{camera_id}' not found")
+
+        node = db.query(CameraNode).filter_by(id=cam.node_id).first()
+        if not node:
+            raise ToolError(f"Camera '{camera_id}' has no assigned node")
+
+        node_id = node.node_id
+    finally:
+        db.close()
+
+    # Send take_snapshot command to CloudNode via WebSocket
+    from app.api.ws import manager
+
+    if not manager.is_connected(node_id):
+        raise ToolError(f"Node '{node_id}' is offline — cannot capture snapshot")
+
+    try:
+        result = await manager.send_command(
+            node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
+        )
+    except TimeoutError:
+        raise ToolError("Snapshot timed out — camera node did not respond in time")
+    except ValueError as e:
+        raise ToolError(str(e))
+
+    image_b64 = result.get("image_b64")
+    if not image_b64:
+        raise ToolError("Camera node did not return image data — update CloudNode to latest version")
+
+    return Image(data=base64.b64decode(image_b64), format="jpeg")
+
+
+@mcp.tool(
+    name="watch_camera",
+    description=(
+        "Take multiple snapshots from a camera over a time period to observe "
+        "activity or changes. Returns a series of JPEG images. "
+        "Useful for monitoring movement or verifying camera coverage."
+    ),
+    annotations={"readOnlyHint": True},
+)
+async def watch_camera(
+    camera_id: Annotated[str, "The camera_id to watch"],
+    count: Annotated[int, Field(description="Number of snapshots to take", ge=2, le=10)] = 3,
+    interval_seconds: Annotated[int, Field(description="Seconds between snapshots", ge=1, le=30)] = 5,
+) -> list:
+    org_id, db = _auth()
+    try:
+        cam = (
+            db.query(Camera)
+            .filter_by(org_id=org_id, camera_id=camera_id)
+            .first()
+        )
+        if not cam:
+            raise ToolError(f"Camera '{camera_id}' not found")
+
+        node = db.query(CameraNode).filter_by(id=cam.node_id).first()
+        if not node:
+            raise ToolError(f"Camera '{camera_id}' has no assigned node")
+
+        node_id = node.node_id
+    finally:
+        db.close()
+
+    from app.api.ws import manager
+
+    if not manager.is_connected(node_id):
+        raise ToolError(f"Node '{node_id}' is offline — cannot capture snapshots")
+
+    results = []
+    for i in range(count):
+        if i > 0:
+            await asyncio.sleep(interval_seconds)
+        try:
+            result = await manager.send_command(
+                node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
+            )
+            image_b64 = result.get("image_b64")
+            if image_b64:
+                results.append(Image(data=base64.b64decode(image_b64), format="jpeg"))
+            else:
+                results.append(f"[Frame {i+1}] No image data returned")
+        except (TimeoutError, ValueError) as e:
+            results.append(f"[Frame {i+1}] Failed: {e}")
+
+    if not any(isinstance(r, Image) for r in results):
+        raise ToolError("Failed to capture any snapshots — check node status")
+
+    return results
 
 
 # ---------------------------------------------------------------------------
