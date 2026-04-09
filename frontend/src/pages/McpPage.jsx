@@ -136,33 +136,45 @@ function McpPage() {
     return (
       <div className="mcp-container">
         <h1 className="page-title">MCP Integration</h1>
-        <div className="mcp-hero">
-          <div className="mcp-hero-icon">{"</>"}</div>
-          <h2>AI-Powered Camera Control</h2>
-          <p className="mcp-hero-desc">
-            Connect Claude Code, Cursor, or any MCP-compatible AI tool directly
-            to your OpenSentry cameras. Manage your entire security system
-            through natural language.
-          </p>
-        </div>
-        <div className="upgrade-prompt">
-          <div className="locked-icon">🔒</div>
-          <h3>Pro or Business Plan Required</h3>
-          <p>MCP integration is available on Pro and Business plans.</p>
-          <button className="btn btn-primary" onClick={() => setShowUpgrade(true)}>
-            Upgrade Your Plan
-          </button>
-        </div>
 
-        <div className="mcp-tools-preview">
-          <h3>Available Tools</h3>
-          <div className="mcp-tools-grid">
-            {TOOLS.map((tool) => (
-              <div key={tool.name} className="mcp-tool-card mcp-tool-locked">
-                <code>{tool.name}</code>
-                <span>{tool.desc}</span>
-              </div>
-            ))}
+        <div className="mcp-locked-page">
+          {/* Ambient glow */}
+          <div className="mcp-glow mcp-glow-1" />
+          <div className="mcp-glow mcp-glow-2" />
+
+          <div className="mcp-locked-hero">
+            <div className="mcp-locked-badge">PRO</div>
+            <div className="mcp-locked-icon">{"</>"}</div>
+            <h2>AI-Powered Camera Control</h2>
+            <p>
+              Give Claude Code, Cursor, or any MCP-compatible AI tool direct
+              access to your cameras, nodes, and settings — all through
+              natural language.
+            </p>
+
+            <div className="mcp-locked-examples">
+              <div className="mcp-example">"List all my cameras and their status"</div>
+              <div className="mcp-example">"Get the stream URL for the garage cam"</div>
+              <div className="mcp-example">"Enable 24/7 recording on all nodes"</div>
+            </div>
+
+            <button className="mcp-upgrade-btn" onClick={() => setShowUpgrade(true)}>
+              Unlock MCP Integration
+            </button>
+            <span className="mcp-upgrade-hint">Available on Pro and Business plans</span>
+          </div>
+
+          <div className="mcp-locked-tools">
+            <h3>{TOOLS.length} tools included</h3>
+            <div className="mcp-tools-grid">
+              {TOOLS.map((tool) => (
+                <div key={tool.name} className="mcp-tool-card mcp-tool-locked">
+                  <code>{tool.name}</code>
+                  <span>{tool.desc}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mcp-tools-fade" />
           </div>
         </div>
 

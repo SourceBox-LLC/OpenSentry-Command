@@ -2512,19 +2512,173 @@ body {
 }
 
 .mcp-tool-locked {
-    opacity: 0.45;
+    opacity: 0.35;
     pointer-events: none;
 }
 
-.mcp-tools-preview {
-    max-width: 860px;
-    margin: 2rem auto 0;
+/* ── MCP Locked / Gate Page ───────────────────────────────────── */
+
+.mcp-locked-page {
+    position: relative;
+    overflow: hidden;
 }
 
-.mcp-tools-preview h3 {
-    font-size: 1.1rem;
+.mcp-glow {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    filter: blur(140px);
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.mcp-glow-1 {
+    top: -100px;
+    left: -150px;
+    background: var(--accent-green);
+}
+
+.mcp-glow-2 {
+    bottom: -100px;
+    right: -150px;
+    background: var(--accent-blue);
+}
+
+.mcp-locked-hero {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 3rem 1.5rem 2.5rem;
+    margin-bottom: 2rem;
+    background: linear-gradient(180deg, rgba(34, 197, 94, 0.04) 0%, transparent 100%);
+    border: 1px solid rgba(34, 197, 94, 0.12);
+    border-radius: 16px;
+}
+
+.mcp-locked-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-green);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 20px;
+    background: rgba(34, 197, 94, 0.08);
+    margin-bottom: 1.25rem;
+}
+
+.mcp-locked-icon {
+    font-size: 3rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, var(--accent-green), var(--accent-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.mcp-locked-hero h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+}
+
+.mcp-locked-hero > p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    max-width: 480px;
+    margin: 0 auto 2rem;
+    line-height: 1.6;
+}
+
+.mcp-locked-examples {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+.mcp-example {
+    display: inline-block;
+    padding: 0.45rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-style: italic;
+}
+
+.mcp-upgrade-btn {
+    display: inline-block;
+    padding: 0.75rem 2rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent-green), #16a34a);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.25);
+    margin-bottom: 0.75rem;
+}
+
+.mcp-upgrade-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.4);
+}
+
+.mcp-upgrade-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.mcp-locked-tools {
+    position: relative;
+    z-index: 1;
+}
+
+.mcp-locked-tools h3 {
+    font-size: 1rem;
     font-weight: 600;
     margin-bottom: 1rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: center;
+}
+
+.mcp-tools-fade {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 120px;
+    background: linear-gradient(to top, var(--bg-primary), transparent);
+    pointer-events: none;
+}
+
+@media (max-width: 600px) {
+    .mcp-locked-hero h2 {
+        font-size: 1.4rem;
+    }
+
+    .mcp-locked-examples {
+        align-items: stretch;
+    }
+
+    .mcp-example {
+        text-align: center;
+    }
 }
 
 @media (max-width: 600px) {
