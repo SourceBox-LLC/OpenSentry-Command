@@ -445,15 +445,15 @@ function LandingPage() {
               <p>
                 Pro and Business users can generate an MCP API key and connect any
                 compatible AI tool — Claude Code, Cursor, or custom agents — directly
-                to their organization's cameras, nodes, and settings.
+                to their organization's cameras, nodes, and system data.
               </p>
               <div className="landing-mcp-examples">
                 <div className="landing-mcp-example">"Show me what the front door camera sees"</div>
                 <div className="landing-mcp-example">"Watch the garage cam for 30 seconds"</div>
-                <div className="landing-mcp-example">"Enable 24/7 recording on all nodes"</div>
+                <div className="landing-mcp-example">"Are any cameras offline right now?"</div>
               </div>
-              <Link to="/sign-up" className="landing-btn landing-btn-primary">
-                Try It Free
+              <Link to="/pricing" className="landing-btn landing-btn-primary">
+                Try with Pro
               </Link>
             </div>
             <div className="landing-mcp-right">
@@ -477,7 +477,7 @@ function LandingPage() {
 }`}</pre>
               </div>
               <div className="landing-mcp-tools-count">
-                <span>15</span> tools available
+                <span>12</span> tools available
               </div>
             </div>
           </div>
