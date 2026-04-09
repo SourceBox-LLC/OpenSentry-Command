@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react"
+import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getCameras } from "../services/api"
+import { getCameras, getPlanInfo } from "../services/api"
 import CameraCard from "../components/CameraCard.jsx"
+import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function DashboardPage() {
   const { getToken } = useAuth()
@@ -9,6 +11,8 @@ function DashboardPage() {
   const [cameras, setCameras] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [planInfo, setPlanInfo] = useState(null)
+  const [showUpgrade, setShowUpgrade] = useState(false)
   const prevCamerasRef = useRef(null)
 
   const loadCameras = useCallback(async () => {
@@ -45,13 +49,30 @@ function DashboardPage() {
     }
   }, [organization, getToken])
 
+  const loadPlanInfo = useCallback(async () => {
+    if (!organization) return
+    try {
+      const token = await getToken()
+      const data = await getPlanInfo(() => Promise.resolve(token))
+      setPlanInfo(data)
+    } catch (err) {
+      console.error("[Dashboard] Error loading plan info:", err)
+    }
+  }, [organization, getToken])
+
   useEffect(() => {
     if (!organization) return
-    
+
     loadCameras()
+    loadPlanInfo()
     const interval = setInterval(loadCameras, 5000)
-    return () => clearInterval(interval)
-  }, [organization, loadCameras])
+    // Refresh plan info less frequently (every 60s)
+    const planInterval = setInterval(loadPlanInfo, 60000)
+    return () => {
+      clearInterval(interval)
+      clearInterval(planInterval)
+    }
+  }, [organization, loadCameras, loadPlanInfo])
 
 
   const getStats = () => {
@@ -101,6 +122,29 @@ function DashboardPage() {
         </div>
       </div>
 
+      {planInfo && planInfo.usage.cameras >= planInfo.limits.max_cameras && (
+        <div className="plan-limit-banner">
+          <span className="plan-limit-text">
+            You've reached your camera limit ({planInfo.limits.max_cameras} on the {planInfo.plan_name} plan).
+            New cameras won't be added until you upgrade.
+          </span>
+          <button className="btn btn-primary btn-small" onClick={() => setShowUpgrade(true)}>
+            Upgrade
+          </button>
+        </div>
+      )}
+
+      {planInfo && planInfo.usage.cameras >= Math.floor(planInfo.limits.max_cameras * 0.8) && planInfo.usage.cameras < planInfo.limits.max_cameras && (
+        <div className="plan-limit-banner plan-limit-warning">
+          <span className="plan-limit-text">
+            You're using {planInfo.usage.cameras} of {planInfo.limits.max_cameras} cameras on the {planInfo.plan_name} plan.
+          </span>
+          <button className="btn btn-secondary btn-small" onClick={() => setShowUpgrade(true)}>
+            View Plans
+          </button>
+        </div>
+      )}
+
       <div className="section-header">
         <h2 className="section-title">Camera Feeds</h2>
         <button onClick={loadCameras} className="btn btn-secondary">
@@ -142,6 +186,13 @@ function DashboardPage() {
           ))}
         </div>
       )}
+
+      <UpgradeModal
+        isOpen={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="cameras"
+        currentPlan={planInfo?.plan}
+      />
     </div>
   )
 }

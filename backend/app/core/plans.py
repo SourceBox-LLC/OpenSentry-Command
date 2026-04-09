@@ -28,6 +28,21 @@ def get_plan_limits(plan: str) -> dict:
     return PLAN_LIMITS.get(plan, PLAN_LIMITS["free_org"])
 
 
+def get_plan_limits_for_org(db, org_id: str) -> dict:
+    """Look up an org's plan from the database and return its limits.
+
+    Used by endpoints that authenticate via API key (e.g. node registration)
+    where JWT claims are not available.  The plan is stored as a Setting
+    by the Clerk webhook handler whenever a subscription changes.
+    """
+    from app.models.models import Setting
+
+    plan = Setting.get(db, org_id, "org_plan", "free_org")
+    limits = get_plan_limits(plan)
+    # Attach the plan slug so callers can show a display name
+    return {**limits, "_plan": plan}
+
+
 def get_plan_display_name(plan: str) -> str:
     """Human-readable plan name."""
     names = {

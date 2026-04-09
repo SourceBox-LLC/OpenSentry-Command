@@ -1725,6 +1725,172 @@ body {
     padding: 0.25rem 0;
 }
 
+/* ── Upgrade Prompt (locked features) ──────────────────────────── */
+
+.upgrade-prompt {
+    text-align: center;
+    padding: 4rem 2rem;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.upgrade-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.upgrade-prompt h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.upgrade-prompt p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.upgrade-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+/* ── Danger Zone Locked ────────────────────────────────────────── */
+
+.danger-locked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    text-align: center;
+    gap: 0.75rem;
+}
+
+.danger-locked .locked-icon {
+    font-size: 2rem;
+}
+
+.danger-locked p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* ── Plan Limit Banners (Dashboard) ────────────────────────────── */
+
+.plan-limit-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.plan-limit-banner.plan-limit-warning {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.plan-limit-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.plan-limit-banner:not(.plan-limit-warning) .plan-limit-text {
+    color: #fca5a5;
+}
+
+.plan-limit-warning .plan-limit-text {
+    color: #fcd34d;
+}
+
+/* ── Upgrade Modal ─────────────────────────────────────────────── */
+
+.upgrade-modal {
+    max-width: 540px;
+}
+
+.upgrade-modal-hero {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.upgrade-modal-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.upgrade-modal-desc {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+}
+
+.upgrade-modal-benefit {
+    color: var(--accent-green);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.upgrade-modal-current {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.upgrade-comparison {
+    margin-bottom: 1.5rem;
+}
+
+.comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.comparison-table th,
+.comparison-table td {
+    padding: 0.5rem 0.75rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.comparison-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.7rem;
+    padding-bottom: 0.75rem;
+}
+
+.comparison-table td:first-child,
+.comparison-table th:first-child {
+    text-align: left;
+}
+
+.comparison-label {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.comparison-table .highlight-col {
+    color: var(--accent-blue);
+    font-weight: 600;
+}
+
+.comparison-table th.highlight-col {
+    color: #60a5fa;
+    position: relative;
+}
+
+.comparison-table .current-col {
+    color: var(--text-muted);
+}
+
 .btn-danger:hover {
     background: linear-gradient(135deg, #dc2626, #b91c1c);
 }

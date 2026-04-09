@@ -432,6 +432,11 @@ async def wipe_stream_logs(
     db: Session = Depends(get_db),
 ):
     """Permanently delete all stream access logs for this organization."""
+    if "admin" not in user.features:
+        raise HTTPException(
+            status_code=403,
+            detail="Danger zone requires a Pro or Business plan.",
+        )
     from app.models import StreamAccessLog
 
     count = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
@@ -449,6 +454,11 @@ async def full_reset(
     Full organization reset: wipe all nodes (with CloudNode notification),
     delete Tigris storage, clear stream logs, clear settings.
     """
+    if "admin" not in user.features:
+        raise HTTPException(
+            status_code=403,
+            detail="Danger zone requires a Pro or Business plan.",
+        )
     from app.models import StreamAccessLog, CameraNode
     from app.services.storage import get_storage
 

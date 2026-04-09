@@ -4,6 +4,7 @@ import { useAuth, useOrganization } from "@clerk/clerk-react"
 import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getPlanInfo } from "../services/api"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
+import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function formatRelativeTime(dateString) {
   if (!dateString) return ""
@@ -34,6 +35,9 @@ function SettingsPage() {
 
   // Plan info
   const [planInfo, setPlanInfo] = useState(null)
+
+  // Upgrade modal
+  const [upgradeFeature, setUpgradeFeature] = useState(null)
 
   // Danger Zone
   const [dangerAction, setDangerAction] = useState(null)
@@ -105,6 +109,14 @@ function SettingsPage() {
     const result = await rotateNodeKey(() => Promise.resolve(token), nodeId)
     await loadNodes()
     return result
+  }
+
+  const handleAddNodeClick = () => {
+    if (planInfo && planInfo.usage.nodes >= planInfo.limits.max_nodes) {
+      setUpgradeFeature("nodes")
+    } else {
+      setShowAddModal(true)
+    }
   }
 
   const openRotateModal = (node) => {
@@ -185,7 +197,7 @@ function SettingsPage() {
               <p>No camera nodes configured yet.</p>
               <button
                 className="btn btn-primary"
-                onClick={() => setShowAddModal(true)}
+                onClick={handleAddNodeClick}
               >
                 Add Your First Node
               </button>
@@ -237,7 +249,7 @@ function SettingsPage() {
               ))}
               <button
                 className="btn btn-primary add-node-btn"
-                onClick={() => setShowAddModal(true)}
+                onClick={handleAddNodeClick}
               >
                 Add Node
               </button>
@@ -398,6 +410,18 @@ function SettingsPage() {
           Irreversible actions that affect your entire organization.
         </p>
 
+        {planInfo && !planInfo.features?.includes("admin") ? (
+          <div className="danger-locked">
+            <div className="locked-icon">🔒</div>
+            <p>Danger zone actions require a <strong>Pro</strong> or <strong>Business</strong> plan.</p>
+            <button
+              className="btn btn-primary btn-small"
+              onClick={() => setUpgradeFeature("danger-zone")}
+            >
+              Upgrade
+            </button>
+          </div>
+        ) : (
         <div className="danger-actions">
           <div className="danger-item">
             <div className="danger-info">
@@ -425,6 +449,7 @@ function SettingsPage() {
             </button>
           </div>
         </div>
+        )}
 
         {dangerAction && (
           <div className="modal-overlay" onClick={() => !dangerLoading && closeDangerModal()}>
@@ -514,6 +539,13 @@ function SettingsPage() {
         }}
         node={selectedNode}
         onRotate={handleRotateKey}
+      />
+
+      <UpgradeModal
+        isOpen={!!upgradeFeature}
+        onClose={() => setUpgradeFeature(null)}
+        feature={upgradeFeature}
+        currentPlan={planInfo?.plan}
       />
     </div>
   )

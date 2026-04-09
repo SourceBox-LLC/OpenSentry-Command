@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react"
+import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getStreamLogs, getStreamStats, getNodes } from "../services/api"
+import { getStreamLogs, getStreamStats, getNodes, getPlanInfo } from "../services/api"
+import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function AdminPage() {
   const { getToken } = useAuth()
@@ -10,6 +12,8 @@ function AdminPage() {
   const [nodes, setNodes] = useState([])
   const [loading, setLoading] = useState(true)
   const [statsLoading, setStatsLoading] = useState(true)
+  const [planInfo, setPlanInfo] = useState(null)
+  const [planLoading, setPlanLoading] = useState(true)
 
   const [filters, setFilters] = useState({
     camera_id: "",
@@ -22,14 +26,34 @@ function AdminPage() {
 
   useEffect(() => {
     if (organization) {
+      loadPlanInfo()
+    }
+  }, [organization])
+
+  // Only load audit data once we know the plan allows it
+  useEffect(() => {
+    if (planInfo && planInfo.features?.includes("admin")) {
       loadNodes()
       loadLogs()
       loadStats()
     }
-  }, [organization])
+  }, [planInfo])
+
+  const loadPlanInfo = async () => {
+    try {
+      setPlanLoading(true)
+      const token = await getToken()
+      const data = await getPlanInfo(() => Promise.resolve(token))
+      setPlanInfo(data)
+    } catch (err) {
+      console.error("Failed to load plan info:", err)
+    } finally {
+      setPlanLoading(false)
+    }
+  }
 
   useEffect(() => {
-    if (organization) {
+    if (organization && planInfo?.features?.includes("admin")) {
       loadLogs()
     }
   }, [filters])
@@ -98,7 +122,7 @@ function AdminPage() {
   }
 
   useEffect(() => {
-    if (organization) {
+    if (organization && planInfo?.features?.includes("admin")) {
       loadStats()
     }
   }, [days])
@@ -108,6 +132,38 @@ function AdminPage() {
       <div className="admin-container">
         <h1 className="page-title">Admin Dashboard</h1>
         <p className="text-muted">Please select an organization to view admin settings.</p>
+      </div>
+    )
+  }
+
+  if (planLoading) {
+    return (
+      <div className="admin-container">
+        <h1 className="page-title">Admin Dashboard</h1>
+        <div className="loading-spinner"></div>
+      </div>
+    )
+  }
+
+  if (!planInfo?.features?.includes("admin")) {
+    return (
+      <div className="admin-container">
+        <div className="upgrade-prompt">
+          <div className="upgrade-icon">🔒</div>
+          <h2>Admin Dashboard</h2>
+          <p>
+            The Admin Dashboard with stream access logs and usage analytics
+            is available on the <strong>Pro</strong> and <strong>Business</strong> plans.
+          </p>
+          <div className="upgrade-actions">
+            <Link to="/pricing" className="btn btn-primary">
+              Upgrade Your Plan
+            </Link>
+            <Link to="/dashboard" className="btn btn-secondary">
+              Back to Dashboard
+            </Link>
+          </div>
+        </div>
       </div>
     )
   }

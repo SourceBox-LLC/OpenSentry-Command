@@ -1,8 +1,11 @@
 import logging
-from fastapi import APIRouter, Request, HTTPException, status
+from fastapi import APIRouter, Request, HTTPException, status, Depends
+from sqlalchemy.orm import Session
 from svix.webhooks import Webhook, WebhookVerificationError
 from app.core.config import settings
 from app.core.clerk import clerk
+from app.core.database import get_db
+from app.models.models import Setting
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ def get_active_plan_slug(items: list) -> str:
 
 
 @router.post("/clerk")
-async def clerk_webhook(request: Request):
+async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
     headers = dict(request.headers)
 
@@ -61,6 +64,8 @@ async def clerk_webhook(request: Request):
             plan_slug = get_active_plan_slug(data.get("items", []))
             limit = PLAN_MEMBER_LIMITS.get(plan_slug, PLAN_MEMBER_LIMITS["free_org"])
             set_org_member_limit(org_id, limit)
+            # Persist plan in DB so API-key-authenticated endpoints can look it up
+            Setting.set(db, org_id, "org_plan", plan_slug)
             logger.info("Org %s subscription active on plan '%s'", org_id, plan_slug)
 
     # ── Payment failure ─────────────────────────────────────────────
@@ -78,6 +83,7 @@ async def clerk_webhook(request: Request):
             # Clerk auto-assigns the free default plan on cancellation,
             # so the JWT pla claim will revert. Just reset member limit.
             set_org_member_limit(org_id, PLAN_MEMBER_LIMITS["free_org"])
+            Setting.set(db, org_id, "org_plan", "free_org")
             logger.info("Org %s subscription canceled — reverted to free limits", org_id)
 
     # ── Free trial ending soon ──────────────────────────────────────

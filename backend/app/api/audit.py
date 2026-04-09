@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -8,6 +8,15 @@ from app.core.auth import require_admin, AuthUser
 from app.models import StreamAccessLog
 
 router = APIRouter(prefix="/api", tags=["audit"])
+
+
+def _require_admin_feature(user: AuthUser):
+    """Raise 403 if the org's plan doesn't include the admin feature."""
+    if "admin" not in user.features:
+        raise HTTPException(
+            status_code=403,
+            detail="Audit dashboard requires a Pro or Business plan. Upgrade at /pricing.",
+        )
 
 
 @router.get("/audit/stream-logs")
@@ -24,6 +33,7 @@ async def get_stream_logs(
     Only org admins can access this endpoint.
     Logs are automatically cleaned up after the retention period.
     """
+    _require_admin_feature(admin)
     query = db.query(StreamAccessLog).filter(StreamAccessLog.org_id == admin.org_id)
 
     if camera_id:
@@ -62,6 +72,7 @@ async def get_stream_stats(
     Get stream access statistics for the admin's organization.
     Returns counts by camera, user, and day.
     """
+    _require_admin_feature(admin)
     from sqlalchemy import func
 
     since = datetime.utcnow() - timedelta(days=days)

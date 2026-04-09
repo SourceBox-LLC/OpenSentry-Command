@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, get_current_user
 from app.core.limiter import limiter
-from app.core.plans import get_plan_limits, get_plan_display_name
+from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_display_name
 from app.models.models import CameraNode, Camera
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
 from app.services.storage import get_storage
@@ -92,8 +92,14 @@ async def register_node(
             existing_node.audio_codec = data.audio_codec
             existing_node.codec_detected_at = datetime.utcnow()
 
+        # Enforce camera cap: count existing org cameras vs plan limit
+        org_id = existing_node.org_id
+        limits = get_plan_limits_for_org(db, org_id)
+        current_cameras = db.query(Camera).filter_by(org_id=org_id).count()
+
         # Map device_path to camera_id for response
         camera_mapping = {}
+        new_camera_count = 0
 
         for cam_data in data.cameras or []:
             # Generate camera_id from node_id and device_path
@@ -122,6 +128,15 @@ async def register_node(
                     existing_cam.video_codec = data.video_codec
                     existing_cam.audio_codec = data.audio_codec
             else:
+                # Check camera cap before creating
+                if current_cameras + new_camera_count >= limits["max_cameras"]:
+                    plan_name = get_plan_display_name(limits.get("_plan", "free_org"))
+                    logger.warning(
+                        "Camera limit reached for org %s (%d/%d on %s plan), skipping camera %s",
+                        org_id, current_cameras + new_camera_count, limits["max_cameras"], plan_name, camera_id,
+                    )
+                    continue
+
                 logger.debug("Creating new camera %s", camera_id)
                 new_cam = Camera(
                     camera_id=camera_id,
@@ -139,6 +154,7 @@ async def register_node(
                     codec_detected_at=datetime.utcnow() if data.video_codec else None,
                 )
                 db.add(new_cam)
+                new_camera_count += 1
 
         # Remove stale camera records that are no longer reported by this node.
         # This handles cases where old camera_ids (e.g. with spaces) linger after
