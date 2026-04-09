@@ -2,11 +2,13 @@ import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
 import { getStreamLogs, getStreamStats, getNodes, getPlanInfo } from "../services/api"
+import { useToasts } from "../hooks/useToasts.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function AdminPage() {
   const { getToken } = useAuth()
   const { organization } = useOrganization()
+  const { showToast } = useToasts()
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState(null)
   const [nodes, setNodes] = useState([])
@@ -84,6 +86,7 @@ function AdminPage() {
       setTotal(data.total || 0)
     } catch (err) {
       console.error("Failed to load audit logs:", err)
+      showToast("Failed to load audit logs", "error")
     } finally {
       setLoading(false)
     }
@@ -97,6 +100,7 @@ function AdminPage() {
       setStats(data)
     } catch (err) {
       console.error("Failed to load stats:", err)
+      showToast("Failed to load statistics", "error")
     } finally {
       setStatsLoading(false)
     }

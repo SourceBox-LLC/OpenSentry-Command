@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
 import { getCameras, getPlanInfo } from "../services/api"
+import { useToasts } from "../hooks/useToasts.jsx"
 import CameraCard from "../components/CameraCard.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function DashboardPage() {
   const { getToken } = useAuth()
   const { organization } = useOrganization()
+  const { showToast } = useToasts()
   const [cameras, setCameras] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -43,6 +45,8 @@ function DashboardPage() {
       }
     } catch (err) {
       console.error("[Dashboard] Error loading cameras:", err)
+      // Only toast on first error, not every poll cycle
+      if (!error) showToast("Failed to load cameras", "error")
       setError(err.message)
     } finally {
       setLoading(false)

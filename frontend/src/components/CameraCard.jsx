@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, memo } from "react"
 import { useAuth } from "@clerk/clerk-react"
 import { requestSnapshot, setRecording } from "../services/api"
+import { useToasts } from "../hooks/useToasts.jsx"
 import HlsPlayer from "./HlsPlayer.jsx"
 
 function CameraCard({
@@ -8,6 +9,7 @@ function CameraCard({
   camera,
 }) {
   const { getToken } = useAuth()
+  const { showToast } = useToasts()
   const [showMotionHistory, setShowMotionHistory] = useState(false)
   const [showFaceHistory, setShowFaceHistory] = useState(false)
   const [showObjectHistory, setShowObjectHistory] = useState(false)
@@ -41,25 +43,29 @@ function CameraCard({
     try {
       await requestSnapshot(getToken, cameraId)
       setSnapshotMsg("Saved to node")
+      showToast("Snapshot saved to node", "success")
     } catch (err) {
       setSnapshotMsg(err.message || "Snapshot failed")
+      showToast(err.message || "Snapshot failed", "error")
     } finally {
       setSnapshotLoading(false)
       setTimeout(() => setSnapshotMsg(null), 3000)
     }
-  }, [cameraId, getToken])
+  }, [cameraId, getToken, showToast])
 
   const toggleRecording = useCallback(async () => {
     setRecordLoading(true)
     try {
       await setRecording(getToken, cameraId, !recording)
       setRecordingState(!recording)
+      showToast(!recording ? "Recording started" : "Recording stopped", !recording ? "info" : "success")
     } catch (err) {
       console.error("Recording toggle failed:", err)
+      showToast(err.message || "Recording toggle failed", "error")
     } finally {
       setRecordLoading(false)
     }
-  }, [cameraId, getToken, recording])
+  }, [cameraId, getToken, recording, showToast])
 
   const isOffline = camera.status === "offline"
 

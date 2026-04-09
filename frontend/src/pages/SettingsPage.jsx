@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
 import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getPlanInfo } from "../services/api"
+import { useToasts } from "../hooks/useToasts.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
@@ -25,6 +26,7 @@ function formatRelativeTime(dateString) {
 function SettingsPage() {
   const { getToken } = useAuth()
   const { organization, membership } = useOrganization()
+  const { showToast } = useToasts()
   const [nodes, setNodes] = useState([])
   const [nodesLoading, setNodesLoading] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -72,6 +74,7 @@ function SettingsPage() {
       setNodes(data)
     } catch (err) {
       console.error("Failed to load nodes:", err)
+      showToast("Failed to load camera nodes", "error")
     } finally {
       setNodesLoading(false)
     }
@@ -83,9 +86,12 @@ function SettingsPage() {
     try {
       const result = await createNodeApi(() => Promise.resolve(token), name)
       await loadNodes()
+      await loadPlanInfo()
+      showToast(`Node "${name}" created successfully`, "success")
       return result
     } catch (err) {
       console.error("[SettingsPage] Failed to create node:", err)
+      showToast(err.message || "Failed to create node", "error")
       throw err
     }
   }
@@ -96,9 +102,12 @@ function SettingsPage() {
       const token = await getToken()
       await deleteNodeApi(() => Promise.resolve(token), nodeId)
       await loadNodes()
+      await loadPlanInfo()
       setDeleteConfirm(null)
+      showToast("Node deleted and storage cleaned up", "success")
     } catch (err) {
       console.error("[SettingsPage] Failed to delete node:", err)
+      showToast(err.message || "Failed to delete node", "error")
     } finally {
       setDeleting(false)
     }
@@ -106,9 +115,15 @@ function SettingsPage() {
 
   const handleRotateKey = async (nodeId) => {
     const token = await getToken()
-    const result = await rotateNodeKey(() => Promise.resolve(token), nodeId)
-    await loadNodes()
-    return result
+    try {
+      const result = await rotateNodeKey(() => Promise.resolve(token), nodeId)
+      await loadNodes()
+      showToast("API key rotated — update your CloudNode config", "warning")
+      return result
+    } catch (err) {
+      showToast(err.message || "Failed to rotate API key", "error")
+      throw err
+    }
   }
 
   const handleAddNodeClick = () => {
@@ -155,9 +170,11 @@ function SettingsPage() {
     try {
       const result = await action.handler()
       setDangerResult(result)
+      showToast(`${action.title} completed`, "success")
     } catch (err) {
       console.error("Danger action failed:", err)
       setDangerResult({ error: err.message })
+      showToast(`${action.title} failed`, "error")
     } finally {
       setDangerLoading(false)
     }
