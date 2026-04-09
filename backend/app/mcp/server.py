@@ -332,7 +332,7 @@ async def view_camera(
     except ValueError as e:
         raise ToolError(str(e))
 
-    image_b64 = result.get("image_b64")
+    image_b64 = result.get("data", {}).get("image_b64") or result.get("image_b64")
     if not image_b64:
         raise ToolError("Camera node did not return image data — update CloudNode to latest version")
 
@@ -385,7 +385,7 @@ async def watch_camera(
             result = await manager.send_command(
                 node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
             )
-            image_b64 = result.get("image_b64")
+            image_b64 = result.get("data", {}).get("image_b64") or result.get("image_b64")
             if image_b64:
                 results.append(Image(data=base64.b64decode(image_b64), format="jpeg"))
             else:
