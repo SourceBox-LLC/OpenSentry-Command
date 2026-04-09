@@ -1621,26 +1621,195 @@ body {
 
 /* ── Pricing Page ────────────────────────────────────────────────── */
 
-.pricing-container {
-    max-width: 1000px;
+.pricing-page {
+    position: relative;
+    max-width: 1100px;
     margin: 0 auto;
-    padding: 2rem 1rem;
+    padding: 2rem 1.5rem 4rem;
+    overflow: hidden;
 }
 
-.pricing-header {
+.pricing-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+.pricing-glow-1 {
+    width: 500px;
+    height: 500px;
+    top: -100px;
+    left: -150px;
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.pricing-glow-2 {
+    width: 400px;
+    height: 400px;
+    top: 200px;
+    right: -100px;
+    background: rgba(59, 130, 246, 0.06);
+}
+
+.pricing-hero {
     text-align: center;
-    margin-bottom: 2rem;
+    position: relative;
+    z-index: 1;
+    margin-bottom: 3rem;
+}
+
+.pricing-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    padding: 0.3rem 0.8rem;
+    border-radius: 9999px;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: var(--accent-green);
+    margin-bottom: 1.25rem;
+}
+
+.pricing-title {
+    font-size: 2.75rem;
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+.pricing-title-accent {
+    background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .pricing-subtitle {
     color: var(--text-secondary);
     font-size: 1.1rem;
-    margin-top: 0.5rem;
+    line-height: 1.6;
+    max-width: 500px;
+    margin: 0 auto;
 }
 
 .pricing-table-wrapper {
     display: flex;
     justify-content: center;
+    position: relative;
+    z-index: 1;
+    margin-bottom: 4rem;
+}
+
+/* ── Features Grid ─────────────────────────────────────────────── */
+
+.pricing-features {
+    position: relative;
+    z-index: 1;
+    margin-bottom: 4rem;
+}
+
+.pricing-features-title {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2rem;
+}
+
+.pricing-features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+}
+
+.pricing-feature-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    transition: border-color 0.2s, transform 0.2s;
+}
+
+.pricing-feature-item:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.pricing-feature-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.pricing-feature-item h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.4rem;
+}
+
+.pricing-feature-item p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* ── FAQ ────────────────────────────────────────────────────────── */
+
+.pricing-faq {
+    position: relative;
+    z-index: 1;
+}
+
+.pricing-faq-title {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2rem;
+}
+
+.pricing-faq-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+}
+
+.pricing-faq-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.pricing-faq-item h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.pricing-faq-item p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+    .pricing-title {
+        font-size: 2rem;
+    }
+
+    .pricing-features-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pricing-faq-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .danger-zone {
