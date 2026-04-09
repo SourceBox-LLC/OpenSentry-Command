@@ -165,7 +165,7 @@ function McpPage() {
           </div>
 
           <div className="mcp-locked-tools">
-            <h3>{TOOLS.length} tools included</h3>
+            <h3><span>{TOOLS.length}</span> tools included with Pro</h3>
             <div className="mcp-tools-grid">
               {TOOLS.map((tool) => (
                 <div key={tool.name} className="mcp-tool-card mcp-tool-locked">
@@ -174,7 +174,6 @@ function McpPage() {
                 </div>
               ))}
             </div>
-            <div className="mcp-tools-fade" />
           </div>
         </div>
 
