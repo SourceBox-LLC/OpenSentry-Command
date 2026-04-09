@@ -1,15 +1,20 @@
 from sqlalchemy import create_engine, event
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, StaticPool
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
 # NullPool: each request gets a fresh connection and releases it immediately.
 # This is the recommended approach for SQLite in async/high-concurrency apps —
 # avoids pool exhaustion when HLS segment uploads create bursts of 15+ concurrent requests.
+#
+# Exception: in-memory SQLite requires StaticPool (shared single connection)
+# so that all operations see the same database.
+_is_memory_db = settings.DATABASE_URL == "sqlite:///:memory:" or ":memory:" in settings.DATABASE_URL
+
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False, "timeout": 30},
-    poolclass=NullPool,
+    connect_args={"check_same_thread": False, **({} if _is_memory_db else {"timeout": 30})},
+    poolclass=StaticPool if _is_memory_db else NullPool,
 )
 
 

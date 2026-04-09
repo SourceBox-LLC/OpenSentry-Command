@@ -21,12 +21,15 @@ logger = logging.getLogger(__name__)
 Base.metadata.create_all(bind=engine)
 
 # Migrate existing tables: add columns that create_all won't add to existing tables.
-from sqlalchemy import inspect, text
-with engine.connect() as conn:
-    columns = [c["name"] for c in inspect(engine).get_columns("stream_access_logs")]
-    if "user_email" not in columns:
-        conn.execute(text("ALTER TABLE stream_access_logs ADD COLUMN user_email VARCHAR(255) DEFAULT ''"))
-        conn.commit()
+from sqlalchemy import inspect as sa_inspect, text
+try:
+    with engine.connect() as conn:
+        columns = [c["name"] for c in sa_inspect(engine).get_columns("stream_access_logs")]
+        if "user_email" not in columns:
+            conn.execute(text("ALTER TABLE stream_access_logs ADD COLUMN user_email VARCHAR(255) DEFAULT ''"))
+            conn.commit()
+except Exception:
+    pass  # Table doesn't exist yet (fresh DB) — create_all handles it
 
 # Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
 mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
@@ -59,9 +62,22 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-Node-API-Key"],
 )
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if request.url.scheme == "https" or os.getenv("FLY_APP_NAME"):
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return response
 
 # Include API routers
 app.include_router(cameras.router)
@@ -129,8 +145,8 @@ if static_dir.exists():
 
     @app.middleware("http")
     async def spa_middleware(request: Request, call_next):
-        # Let API, WebSocket, and install routes pass through
-        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.")):
+        # Let API, WebSocket, install, and OpenAPI docs routes pass through
+        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.", "/docs", "/redoc", "/openapi.json")):
             return await call_next(request)
 
         # MCP endpoint: only pass POST requests (JSON-RPC) to the MCP server;

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from svix.webhooks import Webhook, WebhookVerificationError
@@ -69,12 +70,27 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             logger.info("Org %s subscription active on plan '%s'", org_id, plan_slug)
 
     # ── Payment failure ─────────────────────────────────────────────
-    elif event_type == "subscription.pastDue":
+    elif event_type in ("subscription.pastDue", "subscriptionItem.pastDue"):
         org_id = data.get("payer", {}).get("organization_id")
         if org_id:
+            # Record past-due timestamp for grace period tracking.
+            # Clerk will retry payment via Stripe dunning. We keep current
+            # plan access during the grace period but flag the org.
+            Setting.set(db, org_id, "payment_past_due", "true")
+            past_due_at = data.get("pastDueAt") or datetime.now(tz=timezone.utc).isoformat()
+            Setting.set(db, org_id, "payment_past_due_at", str(past_due_at))
             logger.warning("Org %s subscription is past due — payment failed", org_id)
-            # Keep current limits for a grace period; Clerk will retry payment.
-            # If you want to restrict access, downgrade here.
+
+    # ── Payment attempt result ──────────────────────────────────────
+    elif event_type == "paymentAttempt.updated":
+        org_id = data.get("payer", {}).get("organization_id")
+        payment_status = data.get("status")
+        if org_id and payment_status == "paid":
+            # Payment succeeded — clear past-due flag
+            Setting.set(db, org_id, "payment_past_due", "false")
+            logger.info("Org %s payment succeeded — past-due cleared", org_id)
+        elif org_id and payment_status == "failed":
+            logger.warning("Org %s payment attempt failed", org_id)
 
     # ── Cancellation / end ──────────────────────────────────────────
     elif event_type in ("subscriptionItem.canceled", "subscriptionItem.ended"):
@@ -84,6 +100,7 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             # so the JWT pla claim will revert. Just reset member limit.
             set_org_member_limit(org_id, PLAN_MEMBER_LIMITS["free_org"])
             Setting.set(db, org_id, "org_plan", "free_org")
+            Setting.set(db, org_id, "payment_past_due", "false")
             logger.info("Org %s subscription canceled — reverted to free limits", org_id)
 
     # ── Free trial ending soon ──────────────────────────────────────
@@ -91,6 +108,5 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
         org_id = data.get("payer", {}).get("organization_id")
         if org_id:
             logger.info("Org %s free trial ending in 3 days", org_id)
-            # Future: send notification email
 
     return {"received": True}

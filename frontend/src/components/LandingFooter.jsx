@@ -38,11 +38,10 @@ function LandingFooter() {
             
             <div className="landing-footer-col">
               <h5>Legal</h5>
+              <Link to="/legal/terms">Terms of Service</Link>
+              <Link to="/legal/privacy">Privacy Policy</Link>
               <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">
                 AGPL-3.0 License
-              </a>
-              <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/issues" target="_blank" rel="noopener noreferrer">
-                Report Issue
               </a>
             </div>
           </div>

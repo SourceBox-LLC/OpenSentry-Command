@@ -114,6 +114,13 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-container">
+      {planInfo?.payment_past_due && (
+        <div className="payment-past-due-banner">
+          <span>Your payment is past due. Please update your billing information to avoid service interruption.</span>
+          <Link to="/settings">Update Billing</Link>
+        </div>
+      )}
+
       {planInfo && planInfo.features?.includes("admin") && (
         <div className={`pro-status-bar pro-status-${planInfo.plan}`}>
           <div className="pro-status-left">

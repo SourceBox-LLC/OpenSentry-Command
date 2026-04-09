@@ -283,54 +283,6 @@ body {
     border-color: rgba(245, 158, 11, 0.3);
 }
 
-.camera-card.motion-active {
-    animation: motionAlert 0.5s ease-in-out;
-    border-color: var(--accent-red);
-    box-shadow: 0 10px 40px rgba(239, 68, 68, 0.2);
-}
-
-.camera-card.motion-active .camera-header {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.05), rgba(220, 38, 38, 0.05));
-}
-
-@keyframes motionAlert {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
-}
-
-.camera-card.face-active {
-    animation: faceAlert 0.5s ease-in-out;
-    border-color: var(--accent-purple);
-    box-shadow: 0 10px 40px rgba(168, 85, 247, 0.2);
-}
-
-.camera-card.face-active .camera-header {
-    background: linear-gradient(135deg, rgba(168, 85, 247, 0.05), rgba(126, 34, 206, 0.05));
-}
-
-@keyframes faceAlert {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
-}
-
-.camera-card.objects-active {
-    animation: objectAlert 0.5s ease-in-out;
-    border-color: var(--accent-cyan);
-    box-shadow: 0 10px 40px rgba(6, 182, 212, 0.2);
-}
-
-.camera-card.objects-active .camera-header {
-    background: linear-gradient(135deg, rgba(6, 182, 212, 0.05), rgba(8, 145, 178, 0.05));
-}
-
-@keyframes objectAlert {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
-}
-
 .camera-header {
     display: flex;
     justify-content: space-between;
@@ -578,57 +530,6 @@ body {
     animation: pulse-fast 1s ease-in-out infinite;
 }
 
-/* Motion detection styles */
-.feed-tag.motion-badge {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
-    color: #fff;
-    animation: motionPulse 1s ease-in-out infinite;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-}
-
-@keyframes motionPulse {
-    0%, 100% { 
-        transform: scale(1);
-        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
-    }
-    50% { 
-        transform: scale(1.05);
-        box-shadow: 0 6px 25px rgba(239, 68, 68, 0.6);
-    }
-}
-
-/* Face detection styles */
-.feed-tag.face-badge {
-    background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(126, 34, 206, 0.9));
-    color: #fff;
-    animation: facePulse 1s ease-in-out infinite;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-}
-
-@keyframes facePulse {
-    0%, 100% {
-        transform: scale(1);
-        box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
-    }
-    50% {
-        transform: scale(1.05);
-        box-shadow: 0 6px 25px rgba(168, 85, 247, 0.6);
-    }
-}
-
-/* Objects Badge */
-.objects-badge {
-    background: linear-gradient(135deg, #06b6d4, #0891b2) !important;
-    animation: objectPulse 1.5s infinite;
-}
-
-@keyframes objectPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
 /* Recording indicator styles */
 .feed-tag.rec {
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95));
@@ -691,208 +592,6 @@ body {
 
 .recording-timer .rec-time {
     min-width: 45px;
-}
-
-/* Camera Motion Controls */
-.camera-motion-controls {
-    padding: 0.6rem 1rem;
-    border-top: 1px solid var(--border-color);
-}
-
-.btn-motion-history {
-    width: 100%;
-    background: var(--gradient-3);
-    color: #fff;
-    box-shadow: 0 4px 15px var(--accent-amber-glow);
-}
-
-.btn-motion-history:hover {
-    box-shadow: 0 6px 25px var(--accent-amber-glow);
-}
-
-.motion-history-panel {
-    margin-top: 0.75rem;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0.75rem;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.motion-history-panel.hidden {
-    display: none;
-}
-
-.motion-events-mini {
-    font-size: 0.75rem;
-}
-
-.motion-event-mini {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.motion-event-mini:last-child {
-    border-bottom: none;
-}
-
-.event-icon {
-    font-size: 0.75rem;
-}
-
-.event-time {
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--text-muted);
-    font-size: 0.7rem;
-}
-
-.event-type {
-    margin-left: auto;
-    font-weight: 500;
-    font-size: 0.7rem;
-}
-
-.no-events {
-    text-align: center;
-    color: var(--text-muted);
-    margin: 0.5rem 0;
-    font-size: 0.75rem;
-}
-
-/* Camera Face Controls */
-.camera-face-controls {
-    padding: 0.6rem 1rem;
-    border-top: 1px solid var(--border-color);
-}
-
-.btn-face-history {
-    width: 100%;
-    background: linear-gradient(135deg, #a855f7, #7c3aed);
-    color: #fff;
-    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
-}
-
-.btn-face-history:hover {
-    box-shadow: 0 6px 25px rgba(168, 85, 247, 0.6);
-}
-
-.face-history-panel {
-    margin-top: 0.75rem;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0.75rem;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.face-history-panel.hidden {
-    display: none;
-}
-
-.face-events-mini {
-    font-size: 0.75rem;
-}
-
-.face-event-mini {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.face-event-mini:last-child {
-    border-bottom: none;
-}
-
-.face-event-mini .event-icon {
-    font-size: 0.75rem;
-}
-
-.face-event-mini .event-time {
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--text-muted);
-    font-size: 0.7rem;
-}
-
-.face-event-mini .event-type {
-    margin-left: auto;
-    color: var(--accent-purple);
-    font-weight: 500;
-    font-size: 0.7rem;
-}
-
-/* Camera Object Controls */
-.camera-object-controls {
-    padding: 0.6rem 1rem;
-    border-top: 1px solid var(--border-color);
-}
-
-.btn-object-history {
-    width: 100%;
-    background: linear-gradient(135deg, #06b6d4, #0891b2);
-    color: #fff;
-    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
-}
-
-.btn-object-history:hover {
-    box-shadow: 0 6px 25px rgba(6, 182, 212, 0.6);
-}
-
-.object-history-panel {
-    margin-top: 0.75rem;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0.75rem;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-.object-history-panel.hidden {
-    display: none;
-}
-
-.object-events-mini {
-    font-size: 0.75rem;
-}
-
-.object-event-mini {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.object-event-mini:last-child {
-    border-bottom: none;
-}
-
-.object-event-mini .event-icon {
-    font-size: 0.75rem;
-}
-
-.object-event-mini .event-time {
-    font-family: 'JetBrains Mono', monospace;
-    color: var(--text-muted);
-    font-size: 0.7rem;
-}
-
-.object-event-mini .event-type {
-    margin-left: auto;
-    color: var(--accent-cyan);
-    font-weight: 500;
-    font-size: 0.7rem;
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 
 /* Controls */
@@ -1248,6 +947,117 @@ body {
 
 .pro-status-link:hover {
     color: var(--text-primary);
+}
+
+/* Payment Past Due Banner */
+.payment-past-due-banner {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.875rem;
+    color: #fca5a5;
+}
+
+.payment-past-due-banner a {
+    color: #ef4444;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.payment-past-due-banner a:hover {
+    text-decoration: underline;
+}
+
+/* Legal Pages */
+.legal-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+}
+
+.legal-nav {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.legal-nav a {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    transition: all 0.15s;
+}
+
+.legal-nav a:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.legal-nav a.active {
+    color: var(--text-primary);
+    background: rgba(59, 130, 246, 0.15);
+}
+
+.legal-content h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.legal-updated {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    margin-bottom: 2rem;
+}
+
+.legal-content h2 {
+    font-size: 1.25rem;
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.legal-content h3 {
+    font-size: 1rem;
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.legal-content p {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin-bottom: 0.75rem;
+}
+
+.legal-content ul {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.legal-content li {
+    margin-bottom: 0.35rem;
+}
+
+.legal-content a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.legal-content a:hover {
+    text-decoration: underline;
 }
 
 /* ── Pro Plan Card Enhancement ───────────────────────────────── */
@@ -3540,55 +3350,6 @@ body {
     background: var(--bg-secondary);
     color: var(--text-muted);
     font-size: 0.875rem;
-}
-
-/* Detection Badge */
-.detection-badge {
-    position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 0.375rem 0.75rem;
-    border-radius: 6px;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    z-index: 10;
-}
-
-.detection-badge.motion {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95));
-    color: #fff;
-    animation: motionPulse 1s ease-in-out infinite;
-}
-
-.detection-badge.face {
-    background: linear-gradient(135deg, rgba(168, 85, 247, 0.95), rgba(126, 34, 206, 0.95));
-    color: #fff;
-    animation: facePulse 1s ease-in-out infinite;
-}
-
-.detection-badge.object {
-    background: linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(8, 145, 178, 0.95));
-    color: #fff;
-    animation: objectPulse 1.5s infinite;
-}
-
-@keyframes motionPulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
-    50% { transform: scale(1.05); box-shadow: 0 6px 25px rgba(239, 68, 68, 0.6); }
-}
-
-@keyframes facePulse {
-    0%, 100% { transform: scale(1); box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4); }
-    50% { transform: scale(1.05); box-shadow: 0 6px 25px rgba(168, 85, 247, 0.6); }
-}
-
-@keyframes objectPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
 }
 
 /* Recording Badge */

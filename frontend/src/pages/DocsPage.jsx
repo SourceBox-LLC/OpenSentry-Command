@@ -549,7 +549,7 @@ function DocsPage() {
             <p>Create a new node. Returns the API key (shown once).</p>
 
             <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/settings</span></div>
-            <p>Get all notification and recording settings.</p>
+            <p>Get recording settings (schedule, continuous mode).</p>
 
             <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/audit/stream-logs</span></div>
             <p>Stream access history. Admin only. Filterable by camera and user.</p>

@@ -9,21 +9,10 @@ class CameraGroupCreate(BaseModel):
 
 
 class RecordingSettings(BaseModel):
-    motion_recording: bool = False
-    face_recording: bool = False
-    object_recording: bool = False
-    post_buffer: int = Field(5, ge=0, le=300)
     scheduled_recording: bool = False
     scheduled_start: str = Field("06:00", max_length=5)
     scheduled_end: str = Field("17:00", max_length=5)
     continuous_24_7: bool = False
-
-
-class NotificationSettings(BaseModel):
-    motion_notifications: bool = True
-    face_notifications: bool = True
-    object_notifications: bool = True
-    toast_notifications: bool = True
 
 
 class CameraReport(BaseModel):

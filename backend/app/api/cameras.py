@@ -9,7 +9,6 @@ from app.models.models import Camera, CameraGroup, Setting, AuditLog
 from app.schemas.schemas import (
     CameraGroupCreate,
     RecordingSettings,
-    NotificationSettings,
 )
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -211,36 +210,7 @@ async def get_all_settings(
 ):
     """Get all settings for the user's organization."""
     return {
-        "notifications": {
-            "motion_notifications": Setting.get(
-                db, user.org_id, "motion_notifications", "true"
-            )
-            == "true",
-            "face_notifications": Setting.get(
-                db, user.org_id, "face_notifications", "true"
-            )
-            == "true",
-            "object_notifications": Setting.get(
-                db, user.org_id, "object_notifications", "true"
-            )
-            == "true",
-            "toast_notifications": Setting.get(
-                db, user.org_id, "toast_notifications", "true"
-            )
-            == "true",
-        },
         "recording": {
-            "motion_recording": Setting.get(
-                db, user.org_id, "motion_recording", "false"
-            )
-            == "true",
-            "face_recording": Setting.get(db, user.org_id, "face_recording", "false")
-            == "true",
-            "object_recording": Setting.get(
-                db, user.org_id, "object_recording", "false"
-            )
-            == "true",
-            "post_buffer": int(Setting.get(db, user.org_id, "post_buffer", "5")),
             "scheduled_recording": Setting.get(
                 db, user.org_id, "scheduled_recording", "false"
             )
@@ -253,64 +223,12 @@ async def get_all_settings(
     }
 
 
-@router.get("/settings/notifications")
-async def get_notification_settings(
-    user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """Get notification settings."""
-    return {
-        "motion_notifications": Setting.get(
-            db, user.org_id, "motion_notifications", "true"
-        )
-        == "true",
-        "face_notifications": Setting.get(db, user.org_id, "face_notifications", "true")
-        == "true",
-        "object_notifications": Setting.get(
-            db, user.org_id, "object_notifications", "true"
-        )
-        == "true",
-        "toast_notifications": Setting.get(
-            db, user.org_id, "toast_notifications", "true"
-        )
-        == "true",
-    }
-
-
-@router.post("/settings/notifications")
-async def update_notification_settings(
-    data: NotificationSettings,
-    user: AuthUser = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """Update notification settings. Requires admin."""
-    Setting.set(
-        db, user.org_id, "motion_notifications", str(data.motion_notifications).lower()
-    )
-    Setting.set(
-        db, user.org_id, "face_notifications", str(data.face_notifications).lower()
-    )
-    Setting.set(
-        db, user.org_id, "object_notifications", str(data.object_notifications).lower()
-    )
-    Setting.set(
-        db, user.org_id, "toast_notifications", str(data.toast_notifications).lower()
-    )
-    return {"success": True}
-
-
 @router.get("/settings/recording")
 async def get_recording_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """Get recording settings."""
     return {
-        "motion_recording": Setting.get(db, user.org_id, "motion_recording", "false")
-        == "true",
-        "face_recording": Setting.get(db, user.org_id, "face_recording", "false")
-        == "true",
-        "object_recording": Setting.get(db, user.org_id, "object_recording", "false")
-        == "true",
-        "post_buffer": int(Setting.get(db, user.org_id, "post_buffer", "5")),
         "scheduled_recording": Setting.get(
             db, user.org_id, "scheduled_recording", "false"
         )
@@ -329,10 +247,6 @@ async def update_recording_settings(
     db: Session = Depends(get_db),
 ):
     """Update recording settings. Requires admin."""
-    Setting.set(db, user.org_id, "motion_recording", str(data.motion_recording).lower())
-    Setting.set(db, user.org_id, "face_recording", str(data.face_recording).lower())
-    Setting.set(db, user.org_id, "object_recording", str(data.object_recording).lower())
-    Setting.set(db, user.org_id, "post_buffer", str(data.post_buffer))
     Setting.set(
         db, user.org_id, "scheduled_recording", str(data.scheduled_recording).lower()
     )

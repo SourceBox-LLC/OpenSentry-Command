@@ -274,9 +274,12 @@ async def get_plan_info(
     db: Session = Depends(get_db),
 ):
     """Return the org's current plan, usage, and limits."""
+    from app.models.models import Setting
+
     limits = get_plan_limits(user.plan)
     current_nodes = db.query(CameraNode).filter_by(org_id=user.org_id).count()
     current_cameras = db.query(Camera).filter_by(org_id=user.org_id).count()
+    payment_past_due = Setting.get(db, user.org_id, "payment_past_due", "false") == "true"
     return {
         "plan": user.plan,
         "plan_name": get_plan_display_name(user.plan),
@@ -286,6 +289,7 @@ async def get_plan_info(
             "nodes": current_nodes,
             "cameras": current_cameras,
         },
+        "payment_past_due": payment_past_due,
     }
 
 
