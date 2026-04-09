@@ -105,7 +105,7 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
 
 def _auth():
     """Shortcut: get headers, resolve org, return (org_id, db)."""
-    headers = get_http_headers()
+    headers = get_http_headers(include={"authorization"})
     return _resolve_org(headers)
 
 
