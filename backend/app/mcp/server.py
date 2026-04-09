@@ -418,55 +418,6 @@ def list_camera_groups() -> list[dict]:
         db.close()
 
 
-@mcp.tool(
-    name="create_camera_group",
-    description="Create a new camera group for organizing cameras.",
-)
-@tracked
-def create_camera_group(
-    name: Annotated[str, "Name for the new camera group"],
-    color: Annotated[str, Field(description="Hex color code", default="#22c55e")] = "#22c55e",
-    icon: Annotated[str, Field(description="Emoji icon", default="📁")] = "📁",
-) -> dict:
-    org_id, db = _auth()
-    try:
-        group = CameraGroup(org_id=org_id, name=name, color=color, icon=icon)
-        db.add(group)
-        db.commit()
-        return {"success": True, "id": group.id, "name": group.name}
-    finally:
-        db.close()
-
-
-@mcp.tool(
-    name="assign_camera_to_group",
-    description="Assign a camera to a camera group, or remove it from its current group.",
-)
-@tracked
-def assign_camera_to_group(
-    camera_id: Annotated[str, "The camera_id to assign"],
-    group_id: Annotated[int | None, "Group ID to assign to, or null to unassign"] = None,
-) -> dict:
-    org_id, db = _auth()
-    try:
-        cam = (
-            db.query(Camera)
-            .filter_by(org_id=org_id, camera_id=camera_id)
-            .first()
-        )
-        if not cam:
-            raise ToolError(f"Camera '{camera_id}' not found")
-
-        if group_id is not None:
-            group = db.query(CameraGroup).filter_by(id=group_id, org_id=org_id).first()
-            if not group:
-                raise ToolError(f"Group {group_id} not found")
-
-        cam.group_id = group_id
-        db.commit()
-        return {"success": True, "camera_id": camera_id, "group_id": group_id}
-    finally:
-        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -534,35 +485,6 @@ def get_recording_settings() -> dict:
         db.close()
 
 
-@mcp.tool(
-    name="update_recording_settings",
-    description="Update recording settings. You can enable/disable continuous 24/7 recording or scheduled recording with specific start/end times.",
-)
-@tracked
-def update_recording_settings(
-    continuous_24_7: Annotated[bool | None, "Enable continuous 24/7 recording"] = None,
-    scheduled_recording: Annotated[bool | None, "Enable scheduled recording"] = None,
-    scheduled_start: Annotated[str | None, "Start time in HH:MM format (e.g. '08:00')"] = None,
-    scheduled_end: Annotated[str | None, "End time in HH:MM format (e.g. '18:00')"] = None,
-) -> dict:
-    org_id, db = _auth()
-    try:
-        updated = []
-        if continuous_24_7 is not None:
-            Setting.set(db, org_id, "continuous_24_7", str(continuous_24_7).lower())
-            updated.append("continuous_24_7")
-        if scheduled_recording is not None:
-            Setting.set(db, org_id, "scheduled_recording", str(scheduled_recording).lower())
-            updated.append("scheduled_recording")
-        if scheduled_start is not None:
-            Setting.set(db, org_id, "scheduled_start", scheduled_start)
-            updated.append("scheduled_start")
-        if scheduled_end is not None:
-            Setting.set(db, org_id, "scheduled_end", scheduled_end)
-            updated.append("scheduled_end")
-        return {"success": True, "updated": updated}
-    finally:
-        db.close()
 
 
 # ---------------------------------------------------------------------------
