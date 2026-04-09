@@ -353,7 +353,7 @@ async def watch_camera(
     camera_id: Annotated[str, "The camera_id to watch"],
     count: Annotated[int, Field(description="Number of snapshots to take", ge=2, le=10)] = 3,
     interval_seconds: Annotated[int, Field(description="Seconds between snapshots", ge=1, le=30)] = 5,
-) -> list:
+):
     org_id, db = _auth()
     try:
         cam = (
