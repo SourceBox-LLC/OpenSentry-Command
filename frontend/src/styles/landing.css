@@ -1347,6 +1347,72 @@
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
 }
 
+/* MCP Tools List */
+.docs-mcp-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.docs-mcp-tools .docs-endpoint {
+  margin-top: 0.75rem;
+}
+
+.docs-mcp-tools > p {
+  margin: 0.25rem 0 0.5rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Plans Table */
+.docs-plans-table {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.docs-plans-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.docs-plans-table thead {
+  background: var(--bg-tertiary, rgba(255, 255, 255, 0.03));
+}
+
+.docs-plans-table th {
+  padding: 0.875rem 1.25rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.docs-plans-table th:not(:first-child) {
+  text-align: center;
+}
+
+.docs-plans-table td {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.docs-plans-table td:not(:first-child) {
+  text-align: center;
+}
+
+.docs-plans-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.docs-plans-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .landing-hero-container {
@@ -1615,4 +1681,145 @@
   position: relative;
   z-index: 10;
   min-height: auto;
+}
+
+/* ── Landing: MCP Feature Highlight ───────────────────────────── */
+
+.landing-feature-highlight {
+  position: relative;
+  border-color: rgba(34, 197, 94, 0.2) !important;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.05), rgba(6, 182, 212, 0.03)) !important;
+}
+
+.landing-feature-badge {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent-green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.1);
+}
+
+/* ── Landing: MCP Showcase Section ────────────────────────────── */
+
+.landing-mcp-showcase {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: center;
+}
+
+.landing-mcp-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 20px;
+  background: rgba(34, 197, 94, 0.08);
+  margin-bottom: 1rem;
+}
+
+.landing-mcp-left h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.landing-mcp-left > p {
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.landing-mcp-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.landing-mcp-example {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-style: italic;
+  width: fit-content;
+}
+
+/* Config preview (fake terminal) */
+.landing-mcp-config {
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.landing-mcp-config-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-mcp-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.landing-mcp-dot.red { background: #ff5f57; }
+.landing-mcp-dot.yellow { background: #febc2e; }
+.landing-mcp-dot.green { background: #28c840; }
+
+.landing-mcp-config-title {
+  margin-left: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.landing-mcp-code {
+  padding: 1rem;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--accent-green);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  overflow-x: auto;
+}
+
+.landing-mcp-tools-count {
+  text-align: center;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.landing-mcp-tools-count span {
+  color: var(--accent-green);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  .landing-mcp-showcase {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
 }

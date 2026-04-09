@@ -134,9 +134,18 @@ function LandingPage() {
               <div className="landing-feature-icon">🔑</div>
               <h3>Simple Setup</h3>
               <p>
-                Install CloudNode on any device with a USB camera. Enter API key. 
+                Install CloudNode on any device with a USB camera. Enter API key.
                 That's it. No network configuration required.
               </p>
+            </div>
+            <div className="landing-feature-card landing-feature-highlight">
+              <div className="landing-feature-icon">{"</>"}</div>
+              <h3>MCP Integration</h3>
+              <p>
+                Connect Claude Code or any AI tool directly to your cameras via the
+                Model Context Protocol. Control everything through natural language.
+              </p>
+              <span className="landing-feature-badge">PRO</span>
             </div>
           </div>
         </div>
@@ -412,6 +421,62 @@ function LandingPage() {
                   <span>Browser</span>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Any Device</div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* MCP Section */}
+      <section className="landing-section-alt">
+        <div className="landing-container">
+          <div className="landing-section-header">
+            <h2 className="landing-section-title">AI-Powered with MCP</h2>
+            <p className="landing-section-subtitle">
+              Give AI tools like Claude Code direct access to your security system
+              through the Model Context Protocol.
+            </p>
+          </div>
+          <div className="landing-mcp-showcase">
+            <div className="landing-mcp-left">
+              <div className="landing-mcp-badge">Model Context Protocol</div>
+              <h3>Control cameras with natural language</h3>
+              <p>
+                Pro and Business users can generate an MCP API key and connect any
+                compatible AI tool — Claude Code, Cursor, or custom agents — directly
+                to their organization's cameras, nodes, and settings.
+              </p>
+              <div className="landing-mcp-examples">
+                <div className="landing-mcp-example">"List all my cameras"</div>
+                <div className="landing-mcp-example">"Get a stream URL for the garage"</div>
+                <div className="landing-mcp-example">"Enable 24/7 recording"</div>
+              </div>
+              <Link to="/sign-up" className="landing-btn landing-btn-primary">
+                Try It Free
+              </Link>
+            </div>
+            <div className="landing-mcp-right">
+              <div className="landing-mcp-config">
+                <div className="landing-mcp-config-header">
+                  <span className="landing-mcp-dot red" />
+                  <span className="landing-mcp-dot yellow" />
+                  <span className="landing-mcp-dot green" />
+                  <span className="landing-mcp-config-title">.mcp.json</span>
+                </div>
+                <pre className="landing-mcp-code">{`{
+  "mcpServers": {
+    "opensentry": {
+      "type": "http",
+      "url": "https://opensentry-command.fly.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer osc_..."
+      }
+    }
+  }
+}`}</pre>
+              </div>
+              <div className="landing-mcp-tools-count">
+                <span>13</span> tools available
               </div>
             </div>
           </div>
