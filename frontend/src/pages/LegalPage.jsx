@@ -249,9 +249,9 @@ function TermsContent() {
       <h2>16. Governing Law and Dispute Resolution</h2>
       <p>
         These Terms shall be governed by and construed in accordance with
-        the laws of the State of Delaware, without regard to its conflict
+        the laws of the State of Washington, without regard to its conflict
         of law provisions. Any disputes arising under these Terms shall be
-        resolved in the state or federal courts located in Delaware, and
+        resolved in the state or federal courts located in Washington State, and
         you consent to personal jurisdiction in such courts.
       </p>
 
