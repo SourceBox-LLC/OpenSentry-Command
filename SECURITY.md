@@ -22,6 +22,9 @@ Always run the latest version.
 | **Rate Limiting** | Stream URL generation capped at 10 req/min per IP |
 | **CORS** | Explicit origin allowlist (no wildcards with credentials) |
 | **Audit Logging** | Stream access tracked with user ID, IP, and user agent |
+| **MCP API Key Auth** | MCP tools authenticated via org-scoped Bearer tokens (SHA-256 hashed) |
+| **MCP Activity Logging** | Every MCP tool call persisted to DB with tool name, API key, status, and duration |
+| **MCP Read-Only Tools** | MCP server exposes only read-only tools — no write operations |
 | **Encrypted Storage** | CloudNode encrypts API key at rest with AES-256-GCM |
 | **Webhook Verification** | Clerk webhooks verified via Svix signature |
 
@@ -70,7 +73,8 @@ Always run the latest version.
 2. **Use strong Clerk passwords** -- enforce via Clerk dashboard settings
 3. **Rotate API keys** -- use the key rotation endpoint for CloudNodes periodically
 4. **Restrict CORS** -- set `FRONTEND_URL` to your actual domain
-5. **Monitor audit logs** -- review stream access logs for unauthorized access
+5. **Monitor audit logs** -- review stream access logs and MCP activity logs for unauthorized access
+6. **Manage MCP API keys** -- revoke unused keys from the MCP Control Center, monitor tool call history in the Admin Dashboard
 6. **Use HTTPS** -- deploy behind a reverse proxy with TLS (Fly.io handles this)
 7. **Backup your database** -- regular backups of the application database
 

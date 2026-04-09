@@ -58,8 +58,9 @@ See the [CloudNode README](https://github.com/SourceBox-LLC/opensentry-cloud-nod
 ```
 backend/
 ├── app/
-│   ├── main.py           # FastAPI app, CORS, SPA middleware
-│   ├── api/              # Route handlers (cameras, nodes, hls, streams, audit, webhooks)
+│   ├── main.py           # FastAPI app, CORS, SPA middleware, MCP mount
+│   ├── api/              # Route handlers (cameras, nodes, hls, streams, audit, mcp_activity, webhooks)
+│   ├── mcp/              # MCP server (FastMCP tools, activity tracker)
 │   ├── core/             # Auth (Clerk JWT), config, database
 │   ├── models/           # SQLAlchemy models
 │   ├── schemas/          # Pydantic schemas
@@ -69,7 +70,7 @@ backend/
 
 frontend/
 └── src/
-    ├── pages/            # Page components
+    ├── pages/            # Page components (Dashboard, Settings, Admin, MCP Control Center)
     └── components/       # Reusable UI components
 ```
 

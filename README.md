@@ -27,6 +27,7 @@ Built with **FastAPI + React + Clerk Authentication + Tigris Storage**
 **Key Components:**
 - **CloudNode** (Rust) - Captures USB camera, detects codec, uploads HLS segments to Tigris
 - **Command Center** (FastAPI) - Serves HLS manifests with codec info, handles authentication
+- **MCP Server** - AI tool interface allowing MCP clients (Claude Code, etc.) to view cameras, check status, and query logs
 - **Tigris/S3** - Object storage for video segments and playlists
 - **Clerk** - Multi-tenant authentication with organization-based access
 
@@ -131,24 +132,28 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxx
 backend/
 ├── app/
 │   ├── api/
-│   │   ├── cameras.py      # Camera CRUD, settings, alerts
-│   │   ├── hls.py          # HLS playlist/segment serving
-│   │   ├── nodes.py        # CloudNode registration, heartbeat
-│   │   ├── streams.py      # Upload URL generation, cleanup
-│   │   ├── audit.py        # Stream access logs
-│   │   └── webhooks.py     # Clerk webhooks
+│   │   ├── cameras.py        # Camera CRUD, settings, alerts
+│   │   ├── hls.py            # HLS playlist/segment serving
+│   │   ├── nodes.py          # CloudNode registration, heartbeat
+│   │   ├── streams.py        # Upload URL generation, cleanup
+│   │   ├── audit.py          # Stream access logs
+│   │   ├── mcp_activity.py   # MCP activity SSE + REST + DB logs
+│   │   └── webhooks.py       # Clerk webhooks
 │   ├── core/
-│   │   ├── auth.py         # Clerk JWT verification, permissions
-│   │   ├── config.py       # Settings from environment
-│   │   ├── database.py     # SQLAlchemy setup
-│   │   └── clerk.py        # Clerk client
+│   │   ├── auth.py           # Clerk JWT verification, permissions
+│   │   ├── config.py         # Settings from environment
+│   │   ├── database.py       # SQLAlchemy setup
+│   │   └── clerk.py          # Clerk client
+│   ├── mcp/
+│   │   ├── server.py         # MCP tool definitions (FastMCP)
+│   │   └── activity.py       # In-memory tracker + DB persistence
 │   ├── models/
-│   │   └── models.py       # SQLAlchemy models
+│   │   └── models.py         # SQLAlchemy models
 │   ├── schemas/
-│   │   └── schemas.py      # Pydantic request/response schemas
+│   │   └── schemas.py        # Pydantic request/response schemas
 │   ├── services/
-│   │   └── storage.py      # Tigris/S3 operations
-│   └── main.py             # FastAPI app entry
+│   │   └── storage.py        # Tigris/S3 operations
+│   └── main.py               # FastAPI app entry + MCP mount
 ├── .env.example
 └── pyproject.toml
 
@@ -162,7 +167,8 @@ frontend/
 │   ├── pages/
 │   │   ├── DashboardPage.jsx # Camera grid view
 │   │   ├── SettingsPage.jsx  # Node management
-│   │   ├── AdminPage.jsx     # Stream logs
+│   │   ├── AdminPage.jsx     # Stream logs + MCP activity
+│   │   ├── McpPage.jsx       # MCP Control Center (live monitoring)
 │   │   └── ...
 │   ├── services/
 │   │   └── api.js            # API client
@@ -212,6 +218,67 @@ frontend/
 |--------|----------|-------------|
 | GET | `/api/cameras/{id}/stream.m3u8` | Get HLS playlist |
 | GET | `/api/cameras/{id}/segment/{filename}` | Get HLS segment |
+
+### MCP (Model Context Protocol)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/mcp/` | MCP JSON-RPC endpoint (Bearer token auth) |
+| GET | `/mcp/` | MCP Control Center dashboard |
+
+### MCP Activity (Clerk JWT, Admin)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/mcp/activity/stream` | SSE stream of live MCP tool calls |
+| GET | `/api/mcp/activity/recent` | Recent in-memory events |
+| GET | `/api/mcp/activity/sessions` | Active MCP client sessions |
+| GET | `/api/mcp/activity/stats` | Real-time aggregate stats |
+| GET | `/api/mcp/activity/logs` | Persisted MCP logs (DB-backed) |
+| GET | `/api/mcp/activity/logs/stats` | Historical MCP statistics |
+
+---
+
+## MCP Integration
+
+The Command Center doubles as an MCP server, allowing AI clients (Claude Code, Cursor, etc.) to interact with cameras and system data via the [Model Context Protocol](https://modelcontextprotocol.io/).
+
+### Available Tools (Read-Only)
+
+| Tool | Description |
+|------|-------------|
+| `view_camera` | Live JPEG snapshot from a camera |
+| `watch_camera` | Multiple snapshots over time (2-10 frames) |
+| `list_cameras` | List all cameras with status |
+| `get_camera` | Camera details by ID |
+| `get_stream_url` | Pre-signed HLS stream URL |
+| `list_nodes` | List all camera nodes |
+| `get_node` | Node details by ID |
+| `list_camera_groups` | List camera groups |
+| `get_recording_settings` | Current recording configuration |
+| `get_stream_logs` | Stream access history |
+| `get_stream_stats` | Aggregated stream statistics |
+| `get_system_status` | System overview (cameras, nodes, plan) |
+
+### Connecting Claude Code
+
+```bash
+claude mcp add opensentry \
+  --transport http \
+  --url https://your-domain.fly.dev/mcp/ \
+  --header "Authorization: Bearer YOUR_MCP_API_KEY" \
+  --scope user
+```
+
+Generate an API key from the MCP Control Center page in the web dashboard.
+
+### Architecture
+
+- MCP server built with [FastMCP](https://github.com/jlowin/fastmcp), mounted at `/mcp/` inside the FastAPI app
+- Stateless HTTP transport — each request is an independent JSON-RPC call
+- Auth via Bearer token using org-scoped MCP API keys (SHA-256 hashed)
+- All tool calls are logged to the database and streamed via SSE to the MCP Control Center
+- Visual tools (`view_camera`, `watch_camera`) send WebSocket commands to the CloudNode to capture live JPEG snapshots
 
 ---
 
