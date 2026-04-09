@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getPlanInfo } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getPlanInfo, getSettings, updateNotificationSettings, updateRecordingSettings } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
@@ -38,6 +38,12 @@ function SettingsPage() {
   // Plan info
   const [planInfo, setPlanInfo] = useState(null)
 
+  // Notification & recording settings
+  const [notifications, setNotifications] = useState(null)
+  const [recording, setRecording] = useState(null)
+  const [settingsLoading, setSettingsLoading] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+
   // Upgrade modal
   const [upgradeFeature, setUpgradeFeature] = useState(null)
 
@@ -51,6 +57,7 @@ function SettingsPage() {
     if (organization) {
       loadNodes()
       loadPlanInfo()
+      loadSettings()
     }
   }, [organization])
 
@@ -62,6 +69,64 @@ function SettingsPage() {
     } catch (err) {
       console.error("Failed to load plan info:", err)
     }
+  }
+
+  const loadSettings = async () => {
+    try {
+      setSettingsLoading(true)
+      const token = await getToken()
+      const data = await getSettings(() => Promise.resolve(token))
+      setNotifications(data.notifications)
+      setRecording(data.recording)
+    } catch (err) {
+      console.error("Failed to load settings:", err)
+      showToast("Failed to load settings", "error")
+    } finally {
+      setSettingsLoading(false)
+    }
+  }
+
+  const saveNotifications = async (updated) => {
+    setSettingsSaving(true)
+    try {
+      const token = await getToken()
+      await updateNotificationSettings(() => Promise.resolve(token), updated)
+      setNotifications(updated)
+      showToast("Notification settings saved", "success")
+    } catch (err) {
+      showToast(err.message || "Failed to save notification settings", "error")
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  const saveRecording = async (updated) => {
+    setSettingsSaving(true)
+    try {
+      const token = await getToken()
+      await updateRecordingSettings(() => Promise.resolve(token), updated)
+      setRecording(updated)
+      showToast("Recording settings saved", "success")
+    } catch (err) {
+      showToast(err.message || "Failed to save recording settings", "error")
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  const handleNotificationToggle = (key) => {
+    const updated = { ...notifications, [key]: !notifications[key] }
+    saveNotifications(updated)
+  }
+
+  const handleRecordingToggle = (key) => {
+    const updated = { ...recording, [key]: !recording[key] }
+    saveRecording(updated)
+  }
+
+  const handleRecordingChange = (key, value) => {
+    const updated = { ...recording, [key]: value }
+    saveRecording(updated)
   }
 
   const loadNodes = async () => {
@@ -359,6 +424,195 @@ function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {notifications && (
+        <div className="settings-section">
+          <h2>Notifications</h2>
+          <p className="section-description">
+            Choose which events trigger in-app notifications.
+          </p>
+          <div className="settings-toggles">
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Motion Detection</span>
+                <span className="toggle-desc">Alert when cameras detect motion</span>
+              </div>
+              <button
+                className={`toggle-switch ${notifications.motion_notifications ? "active" : ""}`}
+                onClick={() => handleNotificationToggle("motion_notifications")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Face Detection</span>
+                <span className="toggle-desc">Alert when a face is recognized</span>
+              </div>
+              <button
+                className={`toggle-switch ${notifications.face_notifications ? "active" : ""}`}
+                onClick={() => handleNotificationToggle("face_notifications")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Object Detection</span>
+                <span className="toggle-desc">Alert when specific objects are detected</span>
+              </div>
+              <button
+                className={`toggle-switch ${notifications.object_notifications ? "active" : ""}`}
+                onClick={() => handleNotificationToggle("object_notifications")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Toast Popups</span>
+                <span className="toggle-desc">Show on-screen toast notifications</span>
+              </div>
+              <button
+                className={`toggle-switch ${notifications.toast_notifications ? "active" : ""}`}
+                onClick={() => handleNotificationToggle("toast_notifications")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {recording && (
+        <div className="settings-section">
+          <h2>Recording</h2>
+          <p className="section-description">
+            Configure automatic and scheduled recording behavior.
+          </p>
+          <div className="settings-toggles">
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Record on Motion</span>
+                <span className="toggle-desc">Automatically record when motion is detected</span>
+              </div>
+              <button
+                className={`toggle-switch ${recording.motion_recording ? "active" : ""}`}
+                onClick={() => handleRecordingToggle("motion_recording")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Record on Face Detection</span>
+                <span className="toggle-desc">Automatically record when a face is detected</span>
+              </div>
+              <button
+                className={`toggle-switch ${recording.face_recording ? "active" : ""}`}
+                onClick={() => handleRecordingToggle("face_recording")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Record on Object Detection</span>
+                <span className="toggle-desc">Automatically record when objects are detected</span>
+              </div>
+              <button
+                className={`toggle-switch ${recording.object_recording ? "active" : ""}`}
+                onClick={() => handleRecordingToggle("object_recording")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+
+            <div className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Post-Event Buffer</span>
+                <span className="toggle-desc">Keep recording for this many seconds after an event ends</span>
+              </div>
+              <select
+                className="settings-select"
+                value={recording.post_buffer}
+                onChange={(e) => handleRecordingChange("post_buffer", parseInt(e.target.value))}
+                disabled={settingsSaving}
+              >
+                <option value="0">Off</option>
+                <option value="5">5 seconds</option>
+                <option value="10">10 seconds</option>
+                <option value="15">15 seconds</option>
+                <option value="30">30 seconds</option>
+                <option value="60">60 seconds</option>
+              </select>
+            </div>
+
+            <div className="settings-divider" />
+
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Continuous 24/7</span>
+                <span className="toggle-desc">Record all cameras around the clock</span>
+              </div>
+              <button
+                className={`toggle-switch ${recording.continuous_24_7 ? "active" : ""}`}
+                onClick={() => handleRecordingToggle("continuous_24_7")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Scheduled Recording</span>
+                <span className="toggle-desc">Only record during specific hours</span>
+              </div>
+              <button
+                className={`toggle-switch ${recording.scheduled_recording ? "active" : ""}`}
+                onClick={() => handleRecordingToggle("scheduled_recording")}
+                disabled={settingsSaving}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
+
+            {recording.scheduled_recording && (
+              <div className="schedule-row">
+                <div className="schedule-field">
+                  <label>Start</label>
+                  <input
+                    type="time"
+                    value={recording.scheduled_start}
+                    onChange={(e) => handleRecordingChange("scheduled_start", e.target.value)}
+                    disabled={settingsSaving}
+                    className="settings-time-input"
+                  />
+                </div>
+                <span className="schedule-separator">to</span>
+                <div className="schedule-field">
+                  <label>End</label>
+                  <input
+                    type="time"
+                    value={recording.scheduled_end}
+                    onChange={(e) => handleRecordingChange("scheduled_end", e.target.value)}
+                    disabled={settingsSaving}
+                    className="settings-time-input"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {planInfo && (
         <div className="settings-section">
