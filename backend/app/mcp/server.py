@@ -4,14 +4,17 @@ to an organization's cameras, nodes, streams, and settings.
 
 Mounted inside the main FastAPI app at /mcp.
 Auth: Bearer token using org-scoped MCP API keys.
+Rate limited per API key based on org plan.
 """
 
 import asyncio
 import base64
+import collections
 import contextvars
 import functools
 import hashlib
 import logging
+import threading
 import time
 import uuid as uuid_mod
 from datetime import datetime, timedelta, timezone
@@ -43,6 +46,54 @@ _ctx_org_id = contextvars.ContextVar("mcp_org_id", default="")
 _ctx_key_name = contextvars.ContextVar("mcp_key_name", default="")
 
 # ---------------------------------------------------------------------------
+# Per-key rate limiter — sliding window (calls per minute)
+# ---------------------------------------------------------------------------
+
+# Plan-based rate limits (calls per minute per API key)
+RATE_LIMITS = {
+    "pro_org": 30,
+    "business_org": 120,
+    "free_org": 10,  # shouldn't happen (MCP requires Pro+), but safe default
+}
+DEFAULT_RATE_LIMIT = 10
+
+
+class _RateLimiter:
+    """Thread-safe sliding-window rate limiter keyed by API key hash."""
+
+    def __init__(self):
+        # {key_hash: deque of timestamps}
+        self._windows: dict[str, collections.deque] = {}
+        self._lock = threading.Lock()
+
+    def check(self, key_hash: str, limit: int, window: int = 60) -> tuple[bool, int]:
+        """
+        Check if a request is allowed.
+        Returns (allowed, remaining_calls).
+        """
+        now = time.time()
+        cutoff = now - window
+
+        with self._lock:
+            if key_hash not in self._windows:
+                self._windows[key_hash] = collections.deque()
+
+            dq = self._windows[key_hash]
+
+            # Purge old entries
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+
+            if len(dq) >= limit:
+                return False, 0
+
+            dq.append(now)
+            return True, limit - len(dq)
+
+
+_rate_limiter = _RateLimiter()
+
+# ---------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------
 
@@ -62,7 +113,7 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 
 def _resolve_org(headers: dict | None) -> tuple[str, Session]:
-    """Validate the Bearer token and return (org_id, db_session)."""
+    """Validate the Bearer token, enforce rate limit, return (org_id, db_session)."""
     if not headers:
         raise ToolError("Unauthorized: no headers present")
 
@@ -86,6 +137,17 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         if not mcp_key:
             db.close()
             raise ToolError("Unauthorized: invalid or revoked API key")
+
+        # Look up org plan and enforce rate limit
+        plan = Setting.get(db, mcp_key.org_id, "org_plan", "free_org")
+        limit = RATE_LIMITS.get(plan, DEFAULT_RATE_LIMIT)
+        allowed, remaining = _rate_limiter.check(key_hash, limit)
+        if not allowed:
+            db.close()
+            raise ToolError(
+                f"Rate limit exceeded: {limit} calls/min allowed on {plan.replace('_org', '').title()} plan. "
+                "Try again shortly."
+            )
 
         # Touch last_used_at
         mcp_key.last_used_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)

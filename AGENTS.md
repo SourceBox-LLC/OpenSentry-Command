@@ -328,7 +328,9 @@ The Command Center serves as an MCP (Model Context Protocol) server, allowing AI
 - **Snapshot flow**: MCP server → WebSocket command to CloudNode → FFmpeg extracts JPEG from latest HLS segment → base64 back over WebSocket → returned as `Image` content
 - **Response nesting**: CloudNode returns `{"status": "success", "data": {"image_b64": "..."}}` — tools extract via `result.get("data", {}).get("image_b64")`
 - **Activity tracking**: Every tool call is logged in-memory (SSE to MCP dashboard) AND persisted to `mcp_activity_logs` table (background thread)
+- **Per-key rate limiting**: Sliding window per API key — Pro: 30 calls/min, Business: 120 calls/min. Configured in `RATE_LIMITS` dict in `server.py`
 - **Read-only tools only** — no write operations exposed via MCP
+- **Log retention**: Background task deletes logs older than 90 days (configurable via `LOG_RETENTION_DAYS` env var)
 
 ### Connecting a Client
 

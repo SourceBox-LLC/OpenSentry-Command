@@ -272,13 +272,26 @@ claude mcp add opensentry \
 
 Generate an API key from the MCP Control Center page in the web dashboard.
 
+### Rate Limits
+
+MCP tool calls are rate limited per API key based on the organization's plan:
+
+| Plan | Calls/min |
+|------|-----------|
+| Pro | 30 |
+| Business | 120 |
+
+Exceeding the limit returns an error until the sliding window resets.
+
 ### Architecture
 
 - MCP server built with [FastMCP](https://github.com/jlowin/fastmcp), mounted at `/mcp/` inside the FastAPI app
 - Stateless HTTP transport — each request is an independent JSON-RPC call
 - Auth via Bearer token using org-scoped MCP API keys (SHA-256 hashed)
+- Per-key sliding-window rate limiting based on org plan
 - All tool calls are logged to the database and streamed via SSE to the MCP Control Center
 - Visual tools (`view_camera`, `watch_camera`) send WebSocket commands to the CloudNode to capture live JPEG snapshots
+- Automatic log retention: logs older than 90 days are cleaned up daily (configurable via `LOG_RETENTION_DAYS`)
 
 ---
 

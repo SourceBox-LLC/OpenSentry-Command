@@ -396,6 +396,7 @@ function DocsPage() {
                   <tr><td>Admin Dashboard</td><td>--</td><td>Yes</td><td>Yes</td></tr>
                   <tr><td>Stream Analytics</td><td>--</td><td>Yes</td><td>Yes</td></tr>
                   <tr><td>MCP Integration</td><td>--</td><td>Yes</td><td>Yes</td></tr>
+                  <tr><td>MCP Rate Limit</td><td>--</td><td>30 calls/min</td><td>120 calls/min</td></tr>
                   <tr><td>Danger Zone Tools</td><td>--</td><td>Yes</td><td>Yes</td></tr>
                   <tr><td>Priority Support</td><td>--</td><td>--</td><td>Yes</td></tr>
                 </tbody>
@@ -407,6 +408,7 @@ function DocsPage() {
               <li><strong>Camera limits</strong> — When a node registers and you're at your camera cap, additional cameras are skipped.</li>
               <li><strong>Node limits</strong> — Creating a node beyond your limit shows an upgrade prompt.</li>
               <li><strong>Feature gates</strong> — Admin dashboard, danger zone, and MCP require Pro or Business.</li>
+              <li><strong>MCP rate limits</strong> — Tool calls are rate limited per API key: 30/min on Pro, 120/min on Business. Exceeding the limit returns an error until the window resets.</li>
             </ul>
 
             <p>Manage your subscription from <strong>Settings &gt; Subscription</strong> or the <Link to="/pricing">Pricing</Link> page.</p>
