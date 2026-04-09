@@ -4408,10 +4408,23 @@ body {
 }
 
 /* Audit Logs Table */
+.audit-table-wrapper {
+    max-height: 400px;
+    overflow-y: auto;
+    border-radius: 8px;
+}
+
 .audit-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
+}
+
+.audit-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    z-index: 1;
 }
 
 .audit-table th {

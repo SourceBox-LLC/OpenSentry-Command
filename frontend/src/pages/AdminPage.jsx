@@ -301,28 +301,30 @@ function AdminPage() {
           </div>
         ) : (
           <>
-            <table className="audit-table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Camera</th>
-                  <th>User</th>
-                  <th>IP Address</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logs.map(log => (
-                  <tr key={log.id}>
-                    <td className="timestamp">
-                      {new Date(log.accessed_at).toLocaleString()}
-                    </td>
-                    <td>{log.camera_id}</td>
-                    <td className="user-id">{log.user_email || log.user_id.substring(0, 8) + "..."}</td>
-                    <td className="ip-address">{log.ip_address || "Unknown"}</td>
+            <div className="audit-table-wrapper">
+              <table className="audit-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Camera</th>
+                    <th>User</th>
+                    <th>IP Address</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {logs.map(log => (
+                    <tr key={log.id}>
+                      <td className="timestamp">
+                        {new Date(log.accessed_at).toLocaleString()}
+                      </td>
+                      <td>{log.camera_id}</td>
+                      <td className="user-id">{log.user_email || log.user_id.substring(0, 8) + "..."}</td>
+                      <td className="ip-address">{log.ip_address || "Unknown"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {pageCount > 1 && (
               <div className="audit-pagination">
@@ -498,38 +500,40 @@ function AdminPage() {
           </div>
         ) : (
           <>
-            <table className="audit-table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Tool</th>
-                  <th>API Key</th>
-                  <th>Status</th>
-                  <th>Duration</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mcpLogs.map(log => (
-                  <tr key={log.id} className={log.status === "error" ? "row-error" : ""}>
-                    <td className="timestamp">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </td>
-                    <td><code>{log.tool_name}</code></td>
-                    <td>{log.key_name}</td>
-                    <td>
-                      <span className={`status-badge status-${log.status}`}>
-                        {log.status}
-                      </span>
-                    </td>
-                    <td>{log.duration_ms != null ? `${log.duration_ms}ms` : "—"}</td>
-                    <td className="details-cell">
-                      {log.error || log.args_summary || "—"}
-                    </td>
+            <div className="audit-table-wrapper">
+              <table className="audit-table">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Tool</th>
+                    <th>API Key</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Details</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {mcpLogs.map(log => (
+                    <tr key={log.id} className={log.status === "error" ? "row-error" : ""}>
+                      <td className="timestamp">
+                        {new Date(log.timestamp).toLocaleString()}
+                      </td>
+                      <td><code>{log.tool_name}</code></td>
+                      <td>{log.key_name}</td>
+                      <td>
+                        <span className={`status-badge status-${log.status}`}>
+                          {log.status}
+                        </span>
+                      </td>
+                      <td>{log.duration_ms != null ? `${log.duration_ms}ms` : "—"}</td>
+                      <td className="details-cell">
+                        {log.error || log.args_summary || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {Math.ceil(mcpTotal / mcpFilters.limit) > 1 && (
               <div className="audit-pagination">
