@@ -24,7 +24,7 @@ with engine.connect() as conn:
         conn.commit()
 
 # Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
-mcp_app = mcp.http_app(path="/", stateless_http=True)
+mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
 
 app = FastAPI(
     title="OpenSentry Command Center API",
