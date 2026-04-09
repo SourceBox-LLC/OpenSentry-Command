@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.auth import AuthUser, require_admin
+from app.core.auth import AuthUser, require_admin, get_current_user
 from app.core.limiter import limiter
+from app.core.plans import get_plan_limits, get_plan_display_name
 from app.models.models import CameraNode, Camera
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
 from app.services.storage import get_storage
@@ -232,12 +233,43 @@ async def list_nodes(
     return [n.to_dict() for n in nodes]
 
 
+@router.get("/plan")
+async def get_plan_info(
+    user: AuthUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the org's current plan, usage, and limits."""
+    limits = get_plan_limits(user.plan)
+    current_nodes = db.query(CameraNode).filter_by(org_id=user.org_id).count()
+    current_cameras = db.query(Camera).filter_by(org_id=user.org_id).count()
+    return {
+        "plan": user.plan,
+        "plan_name": get_plan_display_name(user.plan),
+        "features": user.features,
+        "limits": limits,
+        "usage": {
+            "nodes": current_nodes,
+            "cameras": current_cameras,
+        },
+    }
+
+
 @router.post("")
 async def create_node(
     data: NodeCreate,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    # Enforce node limit based on plan
+    limits = get_plan_limits(user.plan)
+    current_nodes = db.query(CameraNode).filter_by(org_id=user.org_id).count()
+    if current_nodes >= limits["max_nodes"]:
+        plan_name = get_plan_display_name(user.plan)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Node limit reached ({limits['max_nodes']} on {plan_name} plan). Upgrade your plan to add more nodes.",
+        )
+
     node_id = str(uuid.uuid4())[:8]
     api_key = str(uuid.uuid4())
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()

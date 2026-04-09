@@ -14,6 +14,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage.jsx"))
 const SettingsPage = lazy(() => import("./pages/SettingsPage.jsx"))
 const AdminPage = lazy(() => import("./pages/AdminPage.jsx"))
 const TestHlsPage = lazy(() => import("./pages/TestHlsPage.jsx"))
+const PricingPage = lazy(() => import("./pages/PricingPage.jsx"))
 
 function RequireOrg({ children }) {
   const { organization, isLoaded } = useOrganization()
@@ -111,6 +112,14 @@ function App() {
 
         {/* Authenticated routes with Layout */}
         <Route element={<Layout />}>
+          <Route
+            path="/pricing"
+            element={
+              <RequireOrg>
+                <PricingPage />
+              </RequireOrg>
+            }
+          />
           <Route
             path="/dashboard"
             element={

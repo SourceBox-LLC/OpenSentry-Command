@@ -1508,6 +1508,125 @@ body {
     }
 }
 
+/* ── Plan / Subscription Card ────────────────────────────────────── */
+
+.plan-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.plan-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.plan-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.plan-name-row h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.plan-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+}
+
+.plan-badge-free_org {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+}
+
+.plan-badge-pro {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+.plan-badge-business {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+}
+
+.plan-usage {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.usage-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.usage-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.usage-count {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.usage-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.usage-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+    min-width: 2px;
+}
+
+.usage-fill.usage-full {
+    background: #ef4444;
+}
+
+/* ── Pricing Page ────────────────────────────────────────────────── */
+
+.pricing-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.pricing-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.pricing-subtitle {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+}
+
+.pricing-table-wrapper {
+    display: flex;
+    justify-content: center;
+}
+
 .danger-zone {
     border: 1px solid rgba(239, 68, 68, 0.3);
     background: rgba(239, 68, 68, 0.05);

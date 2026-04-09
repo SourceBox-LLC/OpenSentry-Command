@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
+import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getPlanInfo } from "../services/api"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
 
@@ -31,6 +32,9 @@ function SettingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Plan info
+  const [planInfo, setPlanInfo] = useState(null)
+
   // Danger Zone
   const [dangerAction, setDangerAction] = useState(null)
   const [dangerConfirmText, setDangerConfirmText] = useState("")
@@ -40,8 +44,19 @@ function SettingsPage() {
   useEffect(() => {
     if (organization) {
       loadNodes()
+      loadPlanInfo()
     }
   }, [organization])
+
+  const loadPlanInfo = async () => {
+    try {
+      const token = await getToken()
+      const data = await getPlanInfo(() => Promise.resolve(token))
+      setPlanInfo(data)
+    } catch (err) {
+      console.error("Failed to load plan info:", err)
+    }
+  }
 
   const loadNodes = async () => {
     if (!organization) return
@@ -315,6 +330,67 @@ function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {planInfo && (
+        <div className="settings-section">
+          <h2>Subscription</h2>
+          <div className="plan-card">
+            <div className="plan-card-header">
+              <div className="plan-name-row">
+                <h3>{planInfo.plan_name} Plan</h3>
+                <span className={`plan-badge plan-badge-${planInfo.plan}`}>
+                  {planInfo.plan === "free_org" ? "Free" : planInfo.plan_name}
+                </span>
+              </div>
+              {planInfo.plan === "free_org" && (
+                <Link to="/pricing" className="btn btn-primary btn-small">
+                  Upgrade
+                </Link>
+              )}
+              {planInfo.plan === "pro" && (
+                <Link to="/pricing" className="btn btn-secondary btn-small">
+                  Manage Plan
+                </Link>
+              )}
+              {planInfo.plan === "business" && (
+                <Link to="/pricing" className="btn btn-secondary btn-small">
+                  Manage Plan
+                </Link>
+              )}
+            </div>
+            <div className="plan-usage">
+              <div className="usage-item">
+                <div className="usage-label">
+                  <span>Cameras</span>
+                  <span className="usage-count">
+                    {planInfo.usage.cameras} / {planInfo.limits.max_cameras >= 999 ? "Unlimited" : planInfo.limits.max_cameras}
+                  </span>
+                </div>
+                <div className="usage-bar">
+                  <div
+                    className={`usage-fill ${planInfo.usage.cameras >= planInfo.limits.max_cameras ? "usage-full" : ""}`}
+                    style={{ width: `${Math.min(100, (planInfo.usage.cameras / planInfo.limits.max_cameras) * 100)}%` }}
+                  />
+                </div>
+              </div>
+              <div className="usage-item">
+                <div className="usage-label">
+                  <span>Nodes</span>
+                  <span className="usage-count">
+                    {planInfo.usage.nodes} / {planInfo.limits.max_nodes >= 999 ? "Unlimited" : planInfo.limits.max_nodes}
+                  </span>
+                </div>
+                <div className="usage-bar">
+                  <div
+                    className={`usage-fill ${planInfo.usage.nodes >= planInfo.limits.max_nodes ? "usage-full" : ""}`}
+                    style={{ width: `${Math.min(100, (planInfo.usage.nodes / Math.min(planInfo.limits.max_nodes, 50)) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="settings-section danger-zone">
         <h2>Danger Zone</h2>

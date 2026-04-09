@@ -14,6 +14,8 @@ class AuthUser:
         org_permissions: list = None,
         email: str = "",
         username: str = "",
+        plan: str = "free_org",
+        features: list = None,
     ):
         self.user_id = user_id
         self.sub = user_id
@@ -22,6 +24,8 @@ class AuthUser:
         self.org_permissions = org_permissions or []
         self.email = email
         self.username = username
+        self.plan = plan
+        self.features = features or []
 
     def has_permission(self, permission: str) -> bool:
         return permission in self.org_permissions
@@ -124,6 +128,20 @@ async def get_current_user(request: Request) -> AuthUser:
         email = claims.get("email", "")
         username = claims.get("username", "")
 
+        # Extract active plan from V2 JWT (e.g. "o:pro" -> "pro")
+        plan_claim = claims.get("pla", "")
+        active_plan = plan_claim.split(":")[-1] if plan_claim else "free_org"
+
+        # Extract active features from fea claim
+        fea_claim = claims.get("fea", "")
+        active_features = []
+        for f in fea_claim.split(","):
+            f = f.strip()
+            if f.startswith("o:"):
+                active_features.append(f[2:])
+            elif f:
+                active_features.append(f)
+
         # Extract org_id and org_role from V1 or V2 JWT format
         # V1: top-level org_id and org_role claims
         # V2: compact "o" claim with id and rol fields
@@ -149,6 +167,8 @@ async def get_current_user(request: Request) -> AuthUser:
             org_permissions=org_permissions,
             email=email,
             username=username,
+            plan=active_plan,
+            features=active_features,
         )
     except HTTPException:
         raise

@@ -134,6 +134,11 @@ export async function getStreamStats(getToken, days = 7) {
   return fetchWithAuth(`/api/audit/stream-logs/stats?days=${days}`, getToken)
 }
 
+// Plan info
+export async function getPlanInfo(getToken) {
+  return fetchWithAuth("/api/nodes/plan", getToken)
+}
+
 // Danger Zone
 export async function wipeStreamLogs(getToken) {
   return fetchWithAuth("/api/settings/danger/wipe-logs", getToken, {

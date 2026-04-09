@@ -47,6 +47,9 @@ function Layout() {
                         </Link>
                       </>
                     )}
+                    <Link to="/pricing" className={isActive("/pricing")}>
+                      Pricing
+                    </Link>
                   </nav>
                 </>
               )}
