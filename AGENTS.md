@@ -152,7 +152,6 @@ timestamp: DateTime
 **Settings:**
 - `GET /api/settings` - Get all settings
 - `POST /api/settings/recording` - Update recording settings
-- `POST /api/settings/notifications` - Update notification settings
 
 **Nodes:**
 - `GET /api/nodes` - List all nodes

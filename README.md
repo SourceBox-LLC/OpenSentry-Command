@@ -193,7 +193,6 @@ frontend/
 | PUT | `/api/cameras/{id}/group` | Assign camera to group |
 | GET | `/api/settings` | Get all settings |
 | POST | `/api/settings/recording` | Update recording settings |
-| POST | `/api/settings/notifications` | Update notification settings |
 | GET | `/api/nodes` | List nodes |
 | POST | `/api/nodes` | Create node |
 | GET | `/api/nodes/{id}` | Get node details |
