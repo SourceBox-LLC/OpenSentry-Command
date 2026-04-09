@@ -2059,7 +2059,8 @@ body {
     margin: 0 auto;
 }
 
-.upgrade-icon {
+.upgrade-icon,
+.locked-icon {
     font-size: 3rem;
     margin-bottom: 1rem;
 }

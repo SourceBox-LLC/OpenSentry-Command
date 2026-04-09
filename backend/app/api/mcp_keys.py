@@ -6,7 +6,7 @@ Users generate keys on the /mcp page; keys are stored hashed (SHA-256).
 import hashlib
 import secrets
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
@@ -79,7 +79,6 @@ async def revoke_mcp_key(
         .first()
     )
     if not mcp_key:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Key not found")
 
     mcp_key.revoked = True

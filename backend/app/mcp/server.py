@@ -11,10 +11,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from fastmcp import FastMCP, Context
+from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.exceptions import ToolError
 from pydantic import Field
+from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.models import (
@@ -47,7 +48,7 @@ mcp = FastMCP(
 # Auth helper — resolve Bearer token to org_id
 # ---------------------------------------------------------------------------
 
-def _resolve_org(headers: dict | None) -> tuple[str, SessionLocal]:
+def _resolve_org(headers: dict | None) -> tuple[str, Session]:
     """Validate the Bearer token and return (org_id, db_session)."""
     if not headers:
         raise ToolError("Unauthorized: no headers present")
@@ -57,6 +58,9 @@ def _resolve_org(headers: dict | None) -> tuple[str, SessionLocal]:
         raise ToolError("Unauthorized: missing Bearer token")
 
     raw_key = auth.split(" ", 1)[1].strip()
+    if not raw_key:
+        raise ToolError("Unauthorized: empty Bearer token")
+
     key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
 
     db = SessionLocal()
