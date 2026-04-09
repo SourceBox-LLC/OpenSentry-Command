@@ -11,7 +11,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.auth import AuthUser, require_admin
+from app.core.auth import AuthUser, require_admin, require_active_billing
 from app.core.database import get_db
 from app.mcp.activity import McpEvent, tracker
 from app.models.models import McpApiKey
@@ -46,7 +46,7 @@ def _log_key_event(
 @router.post("/keys")
 async def create_mcp_key(
     name: str = "Default",
-    user: AuthUser = Depends(require_admin),
+    user: AuthUser = Depends(require_active_billing),
     db: Session = Depends(get_db),
 ):
     """Generate a new MCP API key for the organization."""

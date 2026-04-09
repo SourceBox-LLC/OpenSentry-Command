@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.auth import AuthUser, require_admin, get_current_user
+from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_display_name
 from app.mcp.activity import McpEvent, tracker
@@ -296,7 +296,7 @@ async def get_plan_info(
 @router.post("")
 async def create_node(
     data: NodeCreate,
-    user: AuthUser = Depends(require_admin),
+    user: AuthUser = Depends(require_active_billing),
     db: Session = Depends(get_db),
 ):
     # Enforce node limit based on plan

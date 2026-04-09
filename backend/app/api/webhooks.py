@@ -6,7 +6,7 @@ from svix.webhooks import Webhook, WebhookVerificationError
 from app.core.config import settings
 from app.core.clerk import clerk
 from app.core.database import get_db
-from app.models.models import Setting
+from app.models.models import Setting, CameraNode, Camera, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,8 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     headers = dict(request.headers)
 
     if not settings.CLERK_WEBHOOK_SECRET:
-        logger.warning("CLERK_WEBHOOK_SECRET not set — rejecting unverified webhook")
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Webhook secret not configured")
+        logger.error("CLERK_WEBHOOK_SECRET not set — cannot verify webhook signatures")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Webhook processing unavailable")
 
     try:
         wh = Webhook(settings.CLERK_WEBHOOK_SECRET)
@@ -108,5 +108,29 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
         org_id = data.get("payer", {}).get("organization_id")
         if org_id:
             logger.info("Org %s free trial ending in 3 days", org_id)
+
+    # ── Organization deleted ───────────────────────────────────────
+    elif event_type == "organization.deleted":
+        org_id = data.get("id")
+        if org_id:
+            # Clean up all org data: nodes (cascades to cameras), groups, keys, logs, settings
+            nodes = db.query(CameraNode).filter_by(org_id=org_id).all()
+            camera_count = 0
+            for node in nodes:
+                camera_count += len(node.cameras) if node.cameras else 0
+                db.delete(node)  # cascade deletes cameras
+
+            group_count = db.query(CameraGroup).filter_by(org_id=org_id).delete()
+            key_count = db.query(McpApiKey).filter_by(org_id=org_id).delete()
+            db.query(McpActivityLog).filter_by(org_id=org_id).delete()
+            db.query(StreamAccessLog).filter_by(org_id=org_id).delete()
+            db.query(AuditLog).filter_by(org_id=org_id).delete()
+            db.query(Setting).filter_by(org_id=org_id).delete()
+            db.commit()
+
+            logger.info(
+                "Org %s deleted — cleaned up %d nodes, %d cameras, %d groups, %d API keys",
+                org_id, len(nodes), camera_count, group_count, key_count,
+            )
 
     return {"received": True}
