@@ -92,7 +92,13 @@ if static_dir.exists():
 
     @app.middleware("http")
     async def spa_middleware(request: Request, call_next):
-        if request.url.path.startswith(("/api", "/ws", "/mcp", "/install.", "/mcp-setup.")):
+        # Let API, WebSocket, and install routes pass through
+        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.")):
+            return await call_next(request)
+
+        # MCP endpoint: only pass POST requests (JSON-RPC) to the MCP server;
+        # GET /mcp should serve the frontend dashboard page
+        if request.url.path.startswith("/mcp") and request.method == "POST":
             return await call_next(request)
 
         static_file = static_dir / request.url.path.lstrip("/")
