@@ -15,6 +15,7 @@ function DashboardPage() {
   const [error, setError] = useState(null)
   const [planInfo, setPlanInfo] = useState(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const prevCamerasRef = useRef(null)
 
   const loadCameras = useCallback(async () => {
@@ -78,6 +79,14 @@ function DashboardPage() {
     }
   }, [organization, loadCameras, loadPlanInfo])
 
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    prevCamerasRef.current = null // force state update
+    await loadCameras()
+    await loadPlanInfo()
+    setRefreshing(false)
+  }, [loadCameras, loadPlanInfo])
 
   const getStats = () => {
     const cameraList = Object.values(cameras)
@@ -167,11 +176,12 @@ function DashboardPage() {
 
       <div className="section-header">
         <h2 className="section-title">Camera Feeds</h2>
-        <button onClick={loadCameras} className="btn btn-secondary">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <button onClick={handleRefresh} className="btn btn-secondary" disabled={refreshing}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            style={refreshing ? { animation: 'spin 0.8s linear infinite' } : {}}>
             <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
-          Refresh
+          {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
