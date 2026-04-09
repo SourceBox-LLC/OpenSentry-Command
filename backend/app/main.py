@@ -92,7 +92,7 @@ if static_dir.exists():
 
     @app.middleware("http")
     async def spa_middleware(request: Request, call_next):
-        if request.url.path.startswith(("/api", "/ws", "/mcp", "/install.")):
+        if request.url.path.startswith(("/api", "/ws", "/mcp", "/install.", "/mcp-setup.")):
             return await call_next(request)
 
         static_file = static_dir / request.url.path.lstrip("/")

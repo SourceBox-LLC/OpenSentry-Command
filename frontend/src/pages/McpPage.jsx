@@ -76,6 +76,15 @@ function McpPage() {
   const [revoking, setRevoking] = useState(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
 
+  // Connection config
+  const [setupOs, setSetupOs] = useState(() => {
+    const ua = navigator.userAgent.toLowerCase()
+    if (ua.includes("win")) return "windows"
+    if (ua.includes("mac")) return "macos"
+    return "linux"
+  })
+  const [configTab, setConfigTab] = useState("auto")
+
   // Load plan info
   useEffect(() => {
     if (organization) loadPlanInfo()
@@ -264,17 +273,37 @@ function McpPage() {
     }
   }
 
-  const configJson = (key) => JSON.stringify({
-    mcpServers: {
-      opensentry: {
-        type: "http",
-        url: MCP_URL,
-        headers: {
-          Authorization: `Bearer ${key || "osc_your_key_here"}`
-        }
-      }
-    }
-  }, null, 2)
+  const activeKey = createdKey || "osc_your_key_here"
+  const base = window.location.origin
+
+  // Per-client config generators
+  const clientConfigs = {
+    "claude-code": {
+      label: "Claude Code",
+      file: "~/.claude.json or .mcp.json",
+      config: JSON.stringify({ mcpServers: { opensentry: { type: "http", url: MCP_URL, headers: { Authorization: `Bearer ${activeKey}` } } } }, null, 2),
+      cli: `claude mcp add --transport http opensentry ${MCP_URL} --header "Authorization: Bearer ${activeKey}"`,
+    },
+    "claude-desktop": {
+      label: "Claude Desktop",
+      file: setupOs === "macos" ? "~/Library/Application Support/Claude/claude_desktop_config.json" : setupOs === "windows" ? "%APPDATA%\\Claude\\claude_desktop_config.json" : "~/.config/Claude/claude_desktop_config.json",
+      config: JSON.stringify({ mcpServers: { opensentry: { type: "http", url: MCP_URL, headers: { Authorization: `Bearer ${activeKey}` } } } }, null, 2),
+    },
+    cursor: {
+      label: "Cursor",
+      file: "~/.cursor/mcp.json",
+      config: JSON.stringify({ mcpServers: { opensentry: { url: MCP_URL, headers: { Authorization: `Bearer ${activeKey}` } } } }, null, 2),
+    },
+    windsurf: {
+      label: "Windsurf",
+      file: "~/.codeium/windsurf/mcp_config.json",
+      config: JSON.stringify({ mcpServers: { opensentry: { serverUrl: MCP_URL, headers: { Authorization: `Bearer ${activeKey}` } } } }, null, 2),
+    },
+  }
+
+  const autoSetupCmd = setupOs === "windows"
+    ? `irm ${base}/mcp-setup.ps1 | iex -Args '${activeKey}','${MCP_URL}'`
+    : `curl -fsSL ${base}/mcp-setup.sh | bash -s -- ${activeKey} ${MCP_URL}`
 
   const isPro = planInfo?.features?.includes("admin")
 
@@ -550,28 +579,84 @@ function McpPage() {
               <line x1="8" y1="21" x2="16" y2="21"/>
               <line x1="12" y1="17" x2="12" y2="21"/>
             </svg>
-            Connection Config
+            Connect a Client
             <svg className="mcp-collapse-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="6 9 12 15 18 9"/>
             </svg>
           </button>
           {showConfig && (
             <div className="mcp-collapse-body">
-              <p className="section-description">
-                Add this to your Claude Code settings (<code>~/.claude.json</code>) or project <code>.mcp.json</code>:
-              </p>
-              <div className="mcp-config-block">
-                <div className="mcp-config-header">
-                  <span>Claude Code / .mcp.json</span>
-                  <button className="btn btn-small btn-secondary" onClick={() => copyToClipboard(configJson(createdKey), "config")}>
-                    {copied === "config" ? "Copied!" : "Copy"}
+              {/* Client tabs */}
+              <div className="mcp-client-tabs">
+                <button className={`mcp-client-tab ${configTab === "auto" ? "active" : ""}`} onClick={() => setConfigTab("auto")}>
+                  Auto Setup
+                </button>
+                {Object.entries(clientConfigs).map(([key, c]) => (
+                  <button key={key} className={`mcp-client-tab ${configTab === key ? "active" : ""}`} onClick={() => setConfigTab(key)}>
+                    {c.label}
                   </button>
-                </div>
-                <pre className="mcp-config-code">{configJson(createdKey)}</pre>
+                ))}
               </div>
-              <p className="mcp-config-hint">
-                Or add via CLI: <code>claude mcp add --transport http opensentry {MCP_URL} --header "Authorization: Bearer osc_your_key"</code>
-              </p>
+
+              {/* Auto Setup */}
+              {configTab === "auto" && (
+                <div className="mcp-setup-auto">
+                  <p className="mcp-setup-desc">
+                    Run this command to automatically detect and configure your MCP clients:
+                  </p>
+                  <div className="mcp-os-tabs">
+                    {["linux", "macos", "windows"].map(os => (
+                      <button key={os} className={`mcp-os-tab ${setupOs === os ? "active" : ""}`} onClick={() => setSetupOs(os)}>
+                        {os === "macos" ? "macOS" : os.charAt(0).toUpperCase() + os.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mcp-config-block">
+                    <div className="mcp-config-header">
+                      <span>{setupOs === "windows" ? "PowerShell" : "Terminal"}</span>
+                      <button className="btn btn-small btn-secondary" onClick={() => copyToClipboard(autoSetupCmd, "auto")}>
+                        {copied === "auto" ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                    <pre className="mcp-config-code">{autoSetupCmd}</pre>
+                  </div>
+                  <p className="mcp-setup-note">
+                    The script will scan for installed clients (Claude Code, Claude Desktop, Cursor, Windsurf) and let you choose which to configure.
+                  </p>
+                </div>
+              )}
+
+              {/* Per-client manual config */}
+              {configTab !== "auto" && clientConfigs[configTab] && (
+                <div className="mcp-setup-manual">
+                  <p className="mcp-setup-desc">
+                    Add this to <code>{clientConfigs[configTab].file}</code>:
+                  </p>
+                  <div className="mcp-config-block">
+                    <div className="mcp-config-header">
+                      <span>{clientConfigs[configTab].label}</span>
+                      <button className="btn btn-small btn-secondary" onClick={() => copyToClipboard(clientConfigs[configTab].config, "client-config")}>
+                        {copied === "client-config" ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                    <pre className="mcp-config-code">{clientConfigs[configTab].config}</pre>
+                  </div>
+                  {clientConfigs[configTab].cli && (
+                    <div className="mcp-cli-alt">
+                      <span className="mcp-cli-label">Or via CLI:</span>
+                      <div className="mcp-config-block">
+                        <div className="mcp-config-header">
+                          <span>Terminal</span>
+                          <button className="btn btn-small btn-secondary" onClick={() => copyToClipboard(clientConfigs[configTab].cli, "cli")}>
+                            {copied === "cli" ? "Copied!" : "Copy"}
+                          </button>
+                        </div>
+                        <pre className="mcp-config-code mcp-config-code-sm">{clientConfigs[configTab].cli}</pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -2827,6 +2827,109 @@ body {
     100% { opacity: 1; transform: translateY(0); }
 }
 
+/* Client Setup Tabs */
+.mcp-client-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+}
+
+.mcp-client-tab {
+    padding: 0.5rem 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.mcp-client-tab:hover {
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.mcp-client-tab.active {
+    color: #000;
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+.mcp-os-tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.mcp-os-tab {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.mcp-os-tab:hover {
+    color: var(--text-primary);
+}
+
+.mcp-os-tab.active {
+    color: var(--accent-cyan);
+    border-color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.08);
+}
+
+.mcp-setup-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+}
+
+.mcp-setup-desc code {
+    font-size: 0.75rem;
+    background: var(--bg-secondary);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    color: var(--text-secondary);
+}
+
+.mcp-setup-note {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    line-height: 1.5;
+}
+
+.mcp-cli-alt {
+    margin-top: 1rem;
+}
+
+.mcp-cli-label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+}
+
+.mcp-config-code-sm {
+    font-size: 0.72rem !important;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 /* MCP Section (legacy - used in locked page) */
 .mcp-section {
     background: var(--bg-card);

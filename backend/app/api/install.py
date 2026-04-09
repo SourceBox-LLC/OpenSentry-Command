@@ -1,9 +1,13 @@
 """
-Install script routes for CloudNode.
+Install script routes for CloudNode and MCP client setup.
 
 Serves platform-specific install scripts so users can install with:
   Linux/macOS:  curl -fsSL https://opensentry-command.fly.dev/install.sh | bash
   Windows:      irm https://opensentry-command.fly.dev/install.ps1 | iex
+
+MCP client auto-setup:
+  Linux/macOS:  curl -fsSL <origin>/mcp-setup.sh | bash -s -- <key> <url>
+  Windows:      irm <origin>/mcp-setup.ps1 | iex -Args <key>,<url>
 """
 
 from pathlib import Path
@@ -40,4 +44,28 @@ async def install_ps1():
         content=content,
         media_type="text/plain",
         headers={"Content-Disposition": "inline; filename=install.ps1"},
+    )
+
+
+# ── MCP Client Setup Scripts ─────────────────────────
+
+@router.get("/mcp-setup.sh", response_class=PlainTextResponse)
+async def mcp_setup_sh():
+    """Serve the MCP client setup script for Linux/macOS."""
+    content = _read_script("mcp-setup.sh")
+    return PlainTextResponse(
+        content=content,
+        media_type="text/x-shellscript",
+        headers={"Content-Disposition": "inline; filename=mcp-setup.sh"},
+    )
+
+
+@router.get("/mcp-setup.ps1", response_class=PlainTextResponse)
+async def mcp_setup_ps1():
+    """Serve the MCP client setup script for Windows."""
+    content = _read_script("mcp-setup.ps1")
+    return PlainTextResponse(
+        content=content,
+        media_type="text/plain",
+        headers={"Content-Disposition": "inline; filename=mcp-setup.ps1"},
     )
