@@ -53,9 +53,8 @@ _ctx_key_name = contextvars.ContextVar("mcp_key_name", default="")
 RATE_LIMITS = {
     "pro_org": 30,
     "business_org": 120,
-    "free_org": 10,  # shouldn't happen (MCP requires Pro+), but safe default
 }
-DEFAULT_RATE_LIMIT = 10
+DEFAULT_RATE_LIMIT = 0  # Block unrecognized plans (MCP requires Pro+)
 
 
 class _RateLimiter:
@@ -138,9 +137,12 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
             db.close()
             raise ToolError("Unauthorized: invalid or revoked API key")
 
-        # Look up org plan and enforce rate limit
+        # Look up org plan and enforce access + rate limit
         plan = Setting.get(db, mcp_key.org_id, "org_plan", "free_org")
-        limit = RATE_LIMITS.get(plan, DEFAULT_RATE_LIMIT)
+        limit = RATE_LIMITS.get(plan)
+        if limit is None:
+            db.close()
+            raise ToolError("MCP requires a Pro or Business plan. Upgrade at /pricing.")
         allowed, remaining = _rate_limiter.check(key_hash, limit)
         if not allowed:
             db.close()
