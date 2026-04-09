@@ -1140,6 +1140,22 @@ body {
     color: var(--accent-green);
 }
 
+.nav-link-locked {
+    opacity: 0.7;
+    gap: 4px;
+}
+
+.nav-pro-badge {
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    line-height: 1;
+}
+
 /* Dev Mode Badge */
 .dev-mode-badge {
     display: flex;

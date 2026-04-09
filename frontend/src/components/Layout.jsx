@@ -1,12 +1,33 @@
 import { Outlet, Link, useLocation } from "react-router-dom"
-import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization } from "@clerk/clerk-react"
+import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization, useAuth } from "@clerk/clerk-react"
+import { useState, useEffect } from "react"
+import { getPlanInfo } from "../services/api"
 import ToastContainer from "./ToastContainer.jsx"
 
 function Layout() {
   const { organization, isLoaded: orgLoaded, membership } = useOrganization()
+  const { getToken } = useAuth()
   const location = useLocation()
+  const [planFeatures, setPlanFeatures] = useState([])
 
   const isAdmin = orgLoaded && membership?.role === "org:admin"
+  const hasAdminFeature = planFeatures.includes("admin")
+
+  useEffect(() => {
+    if (organization && isAdmin) {
+      loadPlanFeatures()
+    }
+  }, [organization])
+
+  const loadPlanFeatures = async () => {
+    try {
+      const token = await getToken()
+      const data = await getPlanInfo(() => Promise.resolve(token))
+      setPlanFeatures(data.features || [])
+    } catch (err) {
+      // Silently fail — nav still works, just hides admin link
+    }
+  }
 
   const isActive = (path) => location.pathname === path ? "nav-link active" : "nav-link"
 
@@ -42,9 +63,16 @@ function Layout() {
                         <Link to="/settings" className={isActive("/settings")}>
                           Settings
                         </Link>
-                        <Link to="/admin" className={isActive("/admin")}>
-                          Admin
-                        </Link>
+                        {hasAdminFeature ? (
+                          <Link to="/admin" className={isActive("/admin")}>
+                            Admin
+                          </Link>
+                        ) : (
+                          <Link to="/admin" className={`${isActive("/admin")} nav-link-locked`}>
+                            Admin
+                            <span className="nav-pro-badge">PRO</span>
+                          </Link>
+                        )}
                       </>
                     )}
                     <Link to="/pricing" className={isActive("/pricing")}>
