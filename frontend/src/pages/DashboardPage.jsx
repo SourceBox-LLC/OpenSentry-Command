@@ -105,6 +105,22 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-container">
+      {planInfo && planInfo.features?.includes("admin") && (
+        <div className={`pro-status-bar pro-status-${planInfo.plan}`}>
+          <div className="pro-status-left">
+            <span className="pro-status-badge">{planInfo.plan === "business" ? "BUSINESS" : "PRO"}</span>
+            <span className="pro-status-text">
+              {planInfo.usage.cameras} / {planInfo.limits.max_cameras >= 999 ? "\u221E" : planInfo.limits.max_cameras} cameras
+              {" \u00B7 "}
+              {planInfo.usage.nodes} / {planInfo.limits.max_nodes >= 999 ? "\u221E" : planInfo.limits.max_nodes} nodes
+              {" \u00B7 "}
+              MCP + Admin + Analytics
+            </span>
+          </div>
+          <Link to="/settings" className="pro-status-link">Manage Plan</Link>
+        </div>
+      )}
+
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-label">Active Cameras</div>

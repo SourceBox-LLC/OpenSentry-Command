@@ -10,8 +10,11 @@ function Layout() {
   const location = useLocation()
   const [planFeatures, setPlanFeatures] = useState([])
 
+  const [planName, setPlanName] = useState(null)
+
   const isAdmin = orgLoaded && membership?.role === "org:admin"
   const hasAdminFeature = planFeatures.includes("admin")
+  const isPro = planName === "pro" || planName === "business"
 
   useEffect(() => {
     if (organization && isAdmin) {
@@ -24,6 +27,7 @@ function Layout() {
       const token = await getToken()
       const data = await getPlanInfo(() => Promise.resolve(token))
       setPlanFeatures(data.features || [])
+      setPlanName(data.plan || null)
     } catch (err) {
       // Silently fail — nav still works, just hides admin link
     }
@@ -48,12 +52,19 @@ function Layout() {
             <SignedIn>
               {orgLoaded && organization && (
                 <>
-                  <OrganizationSwitcher
-                    hidePersonal
-                    afterCreateOrganizationUrl="/dashboard"
-                    afterSelectOrganizationUrl="/dashboard"
-                    createOrganizationMode="modal"
-                  />
+                  <div className="nav-org-group">
+                    <OrganizationSwitcher
+                      hidePersonal
+                      afterCreateOrganizationUrl="/dashboard"
+                      afterSelectOrganizationUrl="/dashboard"
+                      createOrganizationMode="modal"
+                    />
+                    {isPro && (
+                      <span className={`nav-plan-badge nav-plan-${planName}`}>
+                        {planName === "business" ? "BIZ" : "PRO"}
+                      </span>
+                    )}
+                  </div>
                   <nav className="nav-links">
                     <Link to="/dashboard" className={isActive("/dashboard")}>
                       Dashboard

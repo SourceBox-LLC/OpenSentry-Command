@@ -1156,6 +1156,113 @@ body {
     line-height: 1;
 }
 
+/* ── Pro Member Nav Badge ─────────────────────────────────────── */
+.nav-org-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nav-plan-badge {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    line-height: 1.2;
+    animation: pro-glow-pulse 3s ease-in-out infinite;
+}
+
+.nav-plan-pro {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.25));
+    color: #818cf8;
+    border: 1px solid rgba(129, 140, 248, 0.3);
+    text-shadow: 0 0 8px rgba(129, 140, 248, 0.4);
+}
+
+.nav-plan-business {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(236, 72, 153, 0.25));
+    color: #c084fc;
+    border: 1px solid rgba(192, 132, 252, 0.3);
+    text-shadow: 0 0 8px rgba(192, 132, 252, 0.4);
+}
+
+@keyframes pro-glow-pulse {
+    0%, 100% { box-shadow: 0 0 4px rgba(129, 140, 248, 0.15); }
+    50% { box-shadow: 0 0 12px rgba(129, 140, 248, 0.3); }
+}
+
+/* ── Dashboard Pro Status Bar ────────────────────────────────── */
+.pro-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1.25rem;
+    border-radius: 10px;
+    margin-bottom: 1.25rem;
+    border: 1px solid;
+}
+
+.pro-status-pro {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(139, 92, 246, 0.06));
+    border-color: rgba(129, 140, 248, 0.2);
+}
+
+.pro-status-business {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.06), rgba(236, 72, 153, 0.06));
+    border-color: rgba(192, 132, 252, 0.2);
+}
+
+.pro-status-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pro-status-badge {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    padding: 3px 10px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, #818cf8, #6366f1);
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.pro-status-business .pro-status-badge {
+    background: linear-gradient(135deg, #c084fc, #a855f7);
+}
+
+.pro-status-text {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.pro-status-link {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+}
+
+.pro-status-link:hover {
+    color: var(--text-primary);
+}
+
+/* ── Pro Plan Card Enhancement ───────────────────────────────── */
+.plan-badge-pro {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(139, 92, 246, 0.15));
+    color: #818cf8;
+    border: 1px solid rgba(129, 140, 248, 0.3);
+}
+
+.plan-badge-business {
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.15));
+    color: #c084fc;
+    border: 1px solid rgba(192, 132, 252, 0.3);
+}
+
 /* Dev Mode Badge */
 .dev-mode-badge {
     display: flex;
@@ -1671,6 +1778,17 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 1.5rem;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.plan-card:has(.plan-badge-pro) {
+    border-color: rgba(129, 140, 248, 0.25);
+    box-shadow: 0 0 20px rgba(129, 140, 248, 0.06);
+}
+
+.plan-card:has(.plan-badge-business) {
+    border-color: rgba(192, 132, 252, 0.25);
+    box-shadow: 0 0 20px rgba(192, 132, 252, 0.06);
 }
 
 .plan-card-header {
