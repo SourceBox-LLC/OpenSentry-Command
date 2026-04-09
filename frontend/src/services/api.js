@@ -168,3 +168,16 @@ export async function revokeMcpKey(getToken, keyId) {
     method: "DELETE"
   })
 }
+
+// MCP Activity
+export async function getMcpActivity(getToken, limit = 50) {
+  return fetchWithAuth(`/api/mcp/activity/recent?limit=${limit}`, getToken)
+}
+
+export async function getMcpSessions(getToken) {
+  return fetchWithAuth("/api/mcp/activity/sessions", getToken)
+}
+
+export async function getMcpStats(getToken) {
+  return fetchWithAuth("/api/mcp/activity/stats", getToken)
+}

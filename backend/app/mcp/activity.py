@@ -1,0 +1,173 @@
+"""
+MCP Activity Tracker — in-memory event log for real-time monitoring.
+
+Tracks every MCP tool invocation, maintains session info,
+and publishes events to SSE subscribers (the MCP dashboard).
+"""
+
+import asyncio
+import json
+import logging
+import threading
+import time
+import uuid
+from collections import deque
+from dataclasses import dataclass, field, asdict
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class McpEvent:
+    """A single MCP tool invocation event."""
+    id: str
+    timestamp: float
+    tool_name: str
+    org_id: str
+    key_name: str
+    status: str  # "started" | "completed" | "error"
+    duration_ms: Optional[float] = None
+    error: Optional[str] = None
+    args_summary: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+
+class McpActivityTracker:
+    """
+    Thread-safe in-memory tracker for MCP tool calls.
+
+    - Stores a rolling window of recent events (circular buffer).
+    - Tracks active sessions by API key name + org.
+    - Publishes events to async subscribers (SSE connections).
+    """
+
+    def __init__(self, max_events: int = 500):
+        self._events: deque[McpEvent] = deque(maxlen=max_events)
+        # {org_id: {key_name: {"last_active": float, "call_count": int, "key_id": int}}}
+        self._sessions: dict[str, dict[str, dict]] = {}
+        # {org_id: [asyncio.Queue, ...]}
+        self._subscribers: dict[str, list[asyncio.Queue]] = {}
+        self._lock = threading.Lock()
+        self._total_calls: dict[str, int] = {}  # org_id -> total call count
+
+    def log_event(self, event: McpEvent):
+        """Log a tool call event and notify subscribers."""
+        with self._lock:
+            self._events.append(event)
+
+            # Track session
+            if event.org_id not in self._sessions:
+                self._sessions[event.org_id] = {}
+            sess = self._sessions[event.org_id]
+            if event.key_name not in sess:
+                sess[event.key_name] = {"call_count": 0}
+            sess[event.key_name]["last_active"] = event.timestamp
+            sess[event.key_name]["call_count"] += 1
+
+            # Track total calls
+            self._total_calls[event.org_id] = self._total_calls.get(event.org_id, 0) + 1
+
+        # Notify SSE subscribers (non-blocking)
+        self._notify(event)
+
+    def _notify(self, event: McpEvent):
+        """Push event to all SSE subscribers for this org."""
+        queues = self._subscribers.get(event.org_id, [])
+        dead = []
+        for q in queues:
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                dead.append(q)
+        # Clean up any dead queues
+        if dead:
+            with self._lock:
+                for q in dead:
+                    try:
+                        self._subscribers[event.org_id].remove(q)
+                    except (ValueError, KeyError):
+                        pass
+
+    def subscribe(self, org_id: str) -> asyncio.Queue:
+        """Create a new SSE subscription for an org. Returns an async queue."""
+        q: asyncio.Queue = asyncio.Queue(maxsize=100)
+        with self._lock:
+            if org_id not in self._subscribers:
+                self._subscribers[org_id] = []
+            self._subscribers[org_id].append(q)
+        logger.info("[Activity] New SSE subscriber for org %s (total: %d)",
+                     org_id, len(self._subscribers[org_id]))
+        return q
+
+    def unsubscribe(self, org_id: str, q: asyncio.Queue):
+        """Remove an SSE subscription."""
+        with self._lock:
+            if org_id in self._subscribers:
+                try:
+                    self._subscribers[org_id].remove(q)
+                except ValueError:
+                    pass
+
+    def get_recent_events(self, org_id: str, limit: int = 50) -> list[McpEvent]:
+        """Get the most recent events for an org."""
+        with self._lock:
+            org_events = [e for e in self._events if e.org_id == org_id]
+            return org_events[-limit:]
+
+    def get_active_sessions(self, org_id: str, timeout: float = 300.0) -> list[dict]:
+        """
+        Get sessions that have been active within `timeout` seconds.
+        Returns list of {key_name, last_active, call_count, status}.
+        """
+        now = time.time()
+        with self._lock:
+            sessions = self._sessions.get(org_id, {})
+            result = []
+            for key_name, info in sessions.items():
+                last_active = info.get("last_active", 0)
+                age = now - last_active
+                result.append({
+                    "key_name": key_name,
+                    "last_active": last_active,
+                    "last_active_ago": round(age),
+                    "call_count": info.get("call_count", 0),
+                    "status": "active" if age < 60 else ("idle" if age < timeout else "disconnected"),
+                })
+            # Sort by most recently active
+            result.sort(key=lambda s: s["last_active"], reverse=True)
+            # Only return non-disconnected
+            return [s for s in result if s["status"] != "disconnected"]
+
+    def get_stats(self, org_id: str) -> dict:
+        """Get aggregate stats for an org."""
+        now = time.time()
+        with self._lock:
+            org_events = [e for e in self._events if e.org_id == org_id]
+            # Calls in last 60 seconds
+            recent = [e for e in org_events if now - e.timestamp < 60]
+            # Calls in last 5 minutes
+            recent_5m = [e for e in org_events if now - e.timestamp < 300]
+            # Error rate
+            errors = [e for e in org_events if e.status == "error"]
+
+            sessions = self._sessions.get(org_id, {})
+            active_count = sum(
+                1 for info in sessions.values()
+                if now - info.get("last_active", 0) < 300
+            )
+
+            return {
+                "total_calls": self._total_calls.get(org_id, 0),
+                "calls_per_min": len(recent),
+                "calls_5m": len(recent_5m),
+                "error_count": len(errors),
+                "active_clients": active_count,
+                "recent_event_count": len(org_events),
+            }
+
+
+# Singleton — imported by server.py and the activity API router
+tracker = McpActivityTracker()

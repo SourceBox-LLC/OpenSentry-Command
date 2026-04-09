@@ -10,7 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.limiter import limiter
-from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install, mcp_keys
+from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install, mcp_keys, mcp_activity
 from app.mcp.server import mcp
 
 Base.metadata.create_all(bind=engine)
@@ -68,6 +68,7 @@ app.include_router(hls.router)
 app.include_router(ws.router)
 app.include_router(install.router)
 app.include_router(mcp_keys.router)
+app.include_router(mcp_activity.router)
 
 # Mount MCP server at /mcp
 app.mount("/mcp", mcp_app)

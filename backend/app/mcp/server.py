@@ -8,8 +8,12 @@ Auth: Bearer token using org-scoped MCP API keys.
 
 import asyncio
 import base64
+import contextvars
+import functools
 import hashlib
 import logging
+import time
+import uuid as uuid_mod
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -30,8 +34,13 @@ from app.models.models import (
     StreamAccessLog,
 )
 from app.services.storage import get_storage
+from app.mcp.activity import tracker, McpEvent
 
 logger = logging.getLogger(__name__)
+
+# Context variables — set by _auth(), read by the tracking decorator
+_ctx_org_id = contextvars.ContextVar("mcp_org_id", default="")
+_ctx_key_name = contextvars.ContextVar("mcp_key_name", default="")
 
 # ---------------------------------------------------------------------------
 # MCP Server
@@ -82,6 +91,10 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         mcp_key.last_used_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         db.commit()
 
+        # Set context vars for the activity tracker
+        _ctx_org_id.set(mcp_key.org_id)
+        _ctx_key_name.set(mcp_key.name)
+
         return mcp_key.org_id, db
     except ToolError:
         raise
@@ -97,6 +110,102 @@ def _auth():
 
 
 # ---------------------------------------------------------------------------
+# Activity-tracking decorator — wraps every MCP tool to log calls
+# ---------------------------------------------------------------------------
+
+def _summarize_args(kwargs: dict) -> str:
+    """Create a short summary of tool arguments for the activity log."""
+    parts = []
+    for k, v in kwargs.items():
+        if v is not None:
+            sv = str(v)
+            if len(sv) > 30:
+                sv = sv[:27] + "..."
+            parts.append(f"{k}={sv}")
+    return ", ".join(parts) if parts else ""
+
+
+def tracked(func):
+    """Decorator that logs MCP tool calls to the activity tracker."""
+    tool_name = func.__name__
+
+    if asyncio.iscoroutinefunction(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            event_id = str(uuid_mod.uuid4())[:8]
+            start = time.time()
+            args_summary = _summarize_args(kwargs)
+            try:
+                result = await func(*args, **kwargs)
+                org_id = _ctx_org_id.get("")
+                key_name = _ctx_key_name.get("")
+                tracker.log_event(McpEvent(
+                    id=event_id,
+                    timestamp=start,
+                    tool_name=tool_name,
+                    org_id=org_id,
+                    key_name=key_name,
+                    status="completed",
+                    duration_ms=round((time.time() - start) * 1000),
+                    args_summary=args_summary or None,
+                ))
+                return result
+            except Exception as e:
+                org_id = _ctx_org_id.get("")
+                key_name = _ctx_key_name.get("")
+                tracker.log_event(McpEvent(
+                    id=event_id,
+                    timestamp=start,
+                    tool_name=tool_name,
+                    org_id=org_id,
+                    key_name=key_name,
+                    status="error",
+                    duration_ms=round((time.time() - start) * 1000),
+                    error=str(e)[:200],
+                    args_summary=args_summary or None,
+                ))
+                raise
+        return wrapper
+    else:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            event_id = str(uuid_mod.uuid4())[:8]
+            start = time.time()
+            args_summary = _summarize_args(kwargs)
+            try:
+                result = func(*args, **kwargs)
+                org_id = _ctx_org_id.get("")
+                key_name = _ctx_key_name.get("")
+                tracker.log_event(McpEvent(
+                    id=event_id,
+                    timestamp=start,
+                    tool_name=tool_name,
+                    org_id=org_id,
+                    key_name=key_name,
+                    status="completed",
+                    duration_ms=round((time.time() - start) * 1000),
+                    args_summary=args_summary or None,
+                ))
+                return result
+            except Exception as e:
+                org_id = _ctx_org_id.get("")
+                key_name = _ctx_key_name.get("")
+                tracker.log_event(McpEvent(
+                    id=event_id,
+                    timestamp=start,
+                    tool_name=tool_name,
+                    org_id=org_id,
+                    key_name=key_name,
+                    status="error",
+                    duration_ms=round((time.time() - start) * 1000),
+                    error=str(e)[:200],
+                    args_summary=args_summary or None,
+                ))
+                raise
+        return wrapper
+
+
+# ---------------------------------------------------------------------------
 # Camera Tools
 # ---------------------------------------------------------------------------
 
@@ -105,6 +214,7 @@ def _auth():
     description="List all cameras in the organization with their current status, codec info, and group assignment.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def list_cameras() -> list[dict]:
     org_id, db = _auth()
     try:
@@ -119,6 +229,7 @@ def list_cameras() -> list[dict]:
     description="Get detailed information about a specific camera by its camera_id.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def get_camera(
     camera_id: Annotated[str, "The camera_id string (e.g. 'node1-video0')"],
 ) -> dict:
@@ -145,6 +256,7 @@ def get_camera(
     ),
     annotations={"readOnlyHint": True},
 )
+@tracked
 def get_stream_url(
     camera_id: Annotated[str, "The camera_id to get the stream URL for"],
 ) -> dict:
@@ -183,6 +295,7 @@ def get_stream_url(
     ),
     annotations={"readOnlyHint": True},
 )
+@tracked
 async def view_camera(
     camera_id: Annotated[str, "The camera_id to view (e.g. 'node1-video0')"],
 ) -> Image:
@@ -235,6 +348,7 @@ async def view_camera(
     ),
     annotations={"readOnlyHint": True},
 )
+@tracked
 async def watch_camera(
     camera_id: Annotated[str, "The camera_id to watch"],
     count: Annotated[int, Field(description="Number of snapshots to take", ge=2, le=10)] = 3,
@@ -294,6 +408,7 @@ async def watch_camera(
     description="List all camera groups in the organization.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def list_camera_groups() -> list[dict]:
     org_id, db = _auth()
     try:
@@ -307,6 +422,7 @@ def list_camera_groups() -> list[dict]:
     name="create_camera_group",
     description="Create a new camera group for organizing cameras.",
 )
+@tracked
 def create_camera_group(
     name: Annotated[str, "Name for the new camera group"],
     color: Annotated[str, Field(description="Hex color code", default="#22c55e")] = "#22c55e",
@@ -326,6 +442,7 @@ def create_camera_group(
     name="assign_camera_to_group",
     description="Assign a camera to a camera group, or remove it from its current group.",
 )
+@tracked
 def assign_camera_to_group(
     camera_id: Annotated[str, "The camera_id to assign"],
     group_id: Annotated[int | None, "Group ID to assign to, or null to unassign"] = None,
@@ -361,6 +478,7 @@ def assign_camera_to_group(
     description="List all camera nodes in the organization with status and camera count.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def list_nodes() -> list[dict]:
     org_id, db = _auth()
     try:
@@ -375,6 +493,7 @@ def list_nodes() -> list[dict]:
     description="Get detailed information about a specific camera node.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def get_node(
     node_id: Annotated[str, "The node_id string (8-char UUID prefix)"],
 ) -> dict:
@@ -401,6 +520,7 @@ def get_node(
     description="Get current recording settings: continuous 24/7 mode, scheduled recording, and schedule times.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def get_recording_settings() -> dict:
     org_id, db = _auth()
     try:
@@ -418,6 +538,7 @@ def get_recording_settings() -> dict:
     name="update_recording_settings",
     description="Update recording settings. You can enable/disable continuous 24/7 recording or scheduled recording with specific start/end times.",
 )
+@tracked
 def update_recording_settings(
     continuous_24_7: Annotated[bool | None, "Enable continuous 24/7 recording"] = None,
     scheduled_recording: Annotated[bool | None, "Enable scheduled recording"] = None,
@@ -453,6 +574,7 @@ def update_recording_settings(
     description="Get recent stream access logs showing who watched which camera and when.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def get_stream_logs(
     camera_id: Annotated[str | None, "Filter by camera_id"] = None,
     limit: Annotated[int, Field(description="Max results", ge=1, le=500)] = 50,
@@ -473,6 +595,7 @@ def get_stream_logs(
     description="Get aggregated stream access statistics: total views, views by camera, views by user, views by day.",
     annotations={"readOnlyHint": True},
 )
+@tracked
 def get_stream_stats(
     days: Annotated[int, Field(description="Number of days to look back", ge=1, le=30)] = 7,
 ) -> dict:
@@ -533,6 +656,7 @@ def get_stream_stats(
     ),
     annotations={"readOnlyHint": True},
 )
+@tracked
 def get_system_status() -> dict:
     org_id, db = _auth()
     try:
