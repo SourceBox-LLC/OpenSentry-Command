@@ -1,16 +1,15 @@
 from sqlalchemy import create_engine, event
-from sqlalchemy.pool import QueuePool
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
+# NullPool: each request gets a fresh connection and releases it immediately.
+# This is the recommended approach for SQLite in async/high-concurrency apps —
+# avoids pool exhaustion when HLS segment uploads create bursts of 15+ concurrent requests.
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args={"check_same_thread": False, "timeout": 30},
-    poolclass=QueuePool,
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_pre_ping=True,
+    poolclass=NullPool,
 )
 
 
