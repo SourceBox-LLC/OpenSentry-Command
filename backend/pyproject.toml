@@ -18,4 +18,5 @@ dependencies = [
     "boto3>=1.35.0",
     "slowapi>=0.1.9",
     "websockets>=12.0",
+    "fastmcp>=3.0.0",
 ]

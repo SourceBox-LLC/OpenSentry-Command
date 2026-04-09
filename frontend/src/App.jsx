@@ -15,6 +15,7 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage.jsx"))
 const AdminPage = lazy(() => import("./pages/AdminPage.jsx"))
 const TestHlsPage = lazy(() => import("./pages/TestHlsPage.jsx"))
 const PricingPage = lazy(() => import("./pages/PricingPage.jsx"))
+const McpPage = lazy(() => import("./pages/McpPage.jsx"))
 
 function RequireOrg({ children }) {
   const { organization, isLoaded } = useOrganization()
@@ -141,6 +142,14 @@ function App() {
             element={
               <RequireAdmin>
                 <AdminPage />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="/mcp"
+            element={
+              <RequireAdmin>
+                <McpPage />
               </RequireAdmin>
             }
           />

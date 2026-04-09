@@ -25,6 +25,12 @@ const UPGRADE_MESSAGES = {
     description: "Advanced management tools like log wiping and full resets are Pro features.",
     benefit: "Upgrade for complete control over your organization data.",
   },
+  mcp: {
+    title: "MCP Integration",
+    icon: "</>",
+    description: "MCP lets AI tools like Claude Code directly control your cameras, nodes, and settings.",
+    benefit: "Upgrade to connect your security system to AI-powered workflows.",
+  },
 }
 
 const PLAN_COMPARISON = [
@@ -33,6 +39,7 @@ const PLAN_COMPARISON = [
   { label: "Admin Dashboard", free: false, pro: true, business: true },
   { label: "Stream Analytics", free: false, pro: true, business: true },
   { label: "Danger Zone Tools", free: false, pro: true, business: true },
+  { label: "MCP Integration", free: false, pro: true, business: true },
   { label: "Priority Support", free: false, pro: false, business: true },
 ]
 

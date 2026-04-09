@@ -75,6 +75,9 @@ function Layout() {
                         )}
                       </>
                     )}
+                    <Link to="/mcp" className={isActive("/mcp")}>
+                      MCP
+                    </Link>
                     <Link to="/pricing" className={isActive("/pricing")}>
                       Pricing
                     </Link>

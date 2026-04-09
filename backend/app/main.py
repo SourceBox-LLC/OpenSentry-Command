@@ -10,7 +10,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.core.limiter import limiter
-from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install
+from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install, mcp_keys
+from app.mcp.server import mcp
 
 Base.metadata.create_all(bind=engine)
 
@@ -22,10 +23,14 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE stream_access_logs ADD COLUMN user_email VARCHAR(255) DEFAULT ''"))
         conn.commit()
 
+# Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
+mcp_app = mcp.http_app(path="/", stateless_http=True)
+
 app = FastAPI(
     title="OpenSentry Command Center API",
     description="FastAPI backend with Clerk authentication for OpenSentry Command Center",
     version="2.0.0",
+    lifespan=mcp_app.lifespan,  # Required for MCP session manager
 )
 
 app.state.limiter = limiter
@@ -62,6 +67,10 @@ app.include_router(audit.router)
 app.include_router(hls.router)
 app.include_router(ws.router)
 app.include_router(install.router)
+app.include_router(mcp_keys.router)
+
+# Mount MCP server at /mcp
+app.mount("/mcp", mcp_app)
 
 
 @app.on_event("startup")
@@ -82,7 +91,7 @@ if static_dir.exists():
 
     @app.middleware("http")
     async def spa_middleware(request: Request, call_next):
-        if request.url.path.startswith(("/api", "/ws", "/install.")):
+        if request.url.path.startswith(("/api", "/ws", "/mcp", "/install.")):
             return await call_next(request)
 
         static_file = static_dir / request.url.path.lstrip("/")

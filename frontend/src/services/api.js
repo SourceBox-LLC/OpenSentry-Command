@@ -151,3 +151,20 @@ export async function fullReset(getToken) {
     method: "POST"
   })
 }
+
+// MCP API Keys
+export async function getMcpKeys(getToken) {
+  return fetchWithAuth("/api/mcp/keys", getToken)
+}
+
+export async function createMcpKey(getToken, name) {
+  return fetchWithAuth(`/api/mcp/keys?name=${encodeURIComponent(name)}`, getToken, {
+    method: "POST"
+  })
+}
+
+export async function revokeMcpKey(getToken, keyId) {
+  return fetchWithAuth(`/api/mcp/keys/${keyId}`, getToken, {
+    method: "DELETE"
+  })
+}

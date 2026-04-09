@@ -1,0 +1,100 @@
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    response = await self.dispatch_func(request, call_next)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/app/main.py", line 86, in spa_middleware
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return await call_next(request)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    raise app_exc from app_exc.__cause__ or app_exc.__context__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await self.app(scope, receive_or_disconnect, send_no_error)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await self.app(scope, receive, send)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    with recv_stream, send_stream, collapse_excgroups():
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]                                   ^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    self.gen.throw(value)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    raise exc
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    response = await self.dispatch_func(request, call_next)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/slowapi/middleware.py", line 136, in dispatch
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    response = await call_next(request)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]               ^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    raise app_exc from app_exc.__cause__ or app_exc.__context__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await self.app(scope, receive_or_disconnect, send_no_error)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    raise exc
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await app(scope, receive, sender)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await self.app(scope, receive, send)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await self.middleware_stack(scope, receive, send)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 680, in app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await route.handle(scope, receive, send)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await self.app(scope, receive, send)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    raise exc
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    await app(scope, receive, sender)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    response = await f(request)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]               ^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 674, in app
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    raw_response = await run_endpoint_function(
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 328, in run_endpoint_function
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return await dependant.call(**values)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/app/api/hls.py", line 279, in update_hls_playlist
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    node = db.query(CameraNode).filter_by(api_key_hash=api_key_hash).first()
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2759, in first
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return self.limit(1)._iter().first()  # type: ignore
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2857, in _iter
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]                                                  ^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2351, in execute
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return self._execute_internal(
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2239, in _execute_internal
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    conn = self._connection_for_bind(bind)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2108, in _connection_for_bind
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return trans._connection_for_bind(engine, execution_options)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "<string>", line 2, in _connection_for_bind
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    ret_value = fn(self, *arg, **kw)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]                ^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 1187, in _connection_for_bind
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    conn = bind.connect()
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3293, in connect
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return self._connection_cls(self)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 143, in __init__
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    self._dbapi_connection = engine.raw_connection()
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]                             ^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 3317, in raw_connection
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return self.pool.connect()
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/pool/base.py", line 448, in connect
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    return _ConnectionFairy._checkout(self)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]    |     ret_value = fn(self, *arg, **kw)
+[2m2026-04-09T00:55:42Z[0m app[91854325f52398] [32msjc[0m [[34minfo[0m]  File "/app/.venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2108, in _connection_for_bind
+[2merror.message=[0m"could not find a good candidate within 40 attempts at load balancing. last error: [PR01] no known healthy instances found for route tcp/443. (hint: is your app shut down? is there an ongoing deployment with a volume or are you using the 'immediate' strategy? have your app's instances all reached their hard limit?)" [2m2026-04-09T00:56:26Z[0m proxy [32msjc[0m [[31merror[0m][2mrequest.url=[0m"/ws/node?api_key=323d7c2e-a437-47b3-87ad-db9183c54780&node_id=d211c9cc" 
+[2merror.message=[0m"could not find a good candidate within 40 attempts at load balancing. last error: [PR01] no known healthy instances found for route tcp/443. (hint: is your app shut down? is there an ongoing deployment with a volume or are you using the 'immediate' strategy? have your app's instances all reached their hard limit?)" [2m2026-04-09T00:56:43Z[0m proxy [32msjc[0m [[31merror[0m][2mrequest.url=[0m"https://opensentry-command.fly.dev/" 
+[2merror.message=[0m"could not find a good candidate within 40 attempts at load balancing. last error: [PR01] no known healthy instances found for route tcp/443. (hint: is your app shut down? is there an ongoing deployment with a volume or are you using the 'immediate' strategy? have your app's instances all reached their hard limit?)" [2m2026-04-09T00:57:07Z[0m proxy [32msjc[0m [[31merror[0m][2mrequest.url=[0m"/ws/node?api_key=323d7c2e-a437-47b3-87ad-db9183c54780&node_id=d211c9cc" 

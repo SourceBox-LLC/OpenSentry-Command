@@ -209,6 +209,27 @@ class StreamAccessLog(Base):
         }
 
 
+class McpApiKey(Base):
+    __tablename__ = "mcp_api_keys"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    key_hash = Column(String(128), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, nullable=True)
+    revoked = Column(Boolean, default=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+            "revoked": self.revoked,
+        }
+
+
 class PendingUpload(Base):
     __tablename__ = "pending_uploads"
 
