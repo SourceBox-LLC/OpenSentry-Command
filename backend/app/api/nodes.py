@@ -1,7 +1,7 @@
 import hashlib
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -85,12 +85,12 @@ async def register_node(
         existing_node.local_ip = data.local_ip or existing_node.local_ip
         existing_node.http_port = data.http_port or existing_node.http_port
         existing_node.status = "online"
-        existing_node.last_seen = datetime.utcnow()
+        existing_node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
 
         if data.video_codec:
             existing_node.video_codec = data.video_codec
             existing_node.audio_codec = data.audio_codec
-            existing_node.codec_detected_at = datetime.utcnow()
+            existing_node.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
 
         # Enforce camera cap: count existing org cameras vs plan limit
         org_id = existing_node.org_id
@@ -122,7 +122,7 @@ async def register_node(
             if existing_cam:
                 logger.debug("Updating existing camera %s", camera_id)
                 existing_cam.name = cam_data.name or existing_cam.name
-                existing_cam.last_seen = datetime.utcnow()
+                existing_cam.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
                 existing_cam.status = "online"
                 if data.video_codec:
                     existing_cam.video_codec = data.video_codec
@@ -148,10 +148,10 @@ async def register_node(
                     if cam_data.capabilities
                     else "streaming",
                     status="online",
-                    last_seen=datetime.utcnow(),
+                    last_seen=datetime.now(tz=timezone.utc).replace(tzinfo=None),
                     video_codec=data.video_codec,
                     audio_codec=data.audio_codec,
-                    codec_detected_at=datetime.utcnow() if data.video_codec else None,
+                    codec_detected_at=datetime.now(tz=timezone.utc).replace(tzinfo=None) if data.video_codec else None,
                 )
                 db.add(new_cam)
                 new_camera_count += 1
@@ -217,7 +217,7 @@ async def node_heartbeat(
         raise HTTPException(status_code=403, detail="Invalid API key")
 
     node.status = "online"
-    node.last_seen = datetime.utcnow()
+    node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
     node.local_ip = data.local_ip or node.local_ip
 
     camera_updates = data.cameras or []
@@ -228,7 +228,7 @@ async def node_heartbeat(
             Camera.node_id == node.id,
         ).all()
         cam_map = {c.camera_id: c for c in cams}
-        now = datetime.utcnow()
+        now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         for cam_status in camera_updates:
             cam = cam_map.get(cam_status.camera_id)
             if cam:
@@ -237,7 +237,7 @@ async def node_heartbeat(
 
     db.commit()
 
-    return {"success": True, "timestamp": datetime.utcnow().isoformat()}
+    return {"success": True, "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat()}
 
 
 @router.get("")
@@ -402,7 +402,7 @@ async def rotate_api_key(
 
     new_api_key = str(uuid.uuid4())
     node.api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
-    node.key_rotated_at = datetime.utcnow()
+    node.key_rotated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
     db.commit()
 
     return {

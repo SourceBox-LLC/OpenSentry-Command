@@ -27,10 +27,11 @@ function LandingPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const base = window.location.origin
   const installCommands = {
-    linux: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
-    macos: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
-    windows: 'irm https://opensentry-command.fly.dev/install.ps1 | iex',
+    linux: `curl -fsSL ${base}/install.sh | bash`,
+    macos: `curl -fsSL ${base}/install.sh | bash`,
+    windows: `irm ${base}/install.ps1 | iex`,
   }
 
   return (
@@ -467,7 +468,7 @@ function LandingPage() {
   "mcpServers": {
     "opensentry": {
       "type": "http",
-      "url": "https://opensentry-command.fly.dev/mcp",
+      "url": "${base}/mcp",
       "headers": {
         "Authorization": "Bearer osc_..."
       }

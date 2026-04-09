@@ -18,10 +18,11 @@ function DocsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const base = window.location.origin
   const installCommands = {
-    linux: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
-    macos: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
-    windows: 'irm https://opensentry-command.fly.dev/install.ps1 | iex',
+    linux: `curl -fsSL ${base}/install.sh | bash`,
+    macos: `curl -fsSL ${base}/install.sh | bash`,
+    windows: `irm ${base}/install.ps1 | iex`,
   }
 
   const OsTabs = ({ id }) => (
@@ -258,7 +259,7 @@ function DocsPage() {
   "mcpServers": {
     "opensentry": {
       "type": "http",
-      "url": "https://opensentry-command.fly.dev/mcp",
+      "url": "${base}/mcp",
       "headers": {
         "Authorization": "Bearer osc_your_key_here"
       }
@@ -269,7 +270,7 @@ function DocsPage() {
   "mcpServers": {
     "opensentry": {
       "type": "http",
-      "url": "https://opensentry-command.fly.dev/mcp",
+      "url": "${base}/mcp",
       "headers": {
         "Authorization": "Bearer osc_your_key_here"
       }
@@ -279,8 +280,8 @@ function DocsPage() {
                   </div>
                   <p>Or via CLI:</p>
                   <div className="docs-code-block">
-                    <code>claude mcp add --transport http opensentry https://opensentry-command.fly.dev/mcp --header "Authorization: Bearer osc_your_key"</code>
-                    <button className="docs-copy-btn" onClick={() => copyToClipboard('claude mcp add --transport http opensentry https://opensentry-command.fly.dev/mcp --header "Authorization: Bearer osc_your_key"')}>Copy</button>
+                    <code>{`claude mcp add --transport http opensentry ${base}/mcp --header "Authorization: Bearer osc_your_key"`}</code>
+                    <button className="docs-copy-btn" onClick={() => copyToClipboard(`claude mcp add --transport http opensentry ${base}/mcp --header "Authorization: Bearer osc_your_key"`)}>Copy</button>
                   </div>
                 </div>
               </div>

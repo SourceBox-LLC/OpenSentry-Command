@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -406,13 +406,13 @@ async def report_camera_codec(
     # Update camera codec fields
     camera.video_codec = video_codec
     camera.audio_codec = audio_codec or "mp4a.40.2"  # Default to AAC-LC
-    camera.codec_detected_at = datetime.utcnow()
+    camera.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
 
     # Also update node codec if this is the first camera to detect
     if node and not node.video_codec:
         node.video_codec = video_codec
         node.audio_codec = camera.audio_codec
-        node.codec_detected_at = datetime.utcnow()
+        node.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         logger.info(
             "Updated node %s codec: video=%s, audio=%s", node.node_id, video_codec, camera.audio_codec
         )

@@ -25,7 +25,7 @@ class Camera(Base):
     group_id = Column(Integer, ForeignKey("camera_groups.id"), nullable=True)
     last_seen = Column(DateTime)
     status = Column(String(20), default="offline")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
 
     # Codec detection fields
     video_codec = Column(String(50), nullable=True)  # e.g., "avc1.42e01e"
@@ -41,7 +41,7 @@ class Camera(Base):
         If no heartbeat in 90s (3 missed), the camera is offline."""
         if not self.last_seen or self.status == "offline":
             return "offline"
-        age = datetime.utcnow() - self.last_seen
+        age = datetime.now(tz=timezone.utc).replace(tzinfo=None) - self.last_seen
         if age > timedelta(seconds=90):
             return "offline"
         return self.status
@@ -66,7 +66,7 @@ class CameraGroup(Base):
     name = Column(String(100), nullable=False)
     color = Column(String(7), default="#22c55e")
     icon = Column(String(10), default="📁")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
 
     cameras = relationship("Camera", back_populates="group")
 
@@ -87,7 +87,7 @@ class Setting(Base):
     org_id = Column(String(100), nullable=False, index=True)
     key = Column(String(100), nullable=False, index=True)
     value = Column(Text)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
 
     @staticmethod
     def get(db, org_id: str, key: str, default: str = None) -> str:
@@ -111,7 +111,7 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True)
     org_id = Column(String(100), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
     event = Column(String(50), nullable=False, index=True)
     ip_address = Column(String(45))
     username = Column(String(80))
@@ -143,7 +143,7 @@ class CameraNode(Base):
     status = Column(String(20), default="offline")
     last_seen = Column(DateTime)
     key_rotated_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
     upload_count = Column(Integer, default=0)
     video_codec = Column(String(50), nullable=True)
     audio_codec = Column(String(50), nullable=True)
@@ -159,7 +159,7 @@ class CameraNode(Base):
         If no heartbeat in 90s (3 missed), the node is offline."""
         if not self.last_seen or self.status in ("offline", "pending"):
             return self.status or "offline"
-        age = datetime.utcnow() - self.last_seen
+        age = datetime.now(tz=timezone.utc).replace(tzinfo=None) - self.last_seen
         if age > timedelta(seconds=90):
             return "offline"
         return self.status
@@ -194,7 +194,7 @@ class StreamAccessLog(Base):
     node_id = Column(String(100), nullable=False)
     ip_address = Column(String(45))
     user_agent = Column(String(500))
-    accessed_at = Column(DateTime, default=datetime.utcnow, index=True)
+    accessed_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
 
     def to_dict(self):
         return {
@@ -216,7 +216,7 @@ class McpApiKey(Base):
     org_id = Column(String(100), nullable=False, index=True)
     key_hash = Column(String(128), nullable=False, unique=True)
     name = Column(String(100), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
     last_used_at = Column(DateTime, nullable=True)
     revoked = Column(Boolean, default=False)
 
@@ -240,7 +240,7 @@ class PendingUpload(Base):
     node_id = Column(String(100), nullable=False)
     s3_key = Column(String(500), nullable=False)
     expected_checksum = Column(String(128), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
     expires_at = Column(DateTime, nullable=False, index=True)
     completed = Column(Boolean, default=False)
 

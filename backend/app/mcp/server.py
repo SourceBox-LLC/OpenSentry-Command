@@ -8,7 +8,7 @@ Auth: Bearer token using org-scoped MCP API keys.
 
 import hashlib
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -26,7 +26,7 @@ from app.models.models import (
     Setting,
     StreamAccessLog,
 )
-from app.services.storage import TigrisStorage
+from app.services.storage import get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
             raise ToolError("Unauthorized: invalid or revoked API key")
 
         # Touch last_used_at
-        mcp_key.last_used_at = datetime.utcnow()
+        mcp_key.last_used_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         db.commit()
 
         return mcp_key.org_id, db
@@ -154,7 +154,7 @@ def get_stream_url(
         if not cam:
             raise ToolError(f"Camera '{camera_id}' not found")
 
-        storage = TigrisStorage()
+        storage = get_storage()
         url = storage.generate_stream_url(camera_id, org_id)
         return {
             "camera_id": camera_id,
@@ -361,7 +361,7 @@ def get_stream_stats(
     try:
         from sqlalchemy import func
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=days)
         base = db.query(StreamAccessLog).filter(
             StreamAccessLog.org_id == org_id,
             StreamAccessLog.accessed_at >= cutoff,

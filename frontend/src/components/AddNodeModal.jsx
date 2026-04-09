@@ -37,10 +37,11 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
     }
   }
 
+  const base = window.location.origin
   const installCommands = {
-    linux: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
-    macos: 'curl -fsSL https://opensentry-command.fly.dev/install.sh | bash',
-    windows: 'irm https://opensentry-command.fly.dev/install.ps1 | iex',
+    linux: `curl -fsSL ${base}/install.sh | bash`,
+    macos: `curl -fsSL ${base}/install.sh | bash`,
+    windows: `irm ${base}/install.ps1 | iex`,
   }
 
   const handleCopy = (text) => {

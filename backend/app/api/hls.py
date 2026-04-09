@@ -72,7 +72,7 @@ def _maybe_log_access(
     _last_access_logged[key] = now
 
     try:
-        from datetime import datetime
+        from datetime import datetime, timezone
         log_entry = StreamAccessLog(
             user_id=user_id,
             user_email=user_email,
@@ -81,7 +81,7 @@ def _maybe_log_access(
             node_id=node_id,
             ip_address=ip_address,
             user_agent=user_agent,
-            accessed_at=datetime.utcnow(),
+            accessed_at=datetime.now(tz=timezone.utc).replace(tzinfo=None),
         )
         db.add(log_entry)
         db.commit()

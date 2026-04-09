@@ -22,7 +22,7 @@ import hashlib
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
@@ -154,7 +154,7 @@ async def node_websocket(
                 await ws.send_json({
                     "type": "ack",
                     "id": data.get("id"),
-                    "payload": {"timestamp": datetime.utcnow().isoformat()},
+                    "payload": {"timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat()},
                 })
 
             elif msg_type == "command_result":
@@ -189,7 +189,7 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
             return
 
         node.status = "online"
-        node.last_seen = datetime.utcnow()
+        node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
 
         local_ip = payload.get("local_ip")
         if local_ip:
@@ -204,7 +204,7 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
                     Camera.node_id == node_db_id,
                 ).all()
                 cam_map = {c.camera_id: c for c in cams}
-                now = datetime.utcnow()
+                now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
                 for cam_data in cameras:
                     cam = cam_map.get(cam_data.get("camera_id"))
                     if cam:
