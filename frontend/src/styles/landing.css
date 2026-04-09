@@ -336,6 +336,11 @@
   gap: 1.5rem;
 }
 
+/* Center lone card on last row (1 orphan: positions 1,4,7,10…) */
+.landing-features-grid > .landing-feature-card:last-child:nth-child(3n+1) {
+  grid-column: 2;
+}
+
 .landing-feature-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -1442,6 +1447,13 @@
   
   .landing-features-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Center lone card on last row in 2-col layout */
+  .landing-features-grid > .landing-feature-card:last-child:nth-child(2n+1) {
+    grid-column: 1 / -1;
+    max-width: 50%;
+    justify-self: center;
   }
   
   .landing-arch-grid {
