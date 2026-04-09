@@ -5,12 +5,15 @@ Users generate keys on the /mcp page; keys are stored hashed (SHA-256).
 
 import hashlib
 import secrets
+import time
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
 from app.core.database import get_db
+from app.mcp.activity import McpEvent, tracker
 from app.models.models import McpApiKey
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
@@ -21,6 +24,23 @@ KEY_PREFIX = "osc_"
 def _generate_key() -> str:
     """Generate a random MCP API key: osc_ + 32 hex chars."""
     return KEY_PREFIX + secrets.token_hex(16)
+
+
+def _log_key_event(
+    org_id: str, tool_name: str, key_name: str, user: AuthUser
+):
+    """Log a key management event to the MCP activity tracker."""
+    admin_label = user.email or user.username or user.user_id[:12]
+    tracker.log_event(McpEvent(
+        id=str(uuid.uuid4()),
+        timestamp=time.time(),
+        tool_name=tool_name,
+        org_id=org_id,
+        key_name=key_name,
+        status="completed",
+        duration_ms=None,
+        args_summary=f"by {admin_label}",
+    ))
 
 
 @router.post("/keys")
@@ -41,6 +61,8 @@ async def create_mcp_key(
     db.add(mcp_key)
     db.commit()
     db.refresh(mcp_key)
+
+    _log_key_event(user.org_id, "key_created", name, user)
 
     return {
         "id": mcp_key.id,
@@ -83,4 +105,7 @@ async def revoke_mcp_key(
 
     mcp_key.revoked = True
     db.commit()
+
+    _log_key_event(user.org_id, "key_revoked", mcp_key.name, user)
+
     return {"success": True, "revoked": key_id}

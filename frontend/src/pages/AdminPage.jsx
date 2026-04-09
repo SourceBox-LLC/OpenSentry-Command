@@ -441,18 +441,29 @@ function AdminPage() {
               onChange={(e) => handleMcpFilterChange("tool_name", e.target.value)}
             >
               <option value="">All Tools</option>
-              <option value="view_camera">view_camera</option>
-              <option value="watch_camera">watch_camera</option>
-              <option value="list_cameras">list_cameras</option>
-              <option value="get_camera">get_camera</option>
-              <option value="get_stream_url">get_stream_url</option>
-              <option value="list_nodes">list_nodes</option>
-              <option value="get_node">get_node</option>
-              <option value="list_camera_groups">list_camera_groups</option>
-              <option value="get_recording_settings">get_recording_settings</option>
-              <option value="get_stream_logs">get_stream_logs</option>
-              <option value="get_stream_stats">get_stream_stats</option>
-              <option value="get_system_status">get_system_status</option>
+              <optgroup label="Key Management">
+                <option value="key_created">key_created (MCP)</option>
+                <option value="key_revoked">key_revoked (MCP)</option>
+                <option value="node_key_created">node_key_created</option>
+                <option value="node_key_rotated">node_key_rotated</option>
+                <option value="node_deleted">node_deleted</option>
+              </optgroup>
+              <optgroup label="Camera Tools">
+                <option value="view_camera">view_camera</option>
+                <option value="watch_camera">watch_camera</option>
+                <option value="list_cameras">list_cameras</option>
+                <option value="get_camera">get_camera</option>
+                <option value="get_stream_url">get_stream_url</option>
+              </optgroup>
+              <optgroup label="System Tools">
+                <option value="list_nodes">list_nodes</option>
+                <option value="get_node">get_node</option>
+                <option value="list_camera_groups">list_camera_groups</option>
+                <option value="get_recording_settings">get_recording_settings</option>
+                <option value="get_stream_logs">get_stream_logs</option>
+                <option value="get_stream_stats">get_stream_stats</option>
+                <option value="get_system_status">get_system_status</option>
+              </optgroup>
             </select>
           </div>
 
@@ -513,24 +524,44 @@ function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mcpLogs.map(log => (
-                    <tr key={log.id} className={log.status === "error" ? "row-error" : ""}>
-                      <td className="timestamp">
-                        {new Date(log.timestamp).toLocaleString()}
-                      </td>
-                      <td><code>{log.tool_name}</code></td>
-                      <td>{log.key_name}</td>
-                      <td>
-                        <span className={`status-badge status-${log.status}`}>
-                          {log.status}
-                        </span>
-                      </td>
-                      <td>{log.duration_ms != null ? `${log.duration_ms}ms` : "—"}</td>
-                      <td className="details-cell">
-                        {log.error || log.args_summary || "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {mcpLogs.map(log => {
+                    const KEY_EVENT_LABELS = {
+                      key_created: "MCP Key Created",
+                      key_revoked: "MCP Key Revoked",
+                      node_key_created: "Node Key Created",
+                      node_key_rotated: "Node Key Rotated",
+                      node_deleted: "Node Deleted",
+                    }
+                    const keyLabel = KEY_EVENT_LABELS[log.tool_name]
+                    const isKeyEvent = !!keyLabel
+                    const isDestructive = log.tool_name === "key_revoked" || log.tool_name === "node_deleted"
+                    return (
+                      <tr key={log.id} className={log.status === "error" ? "row-error" : isKeyEvent ? "row-admin" : ""}>
+                        <td className="timestamp">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </td>
+                        <td>
+                          {isKeyEvent ? (
+                            <span className={`status-badge status-${isDestructive ? "key-revoked" : "key-created"}`}>
+                              {keyLabel}
+                            </span>
+                          ) : (
+                            <code>{log.tool_name}</code>
+                          )}
+                        </td>
+                        <td>{log.key_name}</td>
+                        <td>
+                          <span className={`status-badge status-${log.status}`}>
+                            {log.status}
+                          </span>
+                        </td>
+                        <td>{log.duration_ms != null ? `${log.duration_ms}ms` : "—"}</td>
+                        <td className="details-cell">
+                          {log.error || log.args_summary || "—"}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

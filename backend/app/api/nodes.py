@@ -1,6 +1,7 @@
 import hashlib
 import logging
-import uuid
+import time
+import uuid as uuid_mod
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_display_name
+from app.mcp.activity import McpEvent, tracker
 from app.models.models import CameraNode, Camera
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
 from app.services.storage import get_storage
@@ -16,6 +18,23 @@ from app.services.storage import get_storage
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
+
+
+def _log_key_event(
+    org_id: str, tool_name: str, key_name: str, user: AuthUser,
+):
+    """Log a key management event to the MCP activity tracker."""
+    admin_label = user.email or user.username or user.user_id[:12]
+    tracker.log_event(McpEvent(
+        id=str(uuid_mod.uuid4()),
+        timestamp=time.time(),
+        tool_name=tool_name,
+        org_id=org_id,
+        key_name=key_name,
+        status="completed",
+        duration_ms=None,
+        args_summary=f"by {admin_label}",
+    ))
 
 
 @router.post("/validate")
@@ -286,8 +305,8 @@ async def create_node(
             detail=f"Node limit reached ({limits['max_nodes']} on {plan_name} plan). Upgrade your plan to add more nodes.",
         )
 
-    node_id = str(uuid.uuid4())[:8]
-    api_key = str(uuid.uuid4())
+    node_id = str(uuid_mod.uuid4())[:8]
+    api_key = str(uuid_mod.uuid4())
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
     node = CameraNode(
@@ -301,6 +320,8 @@ async def create_node(
     db.commit()
 
     logger.info("Node created: node_id=%s, name=%s, org=%s", node_id, node.name, user.org_id)
+
+    _log_key_event(user.org_id, "node_key_created", node.name, user)
 
     return {
         "success": True,
@@ -377,8 +398,11 @@ async def delete_node(
         # Don't block the delete if storage cleanup fails — log and continue.
         logger.warning("Storage cleanup failed for node %s: %s", node_id, e)
 
+    node_name = node.name
     db.delete(node)
     db.commit()
+
+    _log_key_event(user.org_id, "node_deleted", node_name, user)
 
     return {"success": True, "deleted": node_id, "storage_cleaned": cameras_deleted, "node_wiped": node_wiped}
 
@@ -400,10 +424,12 @@ async def rotate_api_key(
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    new_api_key = str(uuid.uuid4())
+    new_api_key = str(uuid_mod.uuid4())
     node.api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
     node.key_rotated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
     db.commit()
+
+    _log_key_event(user.org_id, "node_key_rotated", node.name, user)
 
     return {
         "success": True,

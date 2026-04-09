@@ -50,9 +50,10 @@ _ctx_key_name = contextvars.ContextVar("mcp_key_name", default="")
 # ---------------------------------------------------------------------------
 
 # Plan-based rate limits (calls per minute per API key)
+# Keys must match Clerk plan slugs stored in the DB by the webhook handler.
 RATE_LIMITS = {
-    "pro_org": 30,
-    "business_org": 120,
+    "pro": 30,
+    "business": 120,
 }
 DEFAULT_RATE_LIMIT = 0  # Block unrecognized plans (MCP requires Pro+)
 
@@ -147,7 +148,7 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         if not allowed:
             db.close()
             raise ToolError(
-                f"Rate limit exceeded: {limit} calls/min allowed on {plan.replace('_org', '').title()} plan. "
+                f"Rate limit exceeded: {limit} calls/min allowed on {plan.title()} plan. "
                 "Try again shortly."
             )
 
