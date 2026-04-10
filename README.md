@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Backend-FastAPI_2.0-009688.svg" alt="FastAPI"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React_19-61DAFB.svg" alt="React"></a>
 </p>
@@ -290,7 +290,9 @@ Production URL: [opensentry-command.fly.dev](https://opensentry-command.fly.dev)
 
 ## License
 
-MIT -- Free for personal and commercial use.
+[AGPL-3.0](LICENSE) — source-available. You may self-host and modify the code, but if you offer a modified version to users over a network, AGPL §13 requires you to make your changes available to those users.
+
+This project is **not currently accepting external code contributions**. Bug reports and feature requests via [Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues) and [Discussions](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions) are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
