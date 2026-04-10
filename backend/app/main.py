@@ -13,7 +13,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
-from app.api import cameras, webhooks, nodes, streams, audit, hls, ws, install, mcp_keys, mcp_activity
+from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity
 from app.mcp.server import mcp
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,6 @@ async def security_headers(request: Request, call_next):
 app.include_router(cameras.router)
 app.include_router(webhooks.router)
 app.include_router(nodes.router)
-app.include_router(streams.router)
 app.include_router(audit.router)
 app.include_router(hls.router)
 app.include_router(ws.router)
@@ -109,14 +108,14 @@ app.mount("/mcp", mcp_app)
 # Default retention: 90 days for all log types
 LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
 LOG_CLEANUP_INTERVAL_HOURS = 24  # Run once per day
-# Cameras offline for longer than this get their Tigris segments cleaned up.
+# Cameras offline for longer than this get their in-memory caches freed.
 # HLS segments are live-only fragments — useless once streaming stops.
 INACTIVE_CAMERA_CLEANUP_HOURS = int(os.getenv("INACTIVE_CAMERA_CLEANUP_HOURS", "24"))
 
 
 async def _log_cleanup_loop():
-    """Background task: delete logs older than retention period
-    and clean up Tigris storage for cameras that have been offline."""
+    """Background task: delete old logs and free segment caches
+    for cameras that have been offline."""
     from app.models.models import StreamAccessLog, McpActivityLog, AuditLog, Camera
 
     while True:

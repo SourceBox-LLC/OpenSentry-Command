@@ -18,24 +18,13 @@ class Config:
 
     SESSION_TIMEOUT_MINUTES: int = int(os.getenv("SESSION_TIMEOUT", "30"))
 
-    AWS_ENDPOINT_URL_S3: str = os.getenv("AWS_ENDPOINT_URL_S3", "")
-    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
-    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-    AWS_REGION: str = os.getenv("AWS_REGION", "auto")
-    TIGRIS_BUCKET_NAME: str = os.getenv("BUCKET_NAME", "")
-
-    STREAM_URL_EXPIRY_SECONDS: int = int(os.getenv("STREAM_URL_EXPIRY_SECONDS", "900"))
-    SEGMENT_URL_EXPIRY_SECONDS: int = int(os.getenv("SEGMENT_URL_EXPIRY_SECONDS", "900"))
-    UPLOAD_URL_EXPIRY_SECONDS: int = int(os.getenv("UPLOAD_URL_EXPIRY_SECONDS", "900"))
-    UPLOAD_TIMEOUT_MINUTES: int = int(os.getenv("UPLOAD_TIMEOUT_MINUTES", "10"))
     AUDIT_LOG_RETENTION_DAYS: int = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "7"))
     # Segments kept in memory per camera for the live proxy cache.
     # With 2-second segments, 15 = ~30 seconds — enough for HLS playback buffer.
     SEGMENT_CACHE_MAX_PER_CAMERA: int = int(os.getenv("SEGMENT_CACHE_MAX_PER_CAMERA", "15"))
     # Max size of a single pushed segment (safety valve).
     SEGMENT_PUSH_MAX_BYTES: int = int(os.getenv("SEGMENT_PUSH_MAX_BYTES", str(2 * 1024 * 1024)))
-    # Legacy Tigris settings — still used for backwards compat with old CloudNodes.
-    SEGMENT_RETENTION_COUNT: int = int(os.getenv("SEGMENT_RETENTION_COUNT", "60"))
+    # How often (in playlist updates) to run cache eviction.
     CLEANUP_INTERVAL: int = int(os.getenv("CLEANUP_INTERVAL", "20"))
 
     @classmethod

@@ -13,8 +13,6 @@ from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_di
 from app.mcp.activity import McpEvent, tracker
 from app.models.models import CameraNode, Camera
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
-from app.services.storage import get_storage
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
@@ -185,13 +183,6 @@ async def register_node(
                 logger.info("Removing stale camera record: %s", stale_cam.camera_id)
                 from app.api.hls import cleanup_camera_cache
                 cleanup_camera_cache(stale_cam.camera_id)
-                try:
-                    storage = get_storage()
-                    storage.delete_camera_storage(
-                        existing_node.org_id, stale_cam.camera_id
-                    )
-                except Exception as e:
-                    logger.warning("Could not clean Tigris storage for %s: %s", stale_cam.camera_id, e)
                 db.delete(stale_cam)
 
         db.commit()
@@ -390,22 +381,10 @@ async def delete_node(
         # Node may be offline — proceed with server-side cleanup anyway.
         logger.warning("Could not send wipe_data to node %s (may be offline): %s", node_id, e)
 
-    # Clean up in-memory caches and Tigris storage for every camera on this node.
+    # Clean up in-memory caches for every camera on this node.
     from app.api.hls import cleanup_camera_cache
-    cameras_deleted = []
     for camera in list(node.cameras):
         cleanup_camera_cache(camera.camera_id)
-    try:
-        storage = get_storage()
-        for camera in list(node.cameras):
-            count = storage.delete_camera_storage(user.org_id, camera.camera_id)
-            cameras_deleted.append(
-                {"camera_id": camera.camera_id, "objects_deleted": count}
-            )
-            logger.info("Deleted %d storage objects for camera %s", count, camera.camera_id)
-    except Exception as e:
-        # Don't block the delete if storage cleanup fails — log and continue.
-        logger.warning("Storage cleanup failed for node %s: %s", node_id, e)
 
     node_name = node.name
     db.delete(node)
@@ -413,7 +392,7 @@ async def delete_node(
 
     _log_key_event(user.org_id, "node_deleted", node_name, user)
 
-    return {"success": True, "deleted": node_id, "storage_cleaned": cameras_deleted, "node_wiped": node_wiped}
+    return {"success": True, "deleted": node_id, "node_wiped": node_wiped}
 
 
 @router.post("/{node_id}/rotate-key")

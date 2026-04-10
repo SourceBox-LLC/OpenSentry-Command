@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import re
 import time
@@ -32,12 +31,12 @@ _CACHE_MAX_CAMERAS = 500
 
 # ── In-memory segment cache ──────────────────────────────────────────
 # CloudNode pushes segments via POST /push-segment. Browser fetches
-# them via GET /segment/{filename}. No Tigris in the live path.
+# them via GET /segment/{filename}.
 #
 # {camera_id: {filename: (bytes_data, monotonic_timestamp)}}
 _segment_cache: dict[str, dict[str, tuple[bytes, float]]] = {}
 
-# Track playlist update count per camera (for legacy Tigris cleanup).
+# Track playlist update count per camera — used to throttle cache eviction sweeps.
 _playlist_update_count: dict[str, int] = {}
 
 # ── Stream access logging (rate-limited) ─────────────────────────────
@@ -151,7 +150,7 @@ def _rewrite_playlist(
     """
     Rewrite raw HLS playlist: replace bare segment filenames with
     relative proxy URLs (segment/<filename>) and inject codec headers.
-    Pure string manipulation — no I/O, no Tigris, no presigned URLs.
+    Pure string manipulation — no I/O.
     """
     # Prefix segment filenames with "segment/" so the browser resolves
     # them relative to the playlist URL → /api/cameras/{id}/segment/<file>
@@ -214,30 +213,7 @@ async def get_hls_playlist(
         )
 
     # No cached playlist — CloudNode hasn't pushed one yet.
-    # Try Tigris fallback for backwards compatibility with old CloudNodes.
-    try:
-        from app.services.storage import get_storage
-        storage = get_storage()
-        playlist_data = await asyncio.to_thread(
-            storage.get_playlist,
-            camera_id=camera_id,
-            org_id=user.org_id,
-        )
-        raw_playlist = playlist_data.decode("utf-8")
-        video_codec = camera.video_codec or (node.video_codec if node else None) or "avc1.42e01e"
-        audio_codec = camera.audio_codec or (node.audio_codec if node else None) or "mp4a.40.2"
-        playlist_text = _rewrite_playlist(raw_playlist, camera_id, video_codec, audio_codec)
-        _playlist_cache[camera_id] = (playlist_text, time.monotonic())
-        return Response(
-            content=playlist_text,
-            media_type="application/vnd.apple.mpegurl",
-            headers=headers,
-        )
-    except (FileNotFoundError, ValueError):
-        raise HTTPException(status_code=404, detail="Stream not started yet")
-    except Exception:
-        logger.error("Failed to get playlist for camera=%s", camera_id, exc_info=True)
-        raise HTTPException(status_code=404, detail="Stream not started yet")
+    raise HTTPException(status_code=404, detail="Stream not started yet")
 
 
 @router.get("/segment/{filename}")
@@ -248,10 +224,7 @@ async def get_hls_segment(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Serve an HLS segment from the in-memory cache.
-    Falls back to Tigris for backwards compatibility with old CloudNodes.
-    """
+    """Serve an HLS segment from the in-memory cache."""
     camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -259,7 +232,6 @@ async def get_hls_segment(
     if not _RE_SEGMENT_FILENAME.match(filename):
         raise HTTPException(status_code=400, detail="Invalid segment filename")
 
-    # Fast path: serve from in-memory cache (populated by push-segment).
     cam_cache = _segment_cache.get(camera_id)
     if cam_cache:
         entry = cam_cache.get(filename)
@@ -270,28 +242,7 @@ async def get_hls_segment(
                 headers={"Cache-Control": "public, max-age=3600"},
             )
 
-    # Slow path: Tigris fallback for old CloudNodes that still upload there.
-    try:
-        from app.services.storage import get_storage
-        storage = get_storage()
-        segment_data = await asyncio.to_thread(
-            storage.get_segment,
-            camera_id=camera_id,
-            org_id=user.org_id,
-            filename=filename,
-        )
-        return Response(
-            content=segment_data,
-            media_type="video/mp2t",
-            headers={"Cache-Control": "public, max-age=3600"},
-        )
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Segment not found")
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Segment not found")
-    except Exception:
-        logger.error("Failed to get segment %s for camera=%s", filename, camera_id, exc_info=True)
-        raise HTTPException(status_code=404, detail="Segment not found")
+    raise HTTPException(status_code=404, detail="Segment not found")
 
 
 @router.post("/push-segment")
@@ -304,7 +255,6 @@ async def push_segment(
     """
     Receive an HLS segment pushed by CloudNode.
     Stores in memory for the browser to fetch via GET /segment/{filename}.
-    Replaces the old Tigris upload flow — no S3 involved.
     """
     node_api_key = request.headers.get("X-Node-API-Key")
     if not node_api_key:
@@ -382,24 +332,5 @@ async def update_hls_playlist(
     _playlist_update_count[camera_id] = count
     if count % settings.CLEANUP_INTERVAL == 0:
         _evict_caches()
-        # Legacy: clean up old segments on Tigris for old CloudNodes.
-        asyncio.ensure_future(
-            _cleanup_old_segments_tigris(node.org_id, camera_id)
-        )
 
     return {"success": True, "message": "Playlist updated"}
-
-
-async def _cleanup_old_segments_tigris(org_id: str, camera_id: str):
-    """Delete old segments from Tigris (backwards compat for old CloudNodes)."""
-    try:
-        from app.services.storage import get_storage
-        storage = get_storage()
-        await asyncio.to_thread(
-            storage.cleanup_old_segments,
-            org_id=org_id,
-            camera_id=camera_id,
-            keep_count=settings.SEGMENT_RETENTION_COUNT,
-        )
-    except (ValueError, Exception):
-        pass  # Storage not configured or cleanup failed — not critical
