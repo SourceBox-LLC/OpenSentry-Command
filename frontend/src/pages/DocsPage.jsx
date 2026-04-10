@@ -140,8 +140,8 @@ function DocsPage() {
             <h2>CloudNode Setup<a href="#cloudnode-setup" className="docs-anchor">#</a></h2>
             <p>
               CloudNode is a Rust application that captures video from USB cameras,
-              encodes it as HLS segments with FFmpeg, and uploads them to Tigris cloud storage
-              for global CDN delivery.
+              encodes it as HLS segments with FFmpeg, and pushes them to the Command Center
+              backend, which serves them to viewers from an in-memory cache.
             </p>
 
             <h3>Installation</h3>
@@ -180,7 +180,7 @@ function DocsPage() {
             <ul>
               <li>Discovers USB cameras and registers them with Command Center</li>
               <li>Captures video and encodes HLS segments (2-second chunks) via FFmpeg</li>
-              <li>Uploads segments to Tigris/S3 with BLAKE3 checksum verification</li>
+              <li>Pushes segments directly to the Command Center backend over authenticated HTTPS</li>
               <li>Sends heartbeats every 30 seconds to report camera status</li>
               <li>Auto-detects video/audio codecs and reports them to Command Center</li>
               <li>Supports hardware-accelerated encoding on NVIDIA, Intel, and AMD GPUs</li>
@@ -325,7 +325,7 @@ function DocsPage() {
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_stream_url</span>
               </div>
-              <p>Get a temporary pre-signed HLS stream URL for a camera.</p>
+              <p>Get the authenticated HLS stream URL for a camera.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
@@ -427,9 +427,9 @@ function DocsPage() {
               <span className="docs-flow-arrow">→</span>
               <div className="docs-flow-node">CloudNode</div>
               <span className="docs-flow-arrow">→</span>
-              <div className="docs-flow-node cloud">Tigris/S3</div>
+              <div className="docs-flow-node cloud">Command Center</div>
               <span className="docs-flow-arrow">→</span>
-              <div className="docs-flow-node">CDN</div>
+              <div className="docs-flow-node">In-memory cache</div>
               <span className="docs-flow-arrow">→</span>
               <div className="docs-flow-node">Browser</div>
             </div>
@@ -437,15 +437,15 @@ function DocsPage() {
             <h3>How It Works</h3>
             <ol>
               <li><strong>CloudNode</strong> captures video from USB cameras using FFmpeg</li>
-              <li>Video is encoded as HLS segments (2-second chunks) and uploaded to Tigris/S3 with BLAKE3 checksums</li>
-              <li>The <strong>Command Center</strong> generates time-limited signed URLs for viewing</li>
-              <li>Viewers watch via HLS from Fly.io's global CDN — no direct connection to your network</li>
+              <li>Video is encoded as HLS segments (2-second chunks) and pushed directly to the Command Center over authenticated HTTPS</li>
+              <li>The <strong>Command Center</strong> caches the most recent segments in RAM and serves them to authorized viewers same-origin</li>
+              <li>Viewers watch via HLS through the Command Center backend — no third-party storage in the live video path, no direct connection to your network</li>
             </ol>
 
             <h3>Security Model</h3>
             <ul>
               <li><strong>Outbound Only</strong> — CloudNode pushes to cloud. No inbound ports, no router config.</li>
-              <li><strong>Signed URLs</strong> — Stream URLs are time-limited and signed. Can't be shared permanently.</li>
+              <li><strong>Same-origin Streaming</strong> — Live segments are served through the authenticated backend, not a third-party object store.</li>
               <li><strong>API Key Auth</strong> — Node keys stored as SHA-256 hashes. Never stored in plaintext.</li>
               <li><strong>Clerk Organizations</strong> — Multi-tenant auth with admin and member roles.</li>
               <li><strong>HTTPS Everywhere</strong> — All traffic between CloudNode, Command Center, and viewers is encrypted.</li>
@@ -521,14 +521,11 @@ function DocsPage() {
             <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/nodes/heartbeat</span></div>
             <p>Send periodic heartbeat with camera status updates.</p>
 
-            <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/upload-url</span></div>
-            <p>Get a pre-signed URL for uploading an HLS segment to Tigris/S3.</p>
-
-            <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/upload-complete</span></div>
-            <p>Confirm segment upload. Triggers cleanup when retention threshold is reached.</p>
+            <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/push-segment</span></div>
+            <p>Push a raw HLS <code>.ts</code> segment into the Command Center's in-memory cache. Body is the binary segment, <code>filename</code> is a query param.</p>
 
             <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/playlist</span></div>
-            <p>Push the updated HLS playlist to cloud storage.</p>
+            <p>Push the rolling HLS playlist text. The backend rewrites segment URLs to its own proxy paths and caches the result.</p>
 
             <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/codec</span></div>
             <p>Report detected video/audio codec information.</p>
@@ -540,7 +537,10 @@ function DocsPage() {
             <p>List all cameras in the organization.</p>
 
             <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/stream.m3u8</span></div>
-            <p>Get HLS playlist with pre-signed segment URLs for browser playback.</p>
+            <p>Get the cached HLS playlist for browser playback. Segment URLs point at the same-origin segment proxy.</p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/segment/{"{filename}"}</span></div>
+            <p>Serve a single cached HLS segment from memory. JWT-authenticated, same-origin.</p>
 
             <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/nodes</span></div>
             <p>List all nodes in the organization. Admin only.</p>

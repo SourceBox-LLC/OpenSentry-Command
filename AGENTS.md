@@ -23,14 +23,14 @@ Backend config is loaded from environment variables (see `backend/.env.example`)
 
 **Required:**
 - `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` -- Clerk auth
-- `AWS_ENDPOINT_URL_S3` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` -- Tigris storage
 
 **Optional:**
 - `DATABASE_URL` -- defaults to `sqlite:///./opensentry.db`
 - `FRONTEND_URL` -- CORS origin, defaults to `http://localhost:5173`
-- `STREAM_URL_EXPIRY_SECONDS` -- presigned URL TTL (default 300)
-- `SEGMENT_RETENTION_COUNT` -- segments per camera to keep (default 60)
-- `CLEANUP_INTERVAL` -- trigger cleanup every N uploads (default 20)
+- `SEGMENT_CACHE_MAX_PER_CAMERA` -- segments cached in memory per camera (default 15)
+- `SEGMENT_PUSH_MAX_BYTES` -- max bytes per pushed segment (default 2 MB)
+- `CLEANUP_INTERVAL` -- run cache eviction every N playlist updates (default 20)
+- `INACTIVE_CAMERA_CLEANUP_HOURS` -- free caches for cameras offline this long (default 24)
 - `AUDIT_LOG_RETENTION_DAYS` -- stream log retention (default 7)
 
 Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
@@ -40,12 +40,11 @@ Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
 ```
 backend/
 ├── app/
-│   ├── main.py                 # FastAPI app, CORS, SPA middleware, rate limiting
+│   ├── main.py                 # FastAPI app, CORS, SPA middleware, rate limiting, cleanup loop
 │   ├── api/
 │   │   ├── cameras.py          # Camera CRUD, groups, settings, alerts, media, audit logs
 │   │   ├── nodes.py            # CloudNode registration, heartbeat, key rotation
-│   │   ├── hls.py              # HLS playlist rewriting, segment proxy, codec endpoint
-│   │   ├── streams.py          # Presigned URL generation, upload tracking, cleanup
+│   │   ├── hls.py              # HLS playlist + in-memory segment cache + push-segment
 │   │   ├── audit.py            # Stream access logs and statistics
 │   │   └── webhooks.py         # Clerk subscription webhook handler
 │   ├── core/
@@ -55,13 +54,10 @@ backend/
 │   │   └── database.py         # SQLAlchemy engine, session factory, Base
 │   ├── models/
 │   │   └── models.py           # All ORM models (see Data Models below)
-│   ├── schemas/
-│   │   └── schemas.py          # Pydantic request/response schemas
-│   └── services/
-│       ├── storage.py          # TigrisStorage: presigned URLs, segment cleanup
-│       └── codec_prober.py     # FFprobe-based codec detection (RFC 6381 strings)
+│   └── schemas/
+│       └── schemas.py          # Pydantic request/response schemas
 ├── start.py                    # Uvicorn entrypoint (0.0.0.0:8000, reload=True)
-├── pyproject.toml              # Dependencies (FastAPI, SQLAlchemy, Clerk, boto3, etc.)
+├── pyproject.toml              # Dependencies (FastAPI, SQLAlchemy, Clerk, etc.)
 └── .env.example
 
 frontend/
@@ -79,17 +75,19 @@ frontend/
 ```
 Browser ──JWT──→ FastAPI ──SQL──→ SQLite/PostgreSQL
                     ↕
-CloudNode ──API Key──→ FastAPI ──S3──→ Tigris (segments)
+CloudNode ──API Key──→ FastAPI ──RAM──→ in-memory segment cache
 ```
 
 ### Video streaming pipeline
 
-1. CloudNode calls `POST /api/cameras/{id}/upload-url` with API key → gets presigned PUT URL
-2. CloudNode uploads `.ts` segment directly to Tigris
-3. CloudNode calls `POST /api/cameras/{id}/upload-complete` → backend verifies, triggers cleanup
-4. Browser calls `GET /api/cameras/{id}/stream.m3u8` with JWT → backend fetches playlist from Tigris, rewrites segment filenames to presigned GET URLs, injects codec info
-5. Browser downloads segments directly from Tigris (no backend proxy)
-6. Cleanup runs every `CLEANUP_INTERVAL` uploads, keeping last `SEGMENT_RETENTION_COUNT` segments
+1. CloudNode generates HLS segments via FFmpeg (2-second `.ts` files)
+2. CloudNode calls `POST /api/cameras/{id}/push-segment?filename=segment_NNNNN.ts` with the raw `.ts` body and `X-Node-API-Key` header
+3. Backend stores the bytes in `_segment_cache[camera_id][filename]` (max `SEGMENT_CACHE_MAX_PER_CAMERA` per camera, oldest evicted)
+4. CloudNode calls `POST /api/cameras/{id}/playlist` with the rolling `stream.m3u8` text
+5. Backend caches the rewritten playlist (segment filenames → relative `segment/<file>` proxy URLs)
+6. Browser calls `GET /api/cameras/{id}/stream.m3u8` with JWT → served instantly from `_playlist_cache`
+7. Browser fetches each segment via `GET /api/cameras/{id}/segment/{filename}` → served from `_segment_cache` in memory
+8. Cache eviction sweeps every `CLEANUP_INTERVAL` playlist updates; inactive cameras are flushed by the daily cleanup loop
 
 ### SPA serving
 
@@ -138,7 +136,6 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 | `Setting` | `key`, `value` | Per-org key-value settings |
 | `AuditLog` | `event`, `user_id`, `ip_address`, `details` | Security audit trail |
 | `StreamAccessLog` | `user_id`, `camera_id`, `ip_address`, `user_agent` | Stream playback audit |
-| `PendingUpload` | `upload_id`, `s3_key`, `expected_checksum` | In-progress segment uploads |
 
 ## API Routes
 
@@ -149,7 +146,6 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 | `cameras.py` | `/api` | api |
 | `nodes.py` | `/api/nodes` | nodes |
 | `hls.py` | `/api/cameras/{camera_id}` | streaming |
-| `streams.py` | `/api` | streams |
 | `audit.py` | `/api` | audit |
 | `webhooks.py` | `/api/webhooks` | webhooks |
 
@@ -185,15 +181,11 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 - `POST /{node_id}/rotate-key` -- rotate API key (admin)
 
 **hls.py** (prefix `/api/cameras/{camera_id}`):
-- `GET /stream.m3u8` -- HLS playlist with presigned segment URLs (JWT)
-- `GET /segment/{filename}` -- segment proxy fallback (JWT)
+- `GET /stream.m3u8` -- HLS playlist served from cache (JWT)
+- `GET /segment/{filename}` -- serve cached `.ts` segment from memory (JWT)
+- `POST /push-segment?filename=…` -- CloudNode pushes `.ts` segment into cache (API key)
 - `POST /playlist` -- update playlist (API key)
 - `POST /codec` -- update codec info (API key)
-
-**streams.py** (prefix `/api`):
-- `GET /cameras/{camera_id}/stream-url` -- presigned playlist URL (JWT, rate limited 10/min)
-- `POST /cameras/{camera_id}/upload-url` -- presigned upload URL (API key)
-- `POST /cameras/{camera_id}/upload-complete` -- confirm upload (API key)
 
 **audit.py** (prefix `/api`):
 - `GET /audit/stream-logs` -- stream access logs (admin)
@@ -219,8 +211,7 @@ Plus `FRONTEND_URL` if set. All methods, all headers, credentials allowed.
 
 ## Rate Limiting
 
-Uses `slowapi`:
-- `GET /cameras/{camera_id}/stream-url` -- 10 requests/minute per IP
+Uses `slowapi`. No HLS-path endpoints are currently rate-limited; segment fetches are intentionally fast-path with no per-request DB work.
 
 ## Webhook Handling
 
@@ -237,9 +228,9 @@ Uses `slowapi`:
 
 **Database sessions:** `get_db()` dependency yields a SQLAlchemy session per request.
 
-**Presigned URLs:** All video content served through time-limited presigned S3 URLs (default 300s).
+**In-memory segment cache:** Live `.ts` segments live in `_segment_cache` (a `dict[camera_id, dict[filename, (bytes, ts)]]`) inside `hls.py`. Backend never touches S3 for live video. Recordings and snapshots are stored locally on the CloudNode.
 
-**Codec detection:** On first segment upload, backend probes with FFprobe to extract RFC 6381 codec strings (e.g. `avc1.42e01e`, `mp4a.40.2`). Stored on Camera model, injected into HLS playlist as `#EXT-X-CODECS`.
+**Codec detection:** CloudNode reports codec via `POST /api/cameras/{id}/codec` after the first segment is pushed. Stored on Camera model, injected into HLS playlist as `#EXT-X-CODECS`.
 
 ## Key Dependencies
 
@@ -248,7 +239,6 @@ Uses `slowapi`:
 - `pydantic` -- Request/response validation
 - `clerk-backend-api` -- Clerk authentication
 - `pyjwt` -- JWT token handling
-- `boto3` -- S3 client (Tigris object storage)
 - `slowapi` -- Rate limiting
 - `httpx` -- HTTP client
 - `svix` -- Webhook signature verification

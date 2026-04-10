@@ -47,8 +47,8 @@ function PricingPage() {
           </div>
           <div className="pricing-feature-item">
             <div className="pricing-feature-icon">☁️</div>
-            <h3>Cloud Storage</h3>
-            <p>Segments stored on Tigris for reliable playback anywhere</p>
+            <h3>Cloud Streaming</h3>
+            <p>Live segments cached in the Command Center for fast same-origin playback anywhere</p>
           </div>
           <div className="pricing-feature-item">
             <div className="pricing-feature-icon">🖥️</div>

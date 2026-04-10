@@ -20,10 +20,6 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ.setdefault("CLERK_SECRET_KEY", "sk_test_fake")
 os.environ.setdefault("CLERK_PUBLISHABLE_KEY", "pk_test_fake")
 os.environ.setdefault("CLERK_JWKS_URL", "https://fake.clerk.accounts.dev/.well-known/jwks.json")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "fake")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "fake")
-os.environ.setdefault("AWS_ENDPOINT_URL_S3", "https://fake.s3.endpoint")
-os.environ.setdefault("TIGRIS_BUCKET_NAME", "test-bucket")
 
 from app.core.auth import AuthUser
 from app.core.database import Base, engine, get_db

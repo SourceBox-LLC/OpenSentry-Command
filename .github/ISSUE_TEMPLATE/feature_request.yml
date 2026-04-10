@@ -42,8 +42,7 @@ body:
         - Backend (FastAPI API)
         - CloudNode (Rust)
         - Authentication (Clerk)
-        - HLS Streaming
-        - Storage (Tigris/S3)
+        - HLS Streaming / Segment Cache
         - Docker/Deployment
         - Documentation
         - Other
