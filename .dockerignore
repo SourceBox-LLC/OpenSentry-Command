@@ -11,6 +11,13 @@ __pycache__
 .venv
 venv/
 ENV/
+.ruff_cache
+backend/.venv/
+
+# Node.js
+node_modules/
+frontend/node_modules/
+frontend/.vite/
 
 # IDE
 .idea/
@@ -18,19 +25,27 @@ ENV/
 *.swp
 *.swo
 
-# Environment files (use docker env vars instead)
+# Environment files
 .env
+.env.local
+backend/.env
+backend/.env.local
+frontend/.env
+frontend/.env.local
 
 # OS files
 .DS_Store
 Thumbs.db
 
+# Cloud sync name clash files
+*Name clash*
+
 # Logs
 *.log
-
-# Data directory (mounted as volume)
-data/
 
 # Documentation
 *.md
 !README.md
+
+# Local development databases
+backend/opensentry.db

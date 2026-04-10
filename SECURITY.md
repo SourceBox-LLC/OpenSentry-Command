@@ -1,128 +1,128 @@
 # Security Policy
 
-OpenSentry is a security-focused application and we take security vulnerabilities seriously. We appreciate your efforts to responsibly disclose your findings.
+OpenSentry is a security-focused application and we take vulnerabilities seriously.
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| latest  | :white_check_mark: |
-| < 1.0   | :x:                |
+| Version | Supported |
+|---------|-----------|
+| 2.0.x (FastAPI) | :white_check_mark: |
+| < 2.0 (Flask) | :x: |
 
-We recommend always running the latest version of OpenSentry.
+Always run the latest version.
 
 ## Security Features
 
-OpenSentry implements multiple layers of security:
-
 | Feature | Description |
 |---------|-------------|
-| **HTTPS** | Web dashboard encrypted with TLS (port 5000) |
-| **RTSPS** | Video streams encrypted with TLS (port 8322) |
-| **MQTT/TLS** | Control commands encrypted (port 8883) |
-| **Password Hashing** | Bcrypt with automatic salt |
-| **Session Security** | Secure cookies, configurable timeout |
-| **CSRF Protection** | Token-based protection on forms |
-| **Rate Limiting** | Brute force protection on login |
-| **Account Lockout** | Automatic lockout after failed attempts |
-| **Input Validation** | Whitelist-based command validation |
-| **Security Headers** | CSP, X-Frame-Options, X-Content-Type-Options |
+| **Clerk Authentication** | JWT-based authentication with organization-scoped permissions |
+| **API Key Hashing** | CloudNode API keys stored as SHA-256 hashes |
+| **Presigned URLs** | Time-limited S3 URLs for all video content (default 5 min) |
+| **Tenant Isolation** | All queries scoped by `org_id` -- no cross-org data access |
+| **Rate Limiting** | Stream URL generation capped at 10 req/min per IP |
+| **CORS** | Explicit origin allowlist (no wildcards with credentials) |
+| **Audit Logging** | Stream access tracked with user ID, IP, and user agent |
+| **MCP API Key Auth** | MCP tools authenticated via org-scoped Bearer tokens (SHA-256 hashed) |
+| **MCP Activity Logging** | Every MCP tool call persisted to DB with tool name, API key, status, and duration |
+| **MCP Read-Only Tools** | MCP server exposes only read-only tools — no write operations |
+| **Encrypted Storage** | CloudNode encrypts API key at rest with AES-256-GCM |
+| **Webhook Verification** | Clerk webhooks verified via Svix signature |
 
 ## Reporting a Vulnerability
 
-### DO NOT
+### Do NOT
 
 - Open a public GitHub issue for security vulnerabilities
-- Disclose the vulnerability publicly before it's fixed
-- Access or modify other users' data without permission
+- Disclose the vulnerability publicly before it is fixed
 
-### DO
+### Do
 
-1. **Report via our website**: https://www.sourceboxai.com/security
+1. **Report via**: https://www.sourceboxai.com/security
 
-2. **Include in your report:**
+2. **Include:**
    - Description of the vulnerability
    - Steps to reproduce
    - Potential impact
    - Suggested fix (if any)
-   - Your contact information
 
-3. **Allow time for response:**
-   - We will acknowledge receipt within 48 hours
-   - We will provide a detailed response within 7 days
-   - We will keep you informed of our progress
-
-### What to Expect
-
-1. **Acknowledgment** - We'll confirm we received your report
-2. **Assessment** - We'll investigate and assess the severity
-3. **Fix Development** - We'll develop and test a fix
-4. **Release** - We'll release the fix and credit you (if desired)
-5. **Disclosure** - We'll coordinate public disclosure timing with you
+3. **Response timeline:**
+   - Acknowledgment within 48 hours
+   - Assessment within 7 days
+   - Fix coordinated with reporter
 
 ## Scope
 
 ### In Scope
 
-- OpenSentry Command Center (web application, API)
-- Camera Node communication protocols
+- Command Center API and web application
+- CloudNode-to-backend communication
 - Authentication and authorization
-- Data storage and encryption
-- Docker container security
+- Data storage and tenant isolation
+- Presigned URL generation and expiry
 
 ### Out of Scope
 
 - Denial of Service attacks
 - Social engineering
-- Physical security
-- Third-party dependencies (report to upstream)
-- Issues requiring physical access to the device
+- Physical access to devices
+- Third-party dependencies (report upstream)
 
-## Security Best Practices for Users
+## Security Procedures
 
-### Deployment
+Step-by-step response guides for common security incidents.
 
-1. **Use strong passwords** - Minimum 12 characters with mixed case, numbers, symbols
-2. **Keep software updated** - Run `git pull && docker compose up --build -d` regularly
-3. **Use a firewall** - Only expose necessary ports
-4. **Use Tailscale** - For remote access instead of port forwarding
-5. **Change default credentials** - Never use default usernames/passwords in production
+### Compromised MCP API Key
 
-### Network Security
+If you suspect an MCP API key has been leaked, shared, or used by an unauthorized party:
 
-1. **Isolate IoT devices** - Use a separate VLAN for cameras if possible
-2. **Disable UPnP** - Prevent automatic port forwarding
-3. **Monitor access logs** - Check for unauthorized access attempts
+1. **Revoke the key immediately** — Go to the MCP Control Center (`/mcp`), find the key, and click **Revoke**. This takes effect instantly.
+2. **Review MCP activity logs** — Go to Admin Dashboard (`/admin`) and check the **MCP Tool Activity** section. Filter by the compromised key name to see exactly which tools were called, when, and what data was accessed.
+3. **Generate a new key** — Create a replacement key in the MCP Control Center and update your AI client configuration.
+4. **Check for visual access** — Look for unexpected `view_camera` or `watch_camera` calls that may indicate unauthorized viewing of your camera feeds.
 
-### Data Security
+### Compromised CloudNode API Key
 
-1. **Backup your database** - Regular backups of `data/opensentry.db`
-2. **Rotate secrets** - Regenerate `OPENSENTRY_SECRET` periodically
-3. **Audit users** - Remove unused accounts
+If a CloudNode API key is compromised, an attacker could potentially push video segments to your storage:
 
-## Known Security Considerations
+1. **Rotate the key** — Go to Settings (`/settings`), find the node, and click **Rotate Key**. The old key is invalidated immediately.
+2. **Update the CloudNode** — The CloudNode will disconnect. Re-run setup with the new API key.
+3. **Review audit logs** — Check stream access logs in the Admin Dashboard for unusual activity during the exposure window.
+4. **Verify video integrity** — Check your CloudNode logs for upload activity you don't recognize.
 
-### Self-Signed Certificates
+### Compromised User Account
 
-OpenSentry generates self-signed SSL certificates by default. While encrypted, these are not verified by a trusted CA. For production deployments with external access, consider:
+If a Clerk user account in your organization is compromised:
 
-- Using a reverse proxy (nginx, Caddy) with Let's Encrypt certificates
-- Adding the CA certificate to your trust store
+1. **Remove the user** — Go to your Clerk dashboard and remove the user from the organization or disable their account.
+2. **Revoke all MCP keys** — If the user had admin access, they may have created MCP API keys. Revoke all keys in the MCP Control Center and regenerate only the ones you need.
+3. **Rotate CloudNode keys** — If the user had `manage_cameras` permission, rotate all node API keys from Settings.
+4. **Review all logs** — Check both stream access logs and MCP activity logs in the Admin Dashboard for the affected time period.
 
-### Local Network Trust
+### Suspicious Camera Access
 
-OpenSentry is designed for local network deployment. The threat model assumes:
+If you see unexpected entries in your stream access logs:
 
-- Your local network is trusted
-- Cameras and Command Center are on the same network
-- Remote access is through VPN (Tailscale recommended)
+1. **Identify the source** — Check the user email, IP address, and timestamp in Admin Dashboard > Stream Access Logs.
+2. **Check MCP activity** — If the access came from an MCP tool, the MCP Tool Activity section will show which API key was used.
+3. **Revoke access** — Remove the user from your Clerk organization or revoke the MCP key, depending on the source.
+4. **Restrict streaming hours** — If you don't need 24/7 access, enable scheduled recording from Settings.
 
-If deploying on an untrusted network, additional security measures are recommended.
+---
+
+## Best Practices for Deployment
+
+1. **Keep software updated** -- pull latest and rebuild regularly
+2. **Use strong Clerk passwords** -- enforce via Clerk dashboard settings
+3. **Rotate API keys** -- use the key rotation endpoint for CloudNodes periodically
+4. **Restrict CORS** -- set `FRONTEND_URL` to your actual domain
+5. **Monitor audit logs** -- review stream access logs and MCP activity logs for unauthorized access
+6. **Manage MCP API keys** -- revoke unused keys from the MCP Control Center, monitor tool call history in the Admin Dashboard
+6. **Use HTTPS** -- deploy behind a reverse proxy with TLS (Fly.io handles this)
+7. **Backup your database** -- regular backups of the application database
 
 ## Security Updates
 
-Security updates are released as soon as possible after a vulnerability is confirmed. Monitor:
-
+Monitor:
 - [GitHub Releases](https://github.com/SourceBox-LLC/OpenSentry-Command/releases)
 - [GitHub Security Advisories](https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories)
 
@@ -131,7 +131,3 @@ Security updates are released as soon as possible after a vulnerability is confi
 - **Security issues**: https://www.sourceboxai.com/security
 - **General questions**: [GitHub Discussions](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions)
 - **Bug reports**: [GitHub Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues)
-
----
-
-Thank you for helping keep OpenSentry secure!

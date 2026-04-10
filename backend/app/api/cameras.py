@@ -1,20 +1,18 @@
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_view, require_admin, get_current_user
-from app.models.models import Camera, CameraGroup, Media, Setting, Alert
+from app.models.models import Camera, CameraGroup, Setting, AuditLog
 from app.schemas.schemas import (
     CameraGroupCreate,
-    CameraGroupResponse,
-    MediaResponse,
-    AlertResponse,
     RecordingSettings,
-    NotificationSettings,
 )
 
 router = APIRouter(prefix="/api", tags=["api"])
+logger = logging.getLogger(__name__)
 
 
 # Camera CRUD
@@ -23,11 +21,25 @@ async def list_cameras(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """List all cameras for the user's organization."""
+    from app.models.models import CameraNode
+
     cameras = db.query(Camera).filter_by(org_id=user.org_id).all()
+
+    # Check for orphaned cameras in a single query instead of N+1
+    if cameras:
+        node_ids = {cam.node_id for cam in cameras if cam.node_id}
+        if node_ids:
+            existing_node_ids = {
+                n.id for n in db.query(CameraNode.id).filter(CameraNode.id.in_(node_ids)).all()
+            }
+            for cam in cameras:
+                if cam.node_id and cam.node_id not in existing_node_ids:
+                    logger.warning(
+                        "Orphan camera %s (node_id=%s not found)", cam.camera_id, cam.node_id
+                    )
+
     result = [c.to_dict() for c in cameras]
-    print(f"[cameras] Returning {len(result)} cameras for org {user.org_id}")
-    for cam in result:
-        print(f"[cameras]   - camera_id={cam.get('camera_id')}, name={cam.get('name')}")
+    logger.debug("Returning %d cameras for org %s", len(result), user.org_id)
     return result
 
 
@@ -42,6 +54,77 @@ async def get_camera(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
     return camera.to_dict()
+
+
+@router.post("/cameras/{camera_id}/snapshot")
+async def take_snapshot(
+    camera_id: str,
+    user: AuthUser = Depends(require_view),
+    db: Session = Depends(get_db),
+):
+    """Tell the camera node to capture and store a snapshot locally."""
+    from app.models.models import CameraNode
+    from app.api.ws import manager
+
+    camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    if not camera.node_id:
+        raise HTTPException(status_code=400, detail="Camera has no assigned node")
+
+    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
+    if not node:
+        raise HTTPException(status_code=400, detail="Camera node not found")
+    if not manager.is_connected(node.node_id):
+        raise HTTPException(status_code=503, detail="Camera node is offline")
+
+    try:
+        result = await manager.send_command(
+            node.node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
+        )
+        return result
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Snapshot request timed out")
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.post("/cameras/{camera_id}/recording")
+async def toggle_recording(
+    camera_id: str,
+    request: Request,
+    user: AuthUser = Depends(require_view),
+    db: Session = Depends(get_db),
+):
+    """Start or stop recording on the camera node."""
+    from app.models.models import CameraNode
+    from app.api.ws import manager
+
+    body = await request.json()
+    recording = body.get("recording", False)
+
+    camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    if not camera.node_id:
+        raise HTTPException(status_code=400, detail="Camera has no assigned node")
+
+    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
+    if not node:
+        raise HTTPException(status_code=400, detail="Camera node not found")
+    if not manager.is_connected(node.node_id):
+        raise HTTPException(status_code=503, detail="Camera node is offline")
+
+    command = "start_recording" if recording else "stop_recording"
+    try:
+        result = await manager.send_command(
+            node.node_id, command, {"camera_id": camera_id}, timeout=10.0,
+        )
+        return result
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="Recording command timed out")
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 # Camera Groups
@@ -126,92 +209,20 @@ async def get_all_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """Get all settings for the user's organization."""
+    vals = Setting.get_many(db, user.org_id, {
+        "scheduled_recording": "false",
+        "scheduled_start": "06:00",
+        "scheduled_end": "17:00",
+        "continuous_24_7": "false",
+    })
     return {
-        "notifications": {
-            "motion_notifications": Setting.get(
-                db, user.org_id, "motion_notifications", "true"
-            )
-            == "true",
-            "face_notifications": Setting.get(
-                db, user.org_id, "face_notifications", "true"
-            )
-            == "true",
-            "object_notifications": Setting.get(
-                db, user.org_id, "object_notifications", "true"
-            )
-            == "true",
-            "toast_notifications": Setting.get(
-                db, user.org_id, "toast_notifications", "true"
-            )
-            == "true",
-        },
         "recording": {
-            "motion_recording": Setting.get(
-                db, user.org_id, "motion_recording", "false"
-            )
-            == "true",
-            "face_recording": Setting.get(db, user.org_id, "face_recording", "false")
-            == "true",
-            "object_recording": Setting.get(
-                db, user.org_id, "object_recording", "false"
-            )
-            == "true",
-            "post_buffer": int(Setting.get(db, user.org_id, "post_buffer", "5")),
-            "scheduled_recording": Setting.get(
-                db, user.org_id, "scheduled_recording", "false"
-            )
-            == "true",
-            "scheduled_start": Setting.get(db, user.org_id, "scheduled_start", "06:00"),
-            "scheduled_end": Setting.get(db, user.org_id, "scheduled_end", "17:00"),
-            "continuous_24_7": Setting.get(db, user.org_id, "continuous_24_7", "false")
-            == "true",
+            "scheduled_recording": vals["scheduled_recording"] == "true",
+            "scheduled_start": vals["scheduled_start"],
+            "scheduled_end": vals["scheduled_end"],
+            "continuous_24_7": vals["continuous_24_7"] == "true",
         },
     }
-
-
-@router.get("/settings/notifications")
-async def get_notification_settings(
-    user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """Get notification settings."""
-    return {
-        "motion_notifications": Setting.get(
-            db, user.org_id, "motion_notifications", "true"
-        )
-        == "true",
-        "face_notifications": Setting.get(db, user.org_id, "face_notifications", "true")
-        == "true",
-        "object_notifications": Setting.get(
-            db, user.org_id, "object_notifications", "true"
-        )
-        == "true",
-        "toast_notifications": Setting.get(
-            db, user.org_id, "toast_notifications", "true"
-        )
-        == "true",
-    }
-
-
-@router.post("/settings/notifications")
-async def update_notification_settings(
-    data: NotificationSettings,
-    user: AuthUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Update notification settings."""
-    Setting.set(
-        db, user.org_id, "motion_notifications", str(data.motion_notifications).lower()
-    )
-    Setting.set(
-        db, user.org_id, "face_notifications", str(data.face_notifications).lower()
-    )
-    Setting.set(
-        db, user.org_id, "object_notifications", str(data.object_notifications).lower()
-    )
-    Setting.set(
-        db, user.org_id, "toast_notifications", str(data.toast_notifications).lower()
-    )
-    return {"success": True}
 
 
 @router.get("/settings/recording")
@@ -219,36 +230,27 @@ async def get_recording_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """Get recording settings."""
+    vals = Setting.get_many(db, user.org_id, {
+        "scheduled_recording": "false",
+        "scheduled_start": "06:00",
+        "scheduled_end": "17:00",
+        "continuous_24_7": "false",
+    })
     return {
-        "motion_recording": Setting.get(db, user.org_id, "motion_recording", "false")
-        == "true",
-        "face_recording": Setting.get(db, user.org_id, "face_recording", "false")
-        == "true",
-        "object_recording": Setting.get(db, user.org_id, "object_recording", "false")
-        == "true",
-        "post_buffer": int(Setting.get(db, user.org_id, "post_buffer", "5")),
-        "scheduled_recording": Setting.get(
-            db, user.org_id, "scheduled_recording", "false"
-        )
-        == "true",
-        "scheduled_start": Setting.get(db, user.org_id, "scheduled_start", "06:00"),
-        "scheduled_end": Setting.get(db, user.org_id, "scheduled_end", "17:00"),
-        "continuous_24_7": Setting.get(db, user.org_id, "continuous_24_7", "false")
-        == "true",
+        "scheduled_recording": vals["scheduled_recording"] == "true",
+        "scheduled_start": vals["scheduled_start"],
+        "scheduled_end": vals["scheduled_end"],
+        "continuous_24_7": vals["continuous_24_7"] == "true",
     }
 
 
 @router.post("/settings/recording")
 async def update_recording_settings(
     data: RecordingSettings,
-    user: AuthUser = Depends(get_current_user),
+    user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Update recording settings."""
-    Setting.set(db, user.org_id, "motion_recording", str(data.motion_recording).lower())
-    Setting.set(db, user.org_id, "face_recording", str(data.face_recording).lower())
-    Setting.set(db, user.org_id, "object_recording", str(data.object_recording).lower())
-    Setting.set(db, user.org_id, "post_buffer", str(data.post_buffer))
+    """Update recording settings. Requires admin."""
     Setting.set(
         db, user.org_id, "scheduled_recording", str(data.scheduled_recording).lower()
     )
@@ -256,103 +258,6 @@ async def update_recording_settings(
     Setting.set(db, user.org_id, "scheduled_end", str(data.scheduled_end))
     Setting.set(db, user.org_id, "continuous_24_7", str(data.continuous_24_7).lower())
     return {"success": True}
-
-
-# Alerts
-@router.get("/alerts")
-async def list_alerts(
-    user: AuthUser = Depends(require_view),
-    db: Session = Depends(get_db),
-    detection_type: str = None,
-    camera_id: str = None,
-    since_hours: int = 24,
-    limit: int = 100,
-):
-    """List alerts for the user's organization."""
-    query = db.query(Alert).filter_by(org_id=user.org_id)
-
-    if detection_type:
-        if detection_type not in ["motion", "face", "object"]:
-            raise HTTPException(status_code=400, detail="Invalid detection type")
-        query = query.filter_by(detection_type=detection_type)
-
-    if camera_id:
-        query = query.filter_by(camera_id=camera_id)
-
-    since_time = datetime.utcnow() - timedelta(hours=since_hours)
-    query = query.filter(Alert.created_at >= since_time)
-
-    alerts = query.order_by(Alert.created_at.desc()).limit(limit).all()
-    return [a.to_dict() for a in alerts]
-
-
-@router.get("/alerts/{alert_id}")
-async def get_alert(
-    alert_id: int, user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """Get a specific alert."""
-    alert = db.query(Alert).filter_by(id=alert_id, org_id=user.org_id).first()
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    return alert.to_dict()
-
-
-@router.delete("/alerts/{alert_id}")
-async def delete_alert(
-    alert_id: int,
-    user: AuthUser = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """Delete an alert."""
-    alert = db.query(Alert).filter_by(id=alert_id, org_id=user.org_id).first()
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-
-    db.delete(alert)
-    db.commit()
-    return {"success": True, "deleted": alert_id}
-
-
-# Media (snapshots/recordings metadata stored in database)
-@router.get("/media")
-async def list_media(
-    user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """List all media for the user's organization."""
-    media_list = (
-        db.query(Media)
-        .filter_by(org_id=user.org_id)
-        .order_by(Media.created_at.desc())
-        .all()
-    )
-    return [m.to_dict() for m in media_list]
-
-
-@router.get("/media/{media_id}")
-async def get_media(
-    media_id: int, user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """Get media metadata."""
-    media = db.query(Media).filter_by(id=media_id, org_id=user.org_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    return media.to_dict()
-
-
-@router.delete("/media/{media_id}")
-async def delete_media(
-    media_id: int,
-    user: AuthUser = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """Delete media."""
-    media = db.query(Media).filter_by(id=media_id, org_id=user.org_id).first()
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-
-    db.delete(media)
-    db.commit()
-    return {"success": True, "deleted": media_id}
 
 
 # Audit Logs
@@ -398,14 +303,9 @@ async def report_camera_codec(
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     # Verify camera belongs to this node
-    camera = db.query(Camera).filter_by(camera_id=camera_id).first()
+    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-
-    if camera.node_id != node.id:
-        raise HTTPException(
-            status_code=403, detail="Camera does not belong to this node"
-        )
 
     # Parse codec info from request body
     import json
@@ -415,26 +315,120 @@ async def report_camera_codec(
         codec_data = json.loads(body)
         video_codec = codec_data.get("video_codec")
         audio_codec = codec_data.get("audio_codec")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid request body: {e}")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid request body")
 
     if not video_codec:
         raise HTTPException(status_code=400, detail="video_codec is required")
 
-    # Update codec fields
+    # Update camera codec fields
     camera.video_codec = video_codec
     camera.audio_codec = audio_codec or "mp4a.40.2"  # Default to AAC-LC
-    camera.codec_detected_at = datetime.utcnow()
+    camera.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+
+    # Also update node codec if this is the first camera to detect
+    if node and not node.video_codec:
+        node.video_codec = video_codec
+        node.audio_codec = camera.audio_codec
+        node.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        logger.info(
+            "Updated node %s codec: video=%s, audio=%s", node.node_id, video_codec, camera.audio_codec
+        )
+
     db.commit()
 
-    print(
-        f"[codec] Updated codec for camera {camera_id}: video={video_codec}, audio={camera.audio_codec}"
-    )
+    logger.info("Updated codec for camera %s: video=%s, audio=%s", camera_id, video_codec, camera.audio_codec)
 
     return {"success": True, "message": "Codec updated"}
 
 
-@router.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring."""
-    return {"status": "healthy", "service": "OpenSentry Command Center API"}
+# ── Danger Zone ──────────────────────────────────────────────────────
+
+@router.post("/settings/danger/wipe-logs")
+async def wipe_stream_logs(
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete all stream access logs for this organization."""
+    if "admin" not in user.features:
+        raise HTTPException(
+            status_code=403,
+            detail="Danger zone requires a Pro or Business plan.",
+        )
+    from app.models import StreamAccessLog
+
+    count = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
+    from app.models.models import McpActivityLog
+    mcp_count = db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
+    db.commit()
+    logger.warning("Admin %s wiped %d stream + %d MCP logs for org %s", user.user_id, count, mcp_count, user.org_id)
+    return {"success": True, "deleted_logs": count, "deleted_mcp_logs": mcp_count}
+
+
+@router.post("/settings/danger/full-reset")
+async def full_reset(
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Full organization reset: wipe all nodes (with CloudNode notification),
+    delete Tigris storage, clear stream logs, clear settings.
+    """
+    if "admin" not in user.features:
+        raise HTTPException(
+            status_code=403,
+            detail="Danger zone requires a Pro or Business plan.",
+        )
+    from app.models import StreamAccessLog, CameraNode
+    from app.services.storage import get_storage
+
+    results = {
+        "nodes_deleted": 0,
+        "nodes_wiped": 0,
+        "cameras_deleted": 0,
+        "storage_cleaned": 0,
+        "logs_deleted": 0,
+        "settings_deleted": 0,
+    }
+
+    # 1. Delete all nodes (send wipe_data to each, clean Tigris, remove from DB)
+    nodes = db.query(CameraNode).filter_by(org_id=user.org_id).all()
+    for node in nodes:
+        # Tell CloudNode to wipe local data
+        try:
+            from app.api.ws import manager
+            result = await manager.send_command(node.node_id, "wipe_data", {}, timeout=10)
+            if result and result.get("status") == "success":
+                results["nodes_wiped"] += 1
+        except Exception as e:
+            logger.warning("Could not send wipe_data to node %s: %s", node.node_id, e)
+
+        # Clean Tigris storage for each camera
+        try:
+            storage = get_storage()
+            for camera in list(node.cameras):
+                count = storage.delete_camera_storage(user.org_id, camera.camera_id)
+                results["storage_cleaned"] += count
+                results["cameras_deleted"] += 1
+        except Exception as e:
+            logger.warning("Storage cleanup failed for node %s: %s", node.node_id, e)
+
+        db.delete(node)
+        results["nodes_deleted"] += 1
+
+    # 2. Wipe stream access logs
+    results["logs_deleted"] = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
+
+    # 3. Wipe MCP activity logs
+    from app.models.models import McpActivityLog
+    results["mcp_logs_deleted"] = db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
+
+    # 4. Wipe settings
+    results["settings_deleted"] = db.query(Setting).filter_by(org_id=user.org_id).delete()
+
+    # 5. Wipe audit logs
+    db.query(AuditLog).filter_by(org_id=user.org_id).delete()
+
+    db.commit()
+    logger.warning("Admin %s performed FULL RESET for org %s: %s", user.user_id, user.org_id, results)
+    return {"success": True, **results}

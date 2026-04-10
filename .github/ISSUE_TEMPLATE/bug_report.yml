@@ -51,14 +51,13 @@ body:
       label: Component
       description: Which part of OpenSentry is affected?
       options:
-        - Command Center (Dashboard/Web UI)
-        - Command Center (API)
-        - Command Center (MQTT)
-        - Basic Camera Node
-        - Motion Detection Node
-        - Face Detection Node
-        - Object Detection Node
-        - Docker/Setup Scripts
+        - Frontend (React Dashboard)
+        - Backend (FastAPI API)
+        - CloudNode (Rust)
+        - Authentication (Clerk)
+        - HLS Streaming
+        - Storage (Tigris/S3)
+        - Docker/Deployment
         - Documentation
         - Other
     validations:

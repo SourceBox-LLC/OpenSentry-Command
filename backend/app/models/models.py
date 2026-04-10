@@ -1,5 +1,4 @@
-import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import (
     Column,
     String,
@@ -7,9 +6,7 @@ from sqlalchemy import (
     DateTime,
     Integer,
     Boolean,
-    Float,
     ForeignKey,
-    LargeBinary,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -28,17 +25,26 @@ class Camera(Base):
     group_id = Column(Integer, ForeignKey("camera_groups.id"), nullable=True)
     last_seen = Column(DateTime)
     status = Column(String(20), default="offline")
-    notes = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
 
     # Codec detection fields
-    video_codec = Column(String(50), nullable=True)  # e.g., "avc1.42001E"
+    video_codec = Column(String(50), nullable=True)  # e.g., "avc1.42e01e"
     audio_codec = Column(String(50), nullable=True)  # e.g., "mp4a.40.2"
     codec_detected_at = Column(DateTime, nullable=True)
 
-    media = relationship("Media", back_populates="camera", cascade="all, delete-orphan")
     group = relationship("CameraGroup", back_populates="cameras")
     node = relationship("CameraNode", back_populates="cameras")
+
+    @property
+    def effective_status(self) -> str:
+        """Return the real-time status based on last_seen.
+        If no heartbeat in 90s (3 missed), the camera is offline."""
+        if not self.last_seen or self.status == "offline":
+            return "offline"
+        age = datetime.now(tz=timezone.utc).replace(tzinfo=None) - self.last_seen
+        if age > timedelta(seconds=90):
+            return "offline"
+        return self.status
 
     def to_dict(self):
         return {
@@ -47,7 +53,7 @@ class Camera(Base):
             "node_type": self.node_type,
             "capabilities": self.capabilities.split(",") if self.capabilities else [],
             "group": self.group.name if self.group else None,
-            "status": self.status,
+            "status": self.effective_status,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
         }
 
@@ -60,7 +66,7 @@ class CameraGroup(Base):
     name = Column(String(100), nullable=False)
     color = Column(String(7), default="#22c55e")
     icon = Column(String(10), default="📁")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
 
     cameras = relationship("Camera", back_populates="group")
 
@@ -74,74 +80,6 @@ class CameraGroup(Base):
         }
 
 
-class Media(Base):
-    __tablename__ = "media"
-
-    id = Column(Integer, primary_key=True)
-    camera_id = Column(Integer, ForeignKey("cameras.id"), nullable=True)
-    org_id = Column(String(100), nullable=False, index=True)
-    media_type = Column(String(20), nullable=False)
-    filename = Column(String(255), unique=True, nullable=False, index=True)
-    mimetype = Column(String(50), default="application/octet-stream")
-    data = Column(LargeBinary, nullable=False)
-    size = Column(Integer, default=0)
-    duration = Column(Float, nullable=True)
-    thumbnail = Column(LargeBinary, nullable=True)
-    tags = Column(String(500), default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    camera = relationship("Camera", back_populates="media")
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "camera_id": self.camera.camera_id if self.camera else None,
-            "type": self.media_type,
-            "filename": self.filename,
-            "size": self.size,
-            "duration": self.duration,
-            "tags": self.tags.split(",") if self.tags else [],
-            "created": self.created_at.timestamp(),
-            "url": f"/api/{'snapshots' if self.media_type == 'snapshot' else 'recordings'}/{self.id}",
-        }
-
-
-class Alert(Base):
-    __tablename__ = "alerts"
-
-    id = Column(Integer, primary_key=True)
-    org_id = Column(String(100), nullable=False, index=True)
-    camera_id = Column(String(100), nullable=False, index=True)
-    detection_type = Column(String(20), nullable=False)
-    confidence = Column(Float, nullable=True)
-    thumbnail_path = Column(String(500), nullable=True)
-    region_x = Column(Integer, nullable=True)
-    region_y = Column(Integer, nullable=True)
-    region_width = Column(Integer, nullable=True)
-    region_height = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    processed = Column(Boolean, default=False)
-
-    def to_dict(self):
-        region = None
-        if self.region_x is not None:
-            region = {
-                "x": self.region_x,
-                "y": self.region_y,
-                "width": self.region_width,
-                "height": self.region_height,
-            }
-        return {
-            "id": self.id,
-            "camera_id": self.camera_id,
-            "type": self.detection_type,
-            "confidence": self.confidence,
-            "region": region,
-            "timestamp": self.created_at.isoformat() if self.created_at else None,
-            "processed": self.processed,
-        }
-
-
 class Setting(Base):
     __tablename__ = "settings"
 
@@ -149,12 +87,26 @@ class Setting(Base):
     org_id = Column(String(100), nullable=False, index=True)
     key = Column(String(100), nullable=False, index=True)
     value = Column(Text)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
 
     @staticmethod
     def get(db, org_id: str, key: str, default: str = None) -> str:
         setting = db.query(Setting).filter_by(org_id=org_id, key=key).first()
         return setting.value if setting else default
+
+    @staticmethod
+    def get_many(db, org_id: str, keys_defaults: dict) -> dict:
+        """Fetch multiple settings in a single query.
+        keys_defaults: {key: default_value, ...}
+        Returns: {key: value, ...}
+        """
+        rows = (
+            db.query(Setting)
+            .filter(Setting.org_id == org_id, Setting.key.in_(keys_defaults.keys()))
+            .all()
+        )
+        found = {row.key: row.value for row in rows}
+        return {k: found.get(k, default) for k, default in keys_defaults.items()}
 
     @staticmethod
     def set(db, org_id: str, key: str, value: str):
@@ -173,7 +125,7 @@ class AuditLog(Base):
 
     id = Column(Integer, primary_key=True)
     org_id = Column(String(100), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
     event = Column(String(50), nullable=False, index=True)
     ip_address = Column(String(45))
     username = Column(String(80))
@@ -205,7 +157,7 @@ class CameraNode(Base):
     status = Column(String(20), default="offline")
     last_seen = Column(DateTime)
     key_rotated_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
     upload_count = Column(Integer, default=0)
     video_codec = Column(String(50), nullable=True)
     audio_codec = Column(String(50), nullable=True)
@@ -215,6 +167,17 @@ class CameraNode(Base):
         "Camera", back_populates="node", cascade="all, delete-orphan"
     )
 
+    @property
+    def effective_status(self) -> str:
+        """Return the real-time status based on last_seen.
+        If no heartbeat in 90s (3 missed), the node is offline."""
+        if not self.last_seen or self.status in ("offline", "pending"):
+            return self.status or "offline"
+        age = datetime.now(tz=timezone.utc).replace(tzinfo=None) - self.last_seen
+        if age > timedelta(seconds=90):
+            return "offline"
+        return self.status
+
     def to_dict(self):
         return {
             "node_id": self.node_id,
@@ -222,7 +185,7 @@ class CameraNode(Base):
             "hostname": self.hostname,
             "local_ip": self.local_ip,
             "http_port": self.http_port,
-            "status": self.status,
+            "status": self.effective_status,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
             "key_rotated_at": self.key_rotated_at.isoformat()
             if self.key_rotated_at
@@ -239,22 +202,72 @@ class StreamAccessLog(Base):
 
     id = Column(Integer, primary_key=True)
     user_id = Column(String(100), nullable=False, index=True)
+    user_email = Column(String(255), default="")
     org_id = Column(String(100), nullable=False, index=True)
     camera_id = Column(String(100), nullable=False, index=True)
     node_id = Column(String(100), nullable=False)
     ip_address = Column(String(45))
     user_agent = Column(String(500))
-    accessed_at = Column(DateTime, default=datetime.utcnow, index=True)
+    accessed_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
 
     def to_dict(self):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "user_email": self.user_email or "",
             "org_id": self.org_id,
             "camera_id": self.camera_id,
             "node_id": self.node_id,
             "ip_address": self.ip_address,
             "accessed_at": self.accessed_at.isoformat(),
+        }
+
+
+class McpApiKey(Base):
+    __tablename__ = "mcp_api_keys"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    key_hash = Column(String(128), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
+    last_used_at = Column(DateTime, nullable=True)
+    revoked = Column(Boolean, default=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
+            "revoked": self.revoked,
+        }
+
+
+class McpActivityLog(Base):
+    __tablename__ = "mcp_activity_logs"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    tool_name = Column(String(100), nullable=False, index=True)
+    key_name = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False)
+    duration_ms = Column(Integer)
+    args_summary = Column(String(500))
+    error = Column(String(500))
+    timestamp = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "tool_name": self.tool_name,
+            "key_name": self.key_name,
+            "status": self.status,
+            "duration_ms": self.duration_ms,
+            "args_summary": self.args_summary,
+            "error": self.error,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
 
 
@@ -268,7 +281,7 @@ class PendingUpload(Base):
     node_id = Column(String(100), nullable=False)
     s3_key = Column(String(500), nullable=False)
     expected_checksum = Column(String(128), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
     expires_at = Column(DateTime, nullable=False, index=True)
     completed = Column(Boolean, default=False)
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import Hls from "hls.js"
-import { useAuth } from "@clerk/clerk-react"
+import { useSharedToken } from "../hooks/useSharedToken.jsx"
 
 // Set to true to connect directly to CloudNode on localhost:8080
 // Set to false to use backend proxy with authentication
@@ -9,7 +9,7 @@ const LOCAL_TEST_MODE = import.meta.env.VITE_LOCAL_HLS === "true"
 function HlsPlayer({ cameraId, cameraName }) {
     const videoRef = useRef(null)
     const hlsRef = useRef(null)
-    const { getToken } = useAuth()
+    const { getCurrentToken, refreshNow } = useSharedToken()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [isLive, setIsLive] = useState(false)
@@ -17,37 +17,66 @@ function HlsPlayer({ cameraId, cameraName }) {
     useEffect(() => {
         const video = videoRef.current
         if (!video || !cameraId) {
-            console.log("[HlsPlayer] No video ref or cameraId, skipping setup. cameraId:", cameraId)
-            return
+                return
         }
 
-        console.log("[HlsPlayer] Setting up HLS for camera:", cameraId)
-
         const API_URL = import.meta.env.VITE_API_URL || ""
+        const ownOrigin = API_URL || window.location.origin
 
         const setupHls = async () => {
             try {
-                // In local test mode, connect directly to CloudNode
-                // In production mode, use backend proxy with auth
                 const playlistUrl = LOCAL_TEST_MODE
                     ? `http://localhost:8080/hls/${cameraId}/stream.m3u8`
                     : `${API_URL}/api/cameras/${cameraId}/stream.m3u8`
 
-                console.log("[HlsPlayer] Playlist URL:", playlistUrl)
-                console.log("[HlsPlayer] LOCAL_TEST_MODE:", LOCAL_TEST_MODE)
-                console.log("[HlsPlayer] API_URL:", API_URL)
+                // Get the current shared auth token. xhrSetup reads the
+                // latest token on each request via getCurrentToken(), so
+                // no per-player refresh interval is needed.
+                let authToken = LOCAL_TEST_MODE ? null : getCurrentToken()
 
                 if (Hls.isSupported()) {
                     const hls = new Hls({
-                        xhrSetup: async (xhr) => {
-                            // Only add auth header in production mode
-                            if (!LOCAL_TEST_MODE) {
-                                const token = await getToken()
-                                if (token) {
-                                    xhr.setRequestHeader("Authorization", `Bearer ${token}`)
-                                }
+                        xhrSetup: (xhr, url) => {
+                            // Only send auth header to our own backend.
+                            // Presigned Tigris URLs already carry auth in the query
+                            // string — sending an Authorization header to Tigris
+                            // triggers a CORS preflight that Tigris rejects.
+                            // Read the latest shared token on each request.
+                            const token = LOCAL_TEST_MODE ? null : getCurrentToken()
+                            if (token && url.startsWith(ownOrigin)) {
+                                xhr.setRequestHeader("Authorization", `Bearer ${token}`)
                             }
                         },
+
+                        // ── Latency tuning (1-second segments) ────────────────
+                        // Pipeline latency (FFmpeg → upload → Tigris → browser) is ~2-3s.
+                        // With 1s segments, 3 segments = 3s behind live — enough
+                        // headroom to absorb upload jitter without stalling.
+                        liveSyncDurationCount: 4,        // stay 4 segments (4s) behind live
+                        liveMaxLatencyDurationCount: 8,  // if >8 segs (8s) behind, jump to live
+                        liveDurationInfinity: true,      // never treat the stream as ended
+                        liveBackBufferLength: 10,        // keep 10s of back buffer in live mode
+
+                        // Forward buffer: generous to ride out upload jitter
+                        maxBufferLength: 10,
+                        maxMaxBufferLength: 20,
+                        maxBufferSize: 20 * 1024 * 1024, // 20 MB
+
+                        // Back buffer: moderate trim to limit memory on long streams
+                        backBufferLength: 15,
+
+                        // Playlist reload — poll aggressively for new segments.
+                        manifestLoadingMaxRetry: 15,
+                        manifestLoadingRetryDelay: 400,
+                        manifestLoadingTimeOut: 10000,
+                        levelLoadingMaxRetry: 15,
+                        levelLoadingRetryDelay: 400,
+                        levelLoadingTimeOut: 10000,
+                        fragLoadingMaxRetry: 15,
+                        fragLoadingRetryDelay: 400,
+                        fragLoadingTimeOut: 10000,
+
+                        enableWorker: true,
                     })
 
                     hlsRef.current = hls
@@ -58,37 +87,77 @@ function HlsPlayer({ cameraId, cameraName }) {
                     hls.on(Hls.Events.MANIFEST_PARSED, () => {
                         setLoading(false)
                         setIsLive(true)
+                        // Start playback from the live edge, not from the
+                        // beginning of the buffer.
+                        hls.startLoad(-1)
                         video.play().catch(() => { })
                     })
+
+                    // If the player falls too far behind live, snap back.
+                    hls.on(Hls.Events.LEVEL_UPDATED, (_, data) => {
+                        if (data.live && video && !video.paused) {
+                            const liveEdge = hls.liveSyncPosition
+                            if (liveEdge && video.currentTime < liveEdge - 6) {
+                                console.warn("[HlsPlayer] Fell behind live edge, snapping forward")
+                                video.currentTime = liveEdge
+                            }
+                        }
+                    })
+
+                    // Stall recovery: if the player hasn't advanced in 2 seconds
+                    // while playing, it's stuck. Jump to live edge to break out
+                    // of it — this is what a page refresh does, but automatically.
+                    let lastTime = 0
+                    let stallCount = 0
+                    const stallCheck = setInterval(() => {
+                        if (!video || video.paused) return
+
+                        if (Math.abs(video.currentTime - lastTime) < 0.1) {
+                            stallCount++
+                            if (stallCount >= 2) {
+                                // Stalled for 2+ seconds — jump to live
+                                const liveEdge = hls.liveSyncPosition
+                                if (liveEdge && liveEdge > video.currentTime + 1) {
+                                    console.warn(`[HlsPlayer] Stall detected (${stallCount}s), jumping to live edge`)
+                                    video.currentTime = liveEdge
+                                    hls.startLoad(-1)
+                                    setLoading(false)
+                                }
+                                stallCount = 0
+                            }
+                        } else {
+                            stallCount = 0
+                            setLoading(false)
+                        }
+                        lastTime = video.currentTime
+                    }, 1000)
+                    hls._stallCheck = stallCheck
 
                     hls.on(Hls.Events.ERROR, (event, data) => {
                         if (data.fatal) {
                             switch (data.type) {
                                 case Hls.ErrorTypes.NETWORK_ERROR:
-                                    setError("Network error - stream may not be active")
-                                    setLoading(false)
-                                    hls.startLoad()
+                                    // Network errors are often caused by an expired
+                                    // auth token (401). Refresh the shared token
+                                    // immediately before retrying.
+                                    console.warn("[HlsPlayer] Network error, refreshing token and retrying:", data.details)
+                                    refreshNow().then(() => {
+                                        hls.startLoad()
+                                    })
                                     break
                                 case Hls.ErrorTypes.MEDIA_ERROR:
-                                    setError("Media error - attempting recovery")
+                                    console.warn("[HlsPlayer] Media error, recovering:", data.details)
                                     hls.recoverMediaError()
                                     break
                                 default:
-                                    setError("Stream error - cannot recover")
+                                    setError(`Fatal error: ${data.type}`)
                                     hls.destroy()
                                     break
                             }
                         }
                     })
-                } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                    video.src = playlistUrl
-                    video.addEventListener("loadedmetadata", () => {
-                        setLoading(false)
-                        setIsLive(true)
-                        video.play().catch(() => { })
-                    })
                 } else {
-                    setError("HLS is not supported in this browser")
+                    setError("Your browser does not support HLS streaming. Please use a modern browser (Chrome, Firefox, Edge, or Safari 13+).")
                     setLoading(false)
                 }
             } catch (err) {
@@ -101,11 +170,14 @@ function HlsPlayer({ cameraId, cameraName }) {
 
         return () => {
             if (hlsRef.current) {
+                if (hlsRef.current._stallCheck) {
+                    clearInterval(hlsRef.current._stallCheck)
+                }
                 hlsRef.current.destroy()
                 hlsRef.current = null
             }
         }
-    }, [cameraId, getToken])
+    }, [cameraId, getCurrentToken])
 
     if (error) {
         return (

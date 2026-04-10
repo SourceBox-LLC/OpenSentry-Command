@@ -1,23 +1,21 @@
 from .models import (
     Camera,
     CameraGroup,
-    Media,
-    Alert,
     Setting,
     AuditLog,
     CameraNode,
     StreamAccessLog,
+    McpActivityLog,
     PendingUpload,
 )
 
 __all__ = [
     "Camera",
     "CameraGroup",
-    "Media",
-    "Alert",
     "Setting",
     "AuditLog",
     "CameraNode",
     "StreamAccessLog",
+    "McpActivityLog",
     "PendingUpload",
 ]

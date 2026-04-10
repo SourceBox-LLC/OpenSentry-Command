@@ -1,0 +1,113 @@
+import { Link } from "react-router-dom"
+
+const UPGRADE_MESSAGES = {
+  nodes: {
+    title: "Node Limit Reached",
+    icon: "🖥️",
+    description: "You've hit the maximum number of camera nodes on your current plan.",
+    benefit: "Upgrade to connect more nodes and expand your security coverage.",
+  },
+  cameras: {
+    title: "Camera Limit Reached",
+    icon: "📹",
+    description: "You've reached the maximum number of cameras for your plan.",
+    benefit: "Upgrade to monitor more cameras across all your locations.",
+  },
+  admin: {
+    title: "Pro Feature",
+    icon: "📊",
+    description: "The Admin Dashboard with stream access logs and analytics is a Pro feature.",
+    benefit: "Upgrade to get full visibility into who's accessing your streams.",
+  },
+  "danger-zone": {
+    title: "Pro Feature",
+    icon: "⚙️",
+    description: "Advanced management tools like log wiping and full resets are Pro features.",
+    benefit: "Upgrade for complete control over your organization data.",
+  },
+  mcp: {
+    title: "MCP Integration",
+    icon: "</>",
+    description: "MCP lets AI tools like Claude Code directly control your cameras, nodes, and settings.",
+    benefit: "Upgrade to connect your security system to AI-powered workflows.",
+  },
+}
+
+const PLAN_COMPARISON = [
+  { label: "Cameras", free: "2", pro: "10", business: "50" },
+  { label: "Nodes", free: "1", pro: "5", business: "Unlimited" },
+  { label: "Admin Dashboard", free: false, pro: true, business: true },
+  { label: "Stream Analytics", free: false, pro: true, business: true },
+  { label: "Danger Zone Tools", free: false, pro: true, business: true },
+  { label: "MCP Integration", free: false, pro: true, business: true },
+  { label: "Priority Support", free: false, pro: false, business: true },
+]
+
+function UpgradeModal({ isOpen, onClose, feature, currentPlan }) {
+  if (!isOpen) return null
+
+  const msg = UPGRADE_MESSAGES[feature] || UPGRADE_MESSAGES.nodes
+  const planName = currentPlan === "free_org" ? "Free" : currentPlan === "pro" ? "Pro" : "Business"
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content upgrade-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{msg.title}</h2>
+          <button className="modal-close" onClick={onClose}>&times;</button>
+        </div>
+
+        <div className="modal-body">
+          <div className="upgrade-modal-hero">
+            <div className="upgrade-modal-icon">{msg.icon}</div>
+            <p className="upgrade-modal-desc">{msg.description}</p>
+            <p className="upgrade-modal-benefit">{msg.benefit}</p>
+            <div className="upgrade-modal-current">
+              Currently on the <strong>{planName}</strong> plan
+            </div>
+          </div>
+
+          <div className="upgrade-comparison">
+            <table className="comparison-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th className={currentPlan === "free_org" ? "current-col" : ""}>Free</th>
+                  <th className={currentPlan === "pro" ? "current-col" : "highlight-col"}>Pro</th>
+                  <th className={currentPlan === "business" ? "current-col" : ""}>Business</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PLAN_COMPARISON.map((row) => (
+                  <tr key={row.label}>
+                    <td className="comparison-label">{row.label}</td>
+                    <td className={currentPlan === "free_org" ? "current-col" : ""}>
+                      {typeof row.free === "boolean" ? (row.free ? "✓" : "—") : row.free}
+                    </td>
+                    <td className={currentPlan === "pro" ? "current-col" : "highlight-col"}>
+                      {typeof row.pro === "boolean" ? (row.pro ? "✓" : "—") : row.pro}
+                    </td>
+                    <td className={currentPlan === "business" ? "current-col" : ""}>
+                      {typeof row.business === "boolean" ? (row.business ? "✓" : "—") : row.business}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="modal-actions">
+            <button className="btn btn-secondary" onClick={onClose}>
+              Maybe Later
+            </button>
+            <Link to="/pricing" className="btn btn-primary" onClick={onClose}>
+              View Plans
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default UpgradeModal

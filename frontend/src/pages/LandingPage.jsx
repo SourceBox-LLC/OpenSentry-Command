@@ -1,0 +1,521 @@
+import { useState, useEffect } from "react"
+import { Link, useLocation } from "react-router-dom"
+import CameraGridPreview from "../components/CameraGridPreview.jsx"
+
+function LandingPage() {
+  const [os, setOs] = useState('linux')
+  const [copied, setCopied] = useState(false)
+  const location = useLocation()
+
+  useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase()
+    if (ua.includes('win')) setOs('windows')
+    else if (ua.includes('mac')) setOs('macos')
+    else setOs('linux')
+  }, [])
+
+  useEffect(() => {
+    if (location.hash) {
+      const el = document.querySelector(location.hash)
+      if (el) el.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [location.hash])
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const base = window.location.origin
+  const installCommands = {
+    linux: `curl -fsSL ${base}/install.sh | bash`,
+    macos: `curl -fsSL ${base}/install.sh | bash`,
+    windows: `irm ${base}/install.ps1 | iex`,
+  }
+
+  return (
+    <>
+      {/* Hero Section */}
+      <section className="landing-hero">
+        <div className="landing-hero-bg"></div>
+        <div className="landing-hero-container">
+          <div className="landing-hero-content">
+            <div className="landing-hero-badge">☁️ Cloud-Hosted • Multi-Tenant</div>
+            <h1 className="landing-hero-title">
+              Private Security<br />Camera System
+            </h1>
+            <p className="landing-hero-subtitle">
+              Cloud-hosted surveillance with <strong>HLS streaming via global CDN</strong>. 
+              Multi-tenant organizations with role-based access. Your cameras, accessible from anywhere.
+            </p>
+            <div className="landing-hero-actions">
+              <Link to="/sign-up" className="landing-btn landing-btn-primary landing-btn-lg">
+                Get Started
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </Link>
+              <Link to="/#architecture" className="landing-btn landing-btn-outline landing-btn-lg">
+                How It Works
+              </Link>
+            </div>
+            <div className="landing-hero-stats">
+              <div className="landing-stat">
+                <span className="landing-stat-value">HTTPS</span>
+                <span className="landing-stat-label">Web UI</span>
+              </div>
+              <div className="landing-stat">
+                <span className="landing-stat-value">HLS</span>
+                <span className="landing-stat-label">Streaming</span>
+              </div>
+              <div className="landing-stat">
+                <span className="landing-stat-value">CDN</span>
+                <span className="landing-stat-label">Global Delivery</span>
+              </div>
+            </div>
+          </div>
+          <div className="landing-hero-visual">
+            <CameraGridPreview />
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="landing-section-alt">
+        <div className="landing-container">
+          <div className="landing-section-header">
+            <h2 className="landing-section-title">Why OpenSentry?</h2>
+            <p className="landing-section-subtitle">
+              Designed for modern security. Cloud-hosted, globally accessible, and secure by default.
+            </p>
+          </div>
+          <div className="landing-features-grid">
+            <div className="landing-feature-card">
+              <div className="landing-feature-icon">☁️</div>
+              <h3>Cloud-Hosted</h3>
+              <p>
+                Deploy on Fly.io with zero infrastructure management. No port forwarding, 
+                no static IPs, no VPN required.
+              </p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="landing-feature-icon">🔒</div>
+              <h3>Fully Encrypted</h3>
+              <p>
+                HTTPS web UI with Clerk multi-tenant authentication. HLS streams delivered 
+                via signed URLs with automatic expiration.
+              </p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="landing-feature-icon">🌐</div>
+              <h3>Global CDN</h3>
+              <p>
+                HLS segments stored in Tigris/S3 and delivered via Fly.io's global CDN. 
+                Low-latency viewing from anywhere in the world.
+              </p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="landing-feature-icon">👥</div>
+              <h3>Multi-Tenant</h3>
+              <p>
+                Organizations with role-based permissions. Admin and viewer roles. 
+                Invite team members to monitor cameras together.
+              </p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="landing-feature-icon">🎥</div>
+              <h3>Real-Time Streaming</h3>
+              <p>
+                HLS streaming with sub-10-second latency. CloudNode uploads segments 
+                in real-time for near-live viewing experience.
+              </p>
+            </div>
+            <div className="landing-feature-card">
+              <div className="landing-feature-icon">🔑</div>
+              <h3>Simple Setup</h3>
+              <p>
+                Install CloudNode on any device with a USB camera. Enter API key.
+                That's it. No network configuration required.
+              </p>
+            </div>
+            <div className="landing-feature-card landing-feature-highlight">
+              <div className="landing-feature-icon">{"</>"}</div>
+              <h3>MCP Integration</h3>
+              <p>
+                Give AI tools direct visual access to your cameras via the
+                Model Context Protocol. See what cameras see and control everything through natural language.
+              </p>
+              <span className="landing-feature-badge">PRO</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Architecture Section */}
+      <section id="architecture" className="landing-section">
+        <div className="landing-container">
+          <div className="landing-section-header">
+            <h2 className="landing-section-title">Two-Component Architecture</h2>
+            <p className="landing-section-subtitle">
+              CloudNode at your premises. Command Center in the cloud. Secure by design.
+            </p>
+          </div>
+          <div className="landing-arch-grid">
+            <div className="landing-arch-card node">
+              <div className="landing-arch-header">
+                <div className="landing-arch-icon">📹</div>
+                <div className="landing-arch-badge">Customer Premises</div>
+              </div>
+              <h3>CloudNode</h3>
+              <p className="landing-arch-desc">
+                Runs on any device with a USB camera. Captures video, generates HLS segments, 
+                and uploads to Tigris cloud storage.
+              </p>
+              <ul className="landing-arch-features">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  USB camera support
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  FFmpeg HLS generation
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Real-time uploads
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Windows, Linux, macOS
+                </li>
+              </ul>
+              <a 
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="landing-arch-cta landing-arch-cta-primary"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                View Repository
+              </a>
+            </div>
+
+            <div className="landing-arch-connector">
+              <div className="landing-connector-line"></div>
+              <div className="landing-connector-protocols">
+                <span>HTTPS</span>
+                <span>HLS</span>
+                <span>REST API</span>
+              </div>
+              <div className="landing-connector-line"></div>
+            </div>
+
+            <div className="landing-arch-card cloud">
+              <div className="landing-arch-header">
+                <div className="landing-arch-icon">🖥️</div>
+                <div className="landing-arch-badge">Cloud Hosted</div>
+              </div>
+              <h3>Command Center</h3>
+              <p className="landing-arch-desc">
+                Web dashboard for viewing all cameras, managing organizations, and 
+                controlling access. Deployed on Fly.io with global CDN delivery.
+              </p>
+              <ul className="landing-arch-features">
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  HTTPS web interface
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Clerk multi-tenant auth
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  SQLite metadata storage
+                </li>
+                <li>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  HLS streaming via CDN
+                </li>
+              </ul>
+              <a 
+                href="https://github.com/SourceBox-LLC/OpenSentry-Command" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="landing-arch-cta landing-arch-cta-primary"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                View Repository
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Quick Start Section */}
+      <section id="quickstart" className="landing-section-alt">
+        <div className="landing-container">
+          <div className="landing-section-header">
+            <h2 className="landing-section-title">Quick Start</h2>
+            <p className="landing-section-subtitle">
+              Get your first camera online in under 5 minutes.
+            </p>
+          </div>
+          <div className="landing-install-steps">
+            <div className="landing-step">
+              <div className="landing-step-number">1</div>
+              <div className="landing-step-content">
+                <h4>Create a free account</h4>
+                <div className="landing-code-block">
+                  <code>Sign up and create your organization</code>
+                </div>
+                <p className="landing-step-note">
+                  Create an account at opensentry-command.fly.dev and set up your organization.
+                </p>
+              </div>
+            </div>
+            <div className="landing-step">
+              <div className="landing-step-number">2</div>
+              <div className="landing-step-content">
+                <h4>Install CloudNode on your device</h4>
+                <div className="install-tabs install-tabs-landing">
+                  <div className="install-tab-buttons">
+                    <button
+                      className={`install-tab-btn${os === 'linux' ? ' active' : ''}`}
+                      onClick={() => setOs('linux')}
+                    >
+                      Linux
+                    </button>
+                    <button
+                      className={`install-tab-btn${os === 'macos' ? ' active' : ''}`}
+                      onClick={() => setOs('macos')}
+                    >
+                      macOS
+                    </button>
+                    <button
+                      className={`install-tab-btn${os === 'windows' ? ' active' : ''}`}
+                      onClick={() => setOs('windows')}
+                    >
+                      Windows
+                    </button>
+                  </div>
+                  <div className="landing-code-block">
+                    <code>{installCommands[os]}</code>
+                    <button className="landing-copy-btn" onClick={() => copyToClipboard(installCommands[os])}>
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+                <p className="landing-step-note">
+                  One command. Downloads CloudNode, checks dependencies, and guides you through setup.
+                </p>
+              </div>
+            </div>
+            <div className="landing-step">
+              <div className="landing-step-number">3</div>
+              <div className="landing-step-content">
+                <h4>Connect your USB camera</h4>
+                <p className="landing-step-note">
+                  CloudNode will automatically detect connected USB cameras. No manual configuration needed.
+                </p>
+              </div>
+            </div>
+            <div className="landing-step">
+              <div className="landing-step-number">4</div>
+              <div className="landing-step-content">
+                <h4>Enter your API key</h4>
+                <p className="landing-step-note">
+                  Generate an API key in your Command Center settings and enter it during CloudNode setup. 
+                  Your camera will appear in the dashboard instantly.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '3rem' }}>
+            <Link to="/sign-up" className="landing-btn landing-btn-primary landing-btn-lg">
+              Get Started Free
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Security Section */}
+      <section className="landing-section">
+        <div className="landing-container">
+          <div className="landing-security-content">
+            <div className="landing-security-text">
+              <h2>Security First Design</h2>
+              <p>
+                Every connection is encrypted. Every stream is authenticated. No inbound ports required.
+              </p>
+              <ul className="landing-security-list">
+                <li>
+                  <span className="landing-security-check">✓</span>
+                  <div>
+                    <strong>HTTPS</strong> — All web traffic encrypted with TLS
+                  </div>
+                </li>
+                <li>
+                  <span className="landing-security-check">✓</span>
+                  <div>
+                    <strong>Clerk Auth</strong> — Multi-tenant organizations with role-based permissions
+                  </div>
+                </li>
+                <li>
+                  <span className="landing-security-check">✓</span>
+                  <div>
+                    <strong>HLS Signed URLs</strong> — Stream URLs expire automatically
+                  </div>
+                </li>
+                <li>
+                  <span className="landing-security-check">✓</span>
+                  <div>
+                    <strong>API Keys</strong> — Node authentication with SHA256 hashing
+                  </div>
+                </li>
+                <li>
+                  <span className="landing-security-check">✓</span>
+                  <div>
+                    <strong>No Inbound Ports</strong> — CloudNode pushes to cloud, no router config needed
+                  </div>
+                </li>
+              </ul>
+            </div>
+            <div className="landing-security-visual">
+              <div className="landing-encryption-diagram">
+                <div className="landing-diagram-node node">
+                  <span>CloudNode</span>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>USB Camera + FFmpeg</div>
+                </div>
+                <div className="landing-diagram-arrow">
+                  <span>HTTPS</span>
+                </div>
+                <div className="landing-diagram-node cloud">
+                  <span>Command Center</span>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Fly.io + Tigris CDN</div>
+                </div>
+                <div className="landing-diagram-arrow">
+                  <span>HTTPS</span>
+                </div>
+                <div className="landing-diagram-node" style={{ borderColor: 'var(--accent-purple)' }}>
+                  <span>Browser</span>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Any Device</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* MCP Section */}
+      <section className="landing-section-alt">
+        <div className="landing-container">
+          <div className="landing-section-header">
+            <h2 className="landing-section-title">AI-Powered with MCP</h2>
+            <p className="landing-section-subtitle">
+              Give AI tools like Claude Code direct access to your security system
+              through the Model Context Protocol.
+            </p>
+          </div>
+          <div className="landing-mcp-showcase">
+            <div className="landing-mcp-left">
+              <div className="landing-mcp-badge">Model Context Protocol</div>
+              <h3>Control cameras with natural language</h3>
+              <p>
+                Pro and Business users can generate an MCP API key and connect any
+                compatible AI tool — Claude Code, Cursor, or custom agents — directly
+                to their organization's cameras, nodes, and system data.
+              </p>
+              <div className="landing-mcp-examples">
+                <div className="landing-mcp-example">"Show me what the front door camera sees"</div>
+                <div className="landing-mcp-example">"Watch the garage cam for 30 seconds"</div>
+                <div className="landing-mcp-example">"Are any cameras offline right now?"</div>
+              </div>
+              <Link to="/pricing" className="landing-btn landing-btn-primary">
+                Try with Pro
+              </Link>
+            </div>
+            <div className="landing-mcp-right">
+              <div className="landing-mcp-config">
+                <div className="landing-mcp-config-header">
+                  <span className="landing-mcp-dot red" />
+                  <span className="landing-mcp-dot yellow" />
+                  <span className="landing-mcp-dot green" />
+                  <span className="landing-mcp-config-title">.mcp.json</span>
+                </div>
+                <pre className="landing-mcp-code">{`{
+  "mcpServers": {
+    "opensentry": {
+      "type": "http",
+      "url": "${base}/mcp",
+      "headers": {
+        "Authorization": "Bearer osc_..."
+      }
+    }
+  }
+}`}</pre>
+              </div>
+              <div className="landing-mcp-tools-count">
+                <span>12</span> tools available
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="landing-cta">
+        <div className="landing-container">
+          <div className="landing-cta-content">
+            <h2>Ready to Get Started?</h2>
+            <p>
+              Deploy OpenSentry today. Cloud-hosted, globally accessible, and free to start.
+            </p>
+            <div className="landing-cta-actions">
+              <Link to="/sign-up" className="landing-btn landing-btn-primary landing-btn-lg">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                Get Command Center
+              </Link>
+              <a 
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="landing-btn landing-btn-outline landing-btn-lg"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                Get CloudNode
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}
+
+export default LandingPage

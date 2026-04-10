@@ -22,6 +22,9 @@ wheels/
 .DS_Store
 Thumbs.db
 
+# Logs
+*.log
+
 # Security files (never commit!)
 .secret_key
 
@@ -30,3 +33,10 @@ certs/
 
 # Docker data volume
 data/
+
+# Claude Code
+.claude/
+
+# Frontend build output (built during Docker build)
+frontend/dist/
+frontend/node_modules/

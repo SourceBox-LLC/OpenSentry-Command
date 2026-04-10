@@ -24,12 +24,12 @@ class Config:
     AWS_REGION: str = os.getenv("AWS_REGION", "auto")
     TIGRIS_BUCKET_NAME: str = os.getenv("BUCKET_NAME", "")
 
-    STREAM_URL_EXPIRY_SECONDS: int = int(os.getenv("STREAM_URL_EXPIRY_SECONDS", "300"))
-    SEGMENT_URL_EXPIRY_SECONDS: int = int(os.getenv("SEGMENT_URL_EXPIRY_SECONDS", "300"))
-    UPLOAD_URL_EXPIRY_SECONDS: int = int(os.getenv("UPLOAD_URL_EXPIRY_SECONDS", "300"))
+    STREAM_URL_EXPIRY_SECONDS: int = int(os.getenv("STREAM_URL_EXPIRY_SECONDS", "900"))
+    SEGMENT_URL_EXPIRY_SECONDS: int = int(os.getenv("SEGMENT_URL_EXPIRY_SECONDS", "900"))
+    UPLOAD_URL_EXPIRY_SECONDS: int = int(os.getenv("UPLOAD_URL_EXPIRY_SECONDS", "900"))
     UPLOAD_TIMEOUT_MINUTES: int = int(os.getenv("UPLOAD_TIMEOUT_MINUTES", "10"))
     AUDIT_LOG_RETENTION_DAYS: int = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "7"))
-    SEGMENT_RETENTION_COUNT: int = int(os.getenv("SEGMENT_RETENTION_COUNT", "60"))
+    SEGMENT_RETENTION_COUNT: int = int(os.getenv("SEGMENT_RETENTION_COUNT", "300"))
     CLEANUP_INTERVAL: int = int(os.getenv("CLEANUP_INTERVAL", "20"))
 
     @classmethod

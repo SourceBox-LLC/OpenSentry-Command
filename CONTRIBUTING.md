@@ -1,18 +1,6 @@
 # Contributing to OpenSentry
 
-First off, thanks for taking the time to contribute! OpenSentry is an open-source project and we welcome contributions from everyone.
-
-## Table of Contents
-
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [How to Contribute](#how-to-contribute)
-- [Development Setup](#development-setup)
-- [Project Structure](#project-structure)
-- [Coding Guidelines](#coding-guidelines)
-- [Submitting Changes](#submitting-changes)
-- [Reporting Bugs](#reporting-bugs)
-- [Requesting Features](#requesting-features)
+Thanks for your interest in contributing! OpenSentry is open source and we welcome contributions from everyone.
 
 ## Code of Conduct
 
@@ -20,127 +8,96 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 ## Getting Started
 
-OpenSentry consists of multiple components:
+OpenSentry has two main components:
 
 | Component | Language | Repository |
 |-----------|----------|------------|
-| **Command Center** | Python/Flask | [OpenSentry-Command](https://github.com/SourceBox-LLC/OpenSentry-Command) |
-| **Basic Node** | C++ | [OpenSentry-Node](https://github.com/SourceBox-LLC/OpenSentry-Node) |
-| **Motion Node** | C++ | [OpenSentry-MotionNode](https://github.com/SourceBox-LLC/OpenSentry-MotionNode) |
-| **Face Detection Node** | C++ | [OpenSentry-FaceDetectionNode](https://github.com/SourceBox-LLC/OpenSentry-FaceDetectionNode) |
-| **Object Detection Node** | C++ | [OpenSentry-ObjectDetectionNode](https://github.com/SourceBox-LLC/OpenSentry-ObjectDetectionNode) |
+| **Command Center** | Python (FastAPI) + React | [OpenSentry-Command](https://github.com/SourceBox-LLC/OpenSentry-Command) |
+| **CloudNode** | Rust | [OpenSentry-CloudNode](https://github.com/SourceBox-LLC/opensentry-cloud-node) |
 
 ## How to Contribute
 
-There are many ways to contribute:
-
-- **Report bugs** - Found something broken? [Open a bug report](https://github.com/SourceBox-LLC/OpenSentry-Command/issues/new?template=bug_report.yml)
-- **Suggest features** - Have an idea? [Open a feature request](https://github.com/SourceBox-LLC/OpenSentry-Command/issues/new?template=feature_request.yml)
-- **Improve documentation** - Typos, clarifications, examples
-- **Submit code** - Bug fixes, new features, refactoring
-- **Review pull requests** - Help review code from other contributors
-- **Help others** - Answer questions in Discussions
+- **Report bugs** -- [Open an issue](https://github.com/SourceBox-LLC/OpenSentry-Command/issues/new)
+- **Suggest features** -- [Start a discussion](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions)
+- **Improve documentation** -- Typos, clarifications, examples
+- **Submit code** -- Bug fixes, new features, refactoring
+- **Review pull requests** -- Help review code from other contributors
 
 ## Development Setup
 
-### Command Center (Python)
+### Command Center
 
 ```bash
-# Clone the repository
-git clone https://github.com/SourceBox-LLC/OpenSentry-Command.git
-cd OpenSentry-Command
+# Backend
+cd backend
+cp .env.example .env
+uv sync
+uv run python start.py       # http://localhost:8000
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Linux/macOS
-# or: venv\Scripts\activate  # Windows
-
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run locally (without Docker)
-python -m opensentry_command.app
+# Frontend
+cd frontend
+cp .env.example .env
+npm install
+npm run dev                   # http://localhost:5173
 ```
 
-### Camera Nodes (C++)
+### CloudNode
 
 ```bash
-# Clone a node repository
-git clone https://github.com/SourceBox-LLC/OpenSentry-Node.git
-cd OpenSentry-Node
-
-# Install dependencies (Ubuntu/Debian)
-sudo apt-get install build-essential cmake \
-    libopencv-dev libavahi-client-dev \
-    libpaho-mqtt-dev libpaho-mqttpp-dev
-
-# Build
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-
-# Run (requires camera)
-./OpenSentry_Node
+cd opensentry-cloud-node
+cargo build --release
+./target/release/opensentry-cloudnode setup
 ```
 
-### Docker Development
-
-```bash
-# Build and run with Docker
-docker compose up --build
-
-# Rebuild after changes
-docker compose down
-docker compose up --build -d
-
-# View logs
-docker compose logs -f
-```
+See the [CloudNode README](https://github.com/SourceBox-LLC/opensentry-cloud-node) for full setup instructions.
 
 ## Project Structure
 
 ### Command Center
 
 ```
-opensentry_command/
-├── __init__.py          # Flask app factory
-├── app.py               # Entry point
-├── models/
-│   └── database.py      # SQLAlchemy models (User, Camera, Media, AuditLog)
-├── routes/
-│   ├── auth.py          # Authentication routes
-│   ├── api.py           # REST API endpoints (cameras, recordings, snapshots)
-│   └── main.py          # Main dashboard routes
-├── services/
-│   ├── camera.py        # Camera streaming, recording, ffmpeg transcoding
-│   └── mqtt.py          # MQTT client for node communication
-├── static/
-│   ├── css/             # Stylesheets
-│   └── js/              # JavaScript
-└── templates/           # Jinja2 HTML templates
+backend/
+├── app/
+│   ├── main.py           # FastAPI app, CORS, SPA middleware, MCP mount
+│   ├── api/              # Route handlers (cameras, nodes, hls, streams, audit, mcp_activity, webhooks)
+│   ├── mcp/              # MCP server (FastMCP tools, activity tracker)
+│   ├── core/             # Auth (Clerk JWT), config, database
+│   ├── models/           # SQLAlchemy models
+│   ├── schemas/          # Pydantic schemas
+│   └── services/         # Tigris storage, codec probing
+├── pyproject.toml
+└── start.py
+
+frontend/
+└── src/
+    ├── pages/            # Page components (Dashboard, Settings, Admin, MCP Control Center)
+    └── components/       # Reusable UI components
 ```
 
-### Camera Nodes
+### CloudNode
 
 ```
 src/
-└── main.cpp             # Single-file node implementation
-                         # - Camera capture (OpenCV)
-                         # - RTSP streaming (FFmpeg/MediaMTX)
-                         # - mDNS announcement (Avahi)
-                         # - MQTT communication
-                         # - Detection logic (varies by node)
+├── main.rs               # CLI entry point
+├── dashboard.rs           # Live TUI dashboard
+├── api/                   # Cloud API client + WebSocket
+├── camera/                # Platform-specific camera detection
+├── config/                # Config loading (SQLite → YAML → env → CLI)
+├── node/                  # Node lifecycle orchestration
+├── server/                # HTTP server (warp)
+├── setup/                 # Interactive setup wizard
+├── streaming/             # HLS generation and upload
+└── storage/               # SQLite database
 ```
 
 ## Coding Guidelines
 
-### Python (Command Center)
+### Python (Command Center Backend)
 
-- Follow [PEP 8](https://pep8.org/) style guide
+- Follow [PEP 8](https://pep8.org/)
 - Use type hints where practical
 - Keep functions focused and under 50 lines when possible
-- Document complex logic with comments
-- Use meaningful variable and function names
+- Use meaningful names
 
 ```python
 # Good
@@ -153,40 +110,23 @@ def get(id):
     ...
 ```
 
-### C++ (Camera Nodes)
+### JavaScript / React (Frontend)
 
-- Use consistent indentation (4 spaces)
-- Follow naming conventions:
-  - `camelCase` for variables and functions
-  - `PascalCase` for classes
-  - `UPPER_SNAKE_CASE` for constants
-- Keep functions focused
-- Document parameters and return values
+- Functional components with hooks
+- Use Clerk hooks (`useAuth`, `useOrganization`) for auth state
+- CSS classes for styling (dark theme, no Tailwind)
 
-```cpp
-// Good
-bool publishMqttStatus(const std::string& topic, const std::string& payload) {
-    // ...
-}
+### Rust (CloudNode)
 
-// Avoid
-bool pub(string t, string p) { ... }
-```
-
-### General Guidelines
-
-- Write clear commit messages (see below)
-- Keep PRs focused on a single change
-- Add tests for new functionality (when test infrastructure exists)
-- Update documentation if changing behavior
-- Don't introduce new dependencies without discussion
+- No `unwrap()` outside of tests -- use `?` or `anyhow::Context`
+- All errors use the custom `Error` enum
+- Platform-specific code in `camera/platform/`
 
 ## Submitting Changes
 
 ### 1. Fork and Clone
 
 ```bash
-# Fork on GitHub, then:
 git clone https://github.com/YOUR_USERNAME/OpenSentry-Command.git
 cd OpenSentry-Command
 git remote add upstream https://github.com/SourceBox-LLC/OpenSentry-Command.git
@@ -200,72 +140,40 @@ git checkout -b feature/your-feature-name
 git checkout -b fix/issue-description
 ```
 
-### 3. Make Your Changes
+### 3. Commit Your Changes
 
-- Write clean, well-documented code
-- Test your changes locally
-- Update documentation if needed
-
-### 4. Commit Your Changes
-
-Write clear commit messages:
+Use conventional commit messages:
 
 ```
-feat: add object detection alert notifications
+feat: add camera group filtering to dashboard
 
-- Add toast notifications for object detection events
-- Add notification toggle in settings
-- Store preference in localStorage
+- Add group selector dropdown
+- Filter camera grid by selected group
+- Persist selection in localStorage
 ```
 
-Use conventional commit prefixes:
-- `feat:` - New feature
-- `fix:` - Bug fix
-- `docs:` - Documentation only
-- `refactor:` - Code change that neither fixes a bug nor adds a feature
-- `test:` - Adding or updating tests
-- `chore:` - Maintenance tasks
+Prefixes: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 
-### 5. Push and Create PR
+### 4. Open a Pull Request
 
 ```bash
 git push origin feature/your-feature-name
 ```
 
-Then open a Pull Request on GitHub.
-
-### PR Guidelines
-
-- Fill out the PR template completely
-- Link related issues
-- Include screenshots for UI changes
-- Ensure CI passes (when available)
-- Be responsive to review feedback
+Then open a PR on GitHub. Include:
+- A clear description of what changed and why
+- Screenshots for UI changes
+- Links to related issues
 
 ## Reporting Bugs
 
-Before reporting:
-1. Check the [existing issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues)
-2. Check the [documentation](https://opensentry.fly.dev/docs.html)
+Before reporting, check [existing issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues).
 
-When reporting:
-- Use the [bug report template](https://github.com/SourceBox-LLC/OpenSentry-Command/issues/new?template=bug_report.yml)
-- Include steps to reproduce
-- Include relevant logs (`docker compose logs -f`)
-- Include your environment (OS, Docker version, etc.)
-
-## Requesting Features
-
-- Use the [feature request template](https://github.com/SourceBox-LLC/OpenSentry-Command/issues/new?template=feature_request.yml)
-- Describe the problem you're trying to solve
-- Explain your proposed solution
-- Be open to discussion and alternatives
-
-## Questions?
-
-- Check the [Documentation](https://opensentry.fly.dev/docs.html)
-- Open a [Discussion](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions)
-- Look at existing [Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues)
+Include:
+- Steps to reproduce
+- Expected vs actual behavior
+- Relevant logs
+- Environment (OS, Python version, browser)
 
 ---
 

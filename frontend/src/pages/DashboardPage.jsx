@@ -1,44 +1,97 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getCameras, sendCameraCommand, forgetCamera, startRecording, stopRecording, getRecordingStatus } from "../services/api"
+import { getCameras } from "../services/api"
+import { useToasts } from "../hooks/useToasts.jsx"
+import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import CameraCard from "../components/CameraCard.jsx"
+import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function DashboardPage() {
   const { getToken } = useAuth()
-  const { organization } = useOrganization()
+  const { organization, membership } = useOrganization()
+  const { showToast } = useToasts()
+  const { planInfo, refreshPlanInfo } = usePlanInfo()
   const [cameras, setCameras] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [recordingStatus, setRecordingStatus] = useState({})
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const prevCamerasRef = useRef(null)
+  const toastedOfflinesRef = useRef(new Set())
+
+  const isAdmin = membership?.role === "org:admin"
 
   const loadCameras = useCallback(async () => {
     if (!organization) return
     
     try {
-      setLoading(true)
       setError(null)
       const token = await getToken()
       const data = await getCameras(() => Promise.resolve(token))
-      console.log("[Dashboard] Received cameras data:", data)
-      console.log("[Dashboard] Data type:", typeof data, "isArray:", Array.isArray(data))
-      if (Array.isArray(data)) {
-        console.log("[Dashboard] First camera (if any):", data[0])
-      }
+      
       const camerasMap = Array.isArray(data)
         ? data.reduce((acc, camera) => {
-            console.log("[Dashboard] Processing camera:", camera)
             if (camera.camera_id) {
               acc[camera.camera_id] = camera
-            } else {
-              console.warn("[Dashboard] Camera missing camera_id:", camera)
             }
             return acc
           }, {})
         : data
-      console.log("[Dashboard] Final camerasMap keys:", Object.keys(camerasMap))
-      setCameras(camerasMap)
+      
+      // Detect cameras that just went offline
+      if (prevCamerasRef.current) {
+        const newlyOffline = []
+        for (const [id, cam] of Object.entries(camerasMap)) {
+          const prev = prevCamerasRef.current[id]
+          if (prev && prev.status !== "offline" && cam.status === "offline") {
+            newlyOffline.push(cam.name || id)
+          }
+        }
+        if (newlyOffline.length > 0) {
+          // Only toast each camera once per offline event
+          const fresh = newlyOffline.filter(n => !toastedOfflinesRef.current.has(n))
+          if (fresh.length > 0) {
+            fresh.forEach(n => toastedOfflinesRef.current.add(n))
+            const msg = fresh.length === 1
+              ? `Camera "${fresh[0]}" went offline`
+              : `${fresh.length} cameras went offline`
+            showToast(msg, "warning")
+          }
+        }
+        // Clear from toasted set when cameras come back online
+        for (const [id, cam] of Object.entries(camerasMap)) {
+          if (cam.status !== "offline") {
+            const name = cam.name || id
+            if (toastedOfflinesRef.current.has(name)) {
+              toastedOfflinesRef.current.delete(name)
+              showToast(`Camera "${name}" is back online`, "success")
+            }
+          }
+        }
+      }
+
+      // Only update state if data actually changed (shallow field comparison
+      // instead of JSON.stringify — avoids blocking the main thread).
+      const prev = prevCamerasRef.current
+      let changed = !prev || Object.keys(camerasMap).length !== Object.keys(prev).length
+      if (!changed) {
+        for (const [id, cam] of Object.entries(camerasMap)) {
+          const p = prev[id]
+          if (!p || p.status !== cam.status || p.name !== cam.name || p.last_seen !== cam.last_seen) {
+            changed = true
+            break
+          }
+        }
+      }
+      if (changed) {
+        prevCamerasRef.current = camerasMap
+        setCameras(camerasMap)
+      }
     } catch (err) {
       console.error("[Dashboard] Error loading cameras:", err)
+      // Only toast on first error, not every poll cycle
+      if (!error) showToast("Failed to load cameras", "error")
       setError(err.message)
     } finally {
       setLoading(false)
@@ -46,69 +99,21 @@ function DashboardPage() {
   }, [organization, getToken])
 
   useEffect(() => {
-    if (organization) {
-      loadCameras()
-      const interval = setInterval(loadCameras, 5000)
-      return () => clearInterval(interval)
-    }
+    if (!organization) return
+
+    loadCameras()
+    const interval = setInterval(loadCameras, 5000)
+    return () => clearInterval(interval)
   }, [organization, loadCameras])
 
-  const handleCommand = async (cameraId, command) => {
-    const token = await getToken()
-    try {
-      await sendCameraCommand(() => Promise.resolve(token), cameraId, command)
-      setTimeout(loadCameras, 1000)
-    } catch (err) {
-      console.error("Command failed:", err)
-    }
-  }
 
-  const handleForget = async (cameraId) => {
-    if (window.confirm("Are you sure you want to forget this camera?")) {
-      const token = await getToken()
-      try {
-        await forgetCamera(() => Promise.resolve(token), cameraId)
-        loadCameras()
-      } catch (err) {
-        console.error("Forget failed:", err)
-      }
-    }
-  }
-
-  const handleStartRecording = async (cameraId) => {
-    const token = await getToken()
-    try {
-      await startRecording(() => Promise.resolve(token), cameraId)
-      const status = await getRecordingStatus(() => Promise.resolve(token), cameraId)
-      setRecordingStatus(prev => ({ ...prev, [cameraId]: status }))
-    } catch (err) {
-      console.error("Start recording failed:", err)
-    }
-  }
-
-  const handleStopRecording = async (cameraId) => {
-    const token = await getToken()
-    try {
-      await stopRecording(() => Promise.resolve(token), cameraId)
-      setRecordingStatus(prev => ({ ...prev, [cameraId]: { recording: false } }))
-    } catch (err) {
-      console.error("Stop recording failed:", err)
-    }
-  }
-
-  const handleSnapshot = async (cameraId) => {
-    const token = await getToken()
-    try {
-      await fetch(`/api/camera/${cameraId}/snapshot`, {
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      })
-    } catch (err) {
-      console.error("Snapshot failed:", err)
-    }
-  }
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    prevCamerasRef.current = null // force state update
+    await loadCameras()
+    await refreshPlanInfo()
+    setRefreshing(false)
+  }, [loadCameras, refreshPlanInfo])
 
   const getStats = () => {
     const cameraList = Object.values(cameras)
@@ -136,13 +141,36 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-container">
+      {isAdmin && planInfo?.payment_past_due && (
+        <div className="payment-past-due-banner">
+          <span>Your payment is past due. Please update your billing information to avoid service interruption.</span>
+          <Link to="/settings">Update Billing</Link>
+        </div>
+      )}
+
+      {planInfo && planInfo.features?.includes("admin") && (
+        <div className={`pro-status-bar pro-status-${planInfo.plan}`}>
+          <div className="pro-status-left">
+            <span className="pro-status-badge">{planInfo.plan === "business" ? "BUSINESS" : "PRO"}</span>
+            <span className="pro-status-text">
+              {planInfo.usage.cameras} / {planInfo.limits.max_cameras >= 999 ? "\u221E" : planInfo.limits.max_cameras} cameras
+              {" \u00B7 "}
+              {planInfo.usage.nodes} / {planInfo.limits.max_nodes >= 999 ? "\u221E" : planInfo.limits.max_nodes} nodes
+              {" \u00B7 "}
+              MCP + Admin + Analytics
+            </span>
+          </div>
+          <Link to="/settings" className="pro-status-link">Manage Plan</Link>
+        </div>
+      )}
+
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-label">Active Cameras</div>
           <div className="stat-value green">{stats.active}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Total Nodes</div>
+          <div className="stat-label">Total Cameras</div>
           <div className="stat-value blue">{stats.total}</div>
         </div>
         <div className="stat-card">
@@ -157,13 +185,37 @@ function DashboardPage() {
         </div>
       </div>
 
+      {isAdmin && planInfo && planInfo.usage.cameras >= planInfo.limits.max_cameras && (
+        <div className="plan-limit-banner">
+          <span className="plan-limit-text">
+            You've reached your camera limit ({planInfo.limits.max_cameras} on the {planInfo.plan_name} plan).
+            New cameras won't be added until you upgrade.
+          </span>
+          <button className="btn btn-primary btn-small" onClick={() => setShowUpgrade(true)}>
+            Upgrade
+          </button>
+        </div>
+      )}
+
+      {isAdmin && planInfo && planInfo.usage.cameras >= Math.floor(planInfo.limits.max_cameras * 0.8) && planInfo.usage.cameras < planInfo.limits.max_cameras && (
+        <div className="plan-limit-banner plan-limit-warning">
+          <span className="plan-limit-text">
+            You're using {planInfo.usage.cameras} of {planInfo.limits.max_cameras} cameras on the {planInfo.plan_name} plan.
+          </span>
+          <button className="btn btn-secondary btn-small" onClick={() => setShowUpgrade(true)}>
+            View Plans
+          </button>
+        </div>
+      )}
+
       <div className="section-header">
         <h2 className="section-title">Camera Feeds</h2>
-        <button onClick={loadCameras} className="btn btn-secondary">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <button onClick={handleRefresh} className="btn btn-secondary" disabled={refreshing}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            style={refreshing ? { animation: 'spin 0.8s linear infinite' } : {}}>
             <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
           </svg>
-          Refresh
+          {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
@@ -194,16 +246,17 @@ function DashboardPage() {
               key={cameraId}
               cameraId={cameraId}
               camera={camera}
-              onCommand={handleCommand}
-              onForget={() => handleForget(cameraId)}
-              onSnapshot={() => handleSnapshot(cameraId)}
-              onStartRecording={() => handleStartRecording(cameraId)}
-              onStopRecording={() => handleStopRecording(cameraId)}
-              recordingStatus={recordingStatus[cameraId] || { recording: false }}
             />
           ))}
         </div>
       )}
+
+      <UpgradeModal
+        isOpen={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        feature="cameras"
+        currentPlan={planInfo?.plan}
+      />
     </div>
   )
 }

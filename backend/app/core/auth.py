@@ -1,6 +1,8 @@
 import httpx
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.database import get_db
 from clerk_backend_api.security import AuthenticateRequestOptions
 from app.core.clerk import clerk
 
@@ -10,33 +12,35 @@ class AuthUser:
         self,
         user_id: str,
         org_id: str,
-        org_permissions: list,
+        org_role: str = "",
+        org_permissions: list = None,
         email: str = "",
         username: str = "",
+        plan: str = "free_org",
+        features: list = None,
     ):
         self.user_id = user_id
         self.sub = user_id
         self.org_id = org_id
-        self.org_permissions = org_permissions
+        self.org_role = org_role
+        self.org_permissions = org_permissions or []
         self.email = email
         self.username = username
+        self.plan = plan
+        self.features = features or []
 
     def has_permission(self, permission: str) -> bool:
         return permission in self.org_permissions
 
     @property
     def is_admin(self) -> bool:
-        return self.has_permission("org:admin:admin") or self.has_permission(
+        return self.org_role in ("org:admin", "admin") or self.has_permission(
             "org:cameras:manage_cameras"
         )
 
     @property
     def can_view_cameras(self) -> bool:
-        return self.has_permission("org:cameras:view_cameras") or self.is_admin
-
-    @property
-    def can_manage_cameras(self) -> bool:
-        return self.has_permission("org:cameras:manage_cameras") or self.is_admin
+        return True  # All org members can view cameras
 
 
 def decode_v2_permissions(claims: dict) -> list:
@@ -104,17 +108,11 @@ async def get_current_user(request: Request) -> AuthUser:
 
     httpx_request = convert_to_httpx_request(request)
 
-    print(f"[Auth] Incoming request origin: {request.headers.get('origin')}")
-    print(f"[Auth] Authorized parties: [{settings.FRONTEND_URL}]")
-    print(f"[Auth] Request headers: {list(request.headers.keys())}")
-
     try:
         request_state = clerk.authenticate_request(
             httpx_request,
             AuthenticateRequestOptions(authorized_parties=[settings.FRONTEND_URL]),
         )
-
-        print(f"[Auth] Clerk auth result: is_signed_in={request_state.is_signed_in}")
 
         if not request_state.is_signed_in:
             raise HTTPException(
@@ -122,22 +120,36 @@ async def get_current_user(request: Request) -> AuthUser:
             )
 
         claims = request_state.payload
-        print(f"[Auth] JWT claims: {list(claims.keys())}")
-        print(f"[Auth] V2 debug - fea: {claims.get('fea')}")
-        print(f"[Auth] V2 debug - o claim: {claims.get('o')}")
 
         # Decode permissions: try V1 format first, then V2 format
         org_permissions = claims.get("org_permissions") or claims.get("permissions")
         if not org_permissions:
             org_permissions = decode_v2_permissions(claims)
-            print(f"[Auth] V2 decoded permissions: {org_permissions}")
-        else:
-            print(f"[Auth] V1 permissions: {org_permissions}")
 
         user_id = claims.get("sub")
-        org_id = claims.get("org_id")
         email = claims.get("email", "")
         username = claims.get("username", "")
+
+        # Extract active plan from V2 JWT (e.g. "o:pro" -> "pro")
+        plan_claim = claims.get("pla", "")
+        active_plan = plan_claim.split(":")[-1] if plan_claim else "free_org"
+
+        # Extract active features from fea claim
+        fea_claim = claims.get("fea", "")
+        active_features = []
+        for f in fea_claim.split(","):
+            f = f.strip()
+            if f.startswith("o:"):
+                active_features.append(f[2:])
+            elif f:
+                active_features.append(f)
+
+        # Extract org_id and org_role from V1 or V2 JWT format
+        # V1: top-level org_id and org_role claims
+        # V2: compact "o" claim with id and rol fields
+        o_claim = claims.get("o", {})
+        org_id = claims.get("org_id") or o_claim.get("id", "")
+        org_role = claims.get("org_role", "") or o_claim.get("rol", "")
 
         if not user_id:
             raise HTTPException(
@@ -153,17 +165,21 @@ async def get_current_user(request: Request) -> AuthUser:
         return AuthUser(
             user_id=user_id,
             org_id=org_id,
+            org_role=org_role,
             org_permissions=org_permissions,
             email=email,
             username=username,
+            plan=active_plan,
+            features=active_features,
         )
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"[Auth] Clerk authentication error: {type(e).__name__}: {e}")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).error("Authentication failed", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication failed: {str(e)}",
+            detail="Authentication failed",
         )
 
 
@@ -183,4 +199,19 @@ async def require_admin(user: AuthUser = Depends(get_current_user)) -> AuthUser:
     return user
 
 
-User = AuthUser
+async def require_active_billing(
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AuthUser:
+    """Admin + payment must not be past due.  Use for write operations
+    (create node, create key, etc.) so past-due orgs can still read
+    their data but can't provision new resources.
+    Reuses the request's existing DB session instead of opening a new one."""
+    from app.models.models import Setting
+
+    if Setting.get(db, user.org_id, "payment_past_due", "false") == "true":
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Your payment is past due. Please update your billing information before making changes.",
+        )
+    return user
