@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
 import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getPlanInfo, getSettings, updateRecordingSettings } from "../services/api"
@@ -46,6 +46,9 @@ function SettingsPage() {
   // Upgrade modal
   const [upgradeFeature, setUpgradeFeature] = useState(null)
 
+  // Node status tracking
+  const prevNodesRef = useRef(null)
+
   // Danger Zone
   const [dangerAction, setDangerAction] = useState(null)
   const [dangerConfirmText, setDangerConfirmText] = useState("")
@@ -57,6 +60,9 @@ function SettingsPage() {
       loadNodes()
       loadPlanInfo()
       loadSettings()
+      // Poll nodes every 30s to detect status changes
+      const interval = setInterval(loadNodes, 30000)
+      return () => clearInterval(interval)
     }
   }, [organization])
 
@@ -115,10 +121,26 @@ function SettingsPage() {
       setNodesLoading(true)
       const token = await getToken()
       const data = await getNodes(() => Promise.resolve(token))
+
+      // Detect nodes that just went offline or came back online
+      if (prevNodesRef.current) {
+        const prevMap = Object.fromEntries(prevNodesRef.current.map(n => [n.node_id, n]))
+        for (const node of data) {
+          const prev = prevMap[node.node_id]
+          if (prev && prev.status !== "offline" && node.status === "offline") {
+            showToast(`Node "${node.name}" went offline`, "warning")
+          } else if (prev && prev.status === "offline" && node.status !== "offline") {
+            showToast(`Node "${node.name}" is back online`, "success")
+          }
+        }
+      }
+      prevNodesRef.current = data
+
       setNodes(data)
     } catch (err) {
       console.error("Failed to load nodes:", err)
-      showToast("Failed to load camera nodes", "error")
+      // Only toast on first load error, not poll errors
+      if (!prevNodesRef.current) showToast("Failed to load camera nodes", "error")
     } finally {
       setNodesLoading(false)
     }

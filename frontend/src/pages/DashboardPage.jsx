@@ -8,7 +8,7 @@ import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function DashboardPage() {
   const { getToken } = useAuth()
-  const { organization } = useOrganization()
+  const { organization, membership } = useOrganization()
   const { showToast } = useToasts()
   const [cameras, setCameras] = useState({})
   const [loading, setLoading] = useState(true)
@@ -17,6 +17,9 @@ function DashboardPage() {
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const prevCamerasRef = useRef(null)
+  const toastedOfflinesRef = useRef(new Set())
+
+  const isAdmin = membership?.role === "org:admin"
 
   const loadCameras = useCallback(async () => {
     if (!organization) return
@@ -35,11 +38,43 @@ function DashboardPage() {
           }, {})
         : data
       
+      // Detect cameras that just went offline
+      if (prevCamerasRef.current) {
+        const newlyOffline = []
+        for (const [id, cam] of Object.entries(camerasMap)) {
+          const prev = prevCamerasRef.current[id]
+          if (prev && prev.status !== "offline" && cam.status === "offline") {
+            newlyOffline.push(cam.name || id)
+          }
+        }
+        if (newlyOffline.length > 0) {
+          // Only toast each camera once per offline event
+          const fresh = newlyOffline.filter(n => !toastedOfflinesRef.current.has(n))
+          if (fresh.length > 0) {
+            fresh.forEach(n => toastedOfflinesRef.current.add(n))
+            const msg = fresh.length === 1
+              ? `Camera "${fresh[0]}" went offline`
+              : `${fresh.length} cameras went offline`
+            showToast(msg, "warning")
+          }
+        }
+        // Clear from toasted set when cameras come back online
+        for (const [id, cam] of Object.entries(camerasMap)) {
+          if (cam.status !== "offline") {
+            const name = cam.name || id
+            if (toastedOfflinesRef.current.has(name)) {
+              toastedOfflinesRef.current.delete(name)
+              showToast(`Camera "${name}" is back online`, "success")
+            }
+          }
+        }
+      }
+
       // Only update state if data actually changed
       const prevKeys = prevCamerasRef.current ? Object.keys(prevCamerasRef.current).join(',') : ''
       const newKeys = Object.keys(camerasMap).join(',')
-      
-      if (prevKeys !== newKeys || 
+
+      if (prevKeys !== newKeys ||
           JSON.stringify(prevCamerasRef.current) !== JSON.stringify(camerasMap)) {
         prevCamerasRef.current = camerasMap
         setCameras(camerasMap)
@@ -114,7 +149,7 @@ function DashboardPage() {
 
   return (
     <div className="dashboard-container">
-      {planInfo?.payment_past_due && (
+      {isAdmin && planInfo?.payment_past_due && (
         <div className="payment-past-due-banner">
           <span>Your payment is past due. Please update your billing information to avoid service interruption.</span>
           <Link to="/settings">Update Billing</Link>
@@ -158,7 +193,7 @@ function DashboardPage() {
         </div>
       </div>
 
-      {planInfo && planInfo.usage.cameras >= planInfo.limits.max_cameras && (
+      {isAdmin && planInfo && planInfo.usage.cameras >= planInfo.limits.max_cameras && (
         <div className="plan-limit-banner">
           <span className="plan-limit-text">
             You've reached your camera limit ({planInfo.limits.max_cameras} on the {planInfo.plan_name} plan).
@@ -170,7 +205,7 @@ function DashboardPage() {
         </div>
       )}
 
-      {planInfo && planInfo.usage.cameras >= Math.floor(planInfo.limits.max_cameras * 0.8) && planInfo.usage.cameras < planInfo.limits.max_cameras && (
+      {isAdmin && planInfo && planInfo.usage.cameras >= Math.floor(planInfo.limits.max_cameras * 0.8) && planInfo.usage.cameras < planInfo.limits.max_cameras && (
         <div className="plan-limit-banner plan-limit-warning">
           <span className="plan-limit-text">
             You're using {planInfo.usage.cameras} of {planInfo.limits.max_cameras} cameras on the {planInfo.plan_name} plan.
