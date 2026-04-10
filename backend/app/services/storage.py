@@ -206,15 +206,32 @@ class TigrisStorage:
     def delete_camera_storage(self, org_id: str, camera_id: str) -> int:
         """
         Delete all storage objects for a camera.
+        Uses batch delete (up to 1000 per call) for efficiency.
         Returns count of deleted objects.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         prefix = f"{org_id}/cameras/{camera_id}/"
         objects = self.list_objects(prefix)
 
+        if not objects:
+            return 0
+
         deleted_count = 0
-        for obj_key in objects:
-            if self.delete_object(obj_key):
-                deleted_count += 1
+        for i in range(0, len(objects), 1000):
+            batch = objects[i : i + 1000]
+            try:
+                self.s3_client.delete_objects(
+                    Bucket=self.bucket_name,
+                    Delete={
+                        "Objects": [{"Key": key} for key in batch],
+                        "Quiet": True,
+                    },
+                )
+                deleted_count += len(batch)
+            except ClientError as e:
+                logger.warning("Batch delete failed for camera %s: %s", camera_id, e)
 
         return deleted_count
 

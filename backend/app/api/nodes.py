@@ -183,6 +183,8 @@ async def register_node(
         for stale_cam in all_node_cameras:
             if stale_cam.camera_id not in current_camera_ids:
                 logger.info("Removing stale camera record: %s", stale_cam.camera_id)
+                from app.api.hls import cleanup_camera_cache
+                cleanup_camera_cache(stale_cam.camera_id)
                 try:
                     storage = get_storage()
                     storage.delete_camera_storage(
@@ -388,8 +390,11 @@ async def delete_node(
         # Node may be offline — proceed with server-side cleanup anyway.
         logger.warning("Could not send wipe_data to node %s (may be offline): %s", node_id, e)
 
-    # Clean up Tigris storage for every camera on this node before deleting DB records.
+    # Clean up in-memory caches and Tigris storage for every camera on this node.
+    from app.api.hls import cleanup_camera_cache
     cameras_deleted = []
+    for camera in list(node.cameras):
+        cleanup_camera_cache(camera.camera_id)
     try:
         storage = get_storage()
         for camera in list(node.cameras):

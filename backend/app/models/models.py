@@ -271,27 +271,3 @@ class McpActivityLog(Base):
         }
 
 
-class PendingUpload(Base):
-    __tablename__ = "pending_uploads"
-
-    id = Column(Integer, primary_key=True)
-    upload_id = Column(String(100), unique=True, nullable=False, index=True)
-    camera_id = Column(String(100), nullable=False, index=True)
-    org_id = Column(String(100), nullable=False, index=True)
-    node_id = Column(String(100), nullable=False)
-    s3_key = Column(String(500), nullable=False)
-    expected_checksum = Column(String(128), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
-    expires_at = Column(DateTime, nullable=False, index=True)
-    completed = Column(Boolean, default=False)
-
-    def to_dict(self):
-        return {
-            "upload_id": self.upload_id,
-            "camera_id": self.camera_id,
-            "org_id": self.org_id,
-            "s3_key": self.s3_key,
-            "created_at": self.created_at.isoformat(),
-            "expires_at": self.expires_at.isoformat(),
-            "completed": self.completed,
-        }

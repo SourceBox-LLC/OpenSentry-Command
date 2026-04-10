@@ -113,11 +113,34 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     elif event_type == "organization.deleted":
         org_id = data.get("id")
         if org_id:
-            # Clean up all org data: nodes (cascades to cameras), groups, keys, logs, settings
+            # 1. Clean up Tigris S3 storage for every camera BEFORE deleting DB records.
+            #    Storage failures are non-blocking — we still delete the DB records.
             nodes = db.query(CameraNode).filter_by(org_id=org_id).all()
             camera_count = 0
+            storage_objects_deleted = 0
+            try:
+                from app.services.storage import get_storage
+                storage = get_storage()
+                for node in nodes:
+                    for camera in (node.cameras or []):
+                        camera_count += 1
+                        try:
+                            storage_objects_deleted += storage.delete_camera_storage(
+                                org_id, camera.camera_id
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                "Failed to clean storage for camera %s: %s",
+                                camera.camera_id, e,
+                            )
+            except ValueError:
+                # Storage not configured (e.g., test environment)
+                logger.warning("Storage not configured — skipping Tigris cleanup for org %s", org_id)
+                for node in nodes:
+                    camera_count += len(node.cameras) if node.cameras else 0
+
+            # 2. Delete all DB records: nodes (cascades to cameras), groups, keys, logs, settings
             for node in nodes:
-                camera_count += len(node.cameras) if node.cameras else 0
                 db.delete(node)  # cascade deletes cameras
 
             group_count = db.query(CameraGroup).filter_by(org_id=org_id).delete()
@@ -129,8 +152,8 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             db.commit()
 
             logger.info(
-                "Org %s deleted — cleaned up %d nodes, %d cameras, %d groups, %d API keys",
-                org_id, len(nodes), camera_count, group_count, key_count,
+                "Org %s deleted — cleaned up %d nodes, %d cameras, %d groups, %d API keys, %d storage objects",
+                org_id, len(nodes), camera_count, group_count, key_count, storage_objects_deleted,
             )
 
     return {"received": True}

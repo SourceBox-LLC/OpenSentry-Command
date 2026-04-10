@@ -34,7 +34,16 @@ async def get_batch_upload_urls(
     CloudNode requests a new batch when running low.
 
     Body JSON: { "start_sequence": 0, "count": 30 }
+
+    DEPRECATED: CloudNodes should use POST /api/cameras/{camera_id}/push-segment
+    to push segments directly to the backend instead of uploading to Tigris.
+    This endpoint is kept for backwards compatibility with old CloudNode versions.
     """
+    logger.warning(
+        "Deprecated endpoint called: POST /upload-urls for camera=%s. "
+        "CloudNode should use POST /push-segment instead.",
+        camera_id,
+    )
     node_api_key = (
         request.headers.get("X-Node-API-Key")
         or request.headers.get("X-API-Key")

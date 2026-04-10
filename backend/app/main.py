@@ -31,6 +31,17 @@ try:
 except Exception:
     pass  # Table doesn't exist yet (fresh DB) — create_all handles it
 
+# Drop the orphaned pending_uploads table (dead code removed in cleanup).
+try:
+    with engine.connect() as conn:
+        tables = sa_inspect(engine).get_table_names()
+        if "pending_uploads" in tables:
+            conn.execute(text("DROP TABLE pending_uploads"))
+            conn.commit()
+            logger.info("Dropped orphaned pending_uploads table")
+except Exception:
+    pass
+
 # Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
 mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
 
@@ -98,14 +109,20 @@ app.mount("/mcp", mcp_app)
 # Default retention: 90 days for all log types
 LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
 LOG_CLEANUP_INTERVAL_HOURS = 24  # Run once per day
+# Cameras offline for longer than this get their Tigris segments cleaned up.
+# HLS segments are live-only fragments — useless once streaming stops.
+INACTIVE_CAMERA_CLEANUP_HOURS = int(os.getenv("INACTIVE_CAMERA_CLEANUP_HOURS", "24"))
 
 
 async def _log_cleanup_loop():
-    """Background task: delete logs older than retention period."""
-    from app.models.models import StreamAccessLog, McpActivityLog, AuditLog
+    """Background task: delete logs older than retention period
+    and clean up Tigris storage for cameras that have been offline."""
+    from app.models.models import StreamAccessLog, McpActivityLog, AuditLog, Camera
 
     while True:
         await asyncio.sleep(LOG_CLEANUP_INTERVAL_HOURS * 3600)
+
+        # ── Log retention cleanup ──────────────────────────────────
         try:
             cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=LOG_RETENTION_DAYS)
             db = SessionLocal()
@@ -124,6 +141,33 @@ async def _log_cleanup_loop():
                 db.close()
         except Exception:
             logger.exception("[Cleanup] Log cleanup failed")
+
+        # ── Inactive camera cache cleanup ─────────────────────────
+        # Free in-memory segment/playlist caches for cameras that
+        # have been offline longer than the threshold.
+        try:
+            from app.api.hls import cleanup_camera_cache
+            inactive_cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(
+                hours=INACTIVE_CAMERA_CLEANUP_HOURS
+            )
+            db = SessionLocal()
+            try:
+                inactive_cameras = (
+                    db.query(Camera)
+                    .filter(Camera.last_seen < inactive_cutoff)
+                    .all()
+                )
+                if inactive_cameras:
+                    for cam in inactive_cameras:
+                        cleanup_camera_cache(cam.camera_id)
+                    logger.info(
+                        "[Cleanup] Cleared caches for %d inactive cameras (offline >%dh)",
+                        len(inactive_cameras), INACTIVE_CAMERA_CLEANUP_HOURS,
+                    )
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("[Cleanup] Inactive camera cleanup failed")
 
 
 @app.on_event("startup")

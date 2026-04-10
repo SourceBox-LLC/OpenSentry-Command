@@ -403,13 +403,16 @@ async def full_reset(
         except Exception as e:
             logger.warning("Could not send wipe_data to node %s: %s", node.node_id, e)
 
-        # Clean Tigris storage for each camera
+        # Clean in-memory caches and Tigris storage for each camera
+        from app.api.hls import cleanup_camera_cache
+        for camera in list(node.cameras):
+            cleanup_camera_cache(camera.camera_id)
+            results["cameras_deleted"] += 1
         try:
             storage = get_storage()
             for camera in list(node.cameras):
                 count = storage.delete_camera_storage(user.org_id, camera.camera_id)
                 results["storage_cleaned"] += count
-                results["cameras_deleted"] += 1
         except Exception as e:
             logger.warning("Storage cleanup failed for node %s: %s", node.node_id, e)
 
