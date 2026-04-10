@@ -13,7 +13,7 @@ OpenSentry has two main components:
 | Component | Language | Repository |
 |-----------|----------|------------|
 | **Command Center** | Python (FastAPI) + React | [OpenSentry-Command](https://github.com/SourceBox-LLC/OpenSentry-Command) |
-| **CloudNode** | Rust | [OpenSentry-CloudNode](https://github.com/SourceBox-LLC/opensentry-cloud-node) |
+| **CloudNode** | Rust | [OpenSentry-CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) |
 
 ## How to Contribute
 
@@ -44,12 +44,12 @@ npm run dev                   # http://localhost:5173
 ### CloudNode
 
 ```bash
-cd opensentry-cloud-node
+cd OpenSentry-CloudNode
 cargo build --release
 ./target/release/opensentry-cloudnode setup
 ```
 
-See the [CloudNode README](https://github.com/SourceBox-LLC/opensentry-cloud-node) for full setup instructions.
+See the [CloudNode README](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) for full setup instructions.
 
 ## Project Structure
 
@@ -58,9 +58,8 @@ See the [CloudNode README](https://github.com/SourceBox-LLC/opensentry-cloud-nod
 ```
 backend/
 ├── app/
-│   ├── main.py           # FastAPI app, CORS, SPA middleware, MCP mount
-│   ├── api/              # Route handlers (cameras, nodes, hls, streams, audit, mcp_activity, webhooks)
-│   ├── mcp/              # MCP server (FastMCP tools, activity tracker)
+│   ├── main.py           # FastAPI app, CORS, SPA middleware
+│   ├── api/              # Route handlers (cameras, nodes, hls, streams, audit, webhooks)
 │   ├── core/             # Auth (Clerk JWT), config, database
 │   ├── models/           # SQLAlchemy models
 │   ├── schemas/          # Pydantic schemas
@@ -70,7 +69,7 @@ backend/
 
 frontend/
 └── src/
-    ├── pages/            # Page components (Dashboard, Settings, Admin, MCP Control Center)
+    ├── pages/            # Page components
     └── components/       # Reusable UI components
 ```
 

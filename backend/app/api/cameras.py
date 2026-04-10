@@ -372,7 +372,7 @@ async def full_reset(
 ):
     """
     Full organization reset: wipe all nodes (with CloudNode notification),
-    delete Tigris storage, clear stream logs, clear settings.
+    clear stream logs, clear settings.
     """
     if "admin" not in user.features:
         raise HTTPException(
@@ -380,18 +380,17 @@ async def full_reset(
             detail="Danger zone requires a Pro or Business plan.",
         )
     from app.models import StreamAccessLog, CameraNode
-    from app.services.storage import get_storage
+    from app.api.hls import cleanup_camera_cache
 
     results = {
         "nodes_deleted": 0,
         "nodes_wiped": 0,
         "cameras_deleted": 0,
-        "storage_cleaned": 0,
         "logs_deleted": 0,
         "settings_deleted": 0,
     }
 
-    # 1. Delete all nodes (send wipe_data to each, clean Tigris, remove from DB)
+    # 1. Delete all nodes (send wipe_data to each, clean caches, remove from DB)
     nodes = db.query(CameraNode).filter_by(org_id=user.org_id).all()
     for node in nodes:
         # Tell CloudNode to wipe local data
@@ -403,15 +402,9 @@ async def full_reset(
         except Exception as e:
             logger.warning("Could not send wipe_data to node %s: %s", node.node_id, e)
 
-        # Clean Tigris storage for each camera
-        try:
-            storage = get_storage()
-            for camera in list(node.cameras):
-                count = storage.delete_camera_storage(user.org_id, camera.camera_id)
-                results["storage_cleaned"] += count
-                results["cameras_deleted"] += 1
-        except Exception as e:
-            logger.warning("Storage cleanup failed for node %s: %s", node.node_id, e)
+        for camera in list(node.cameras):
+            cleanup_camera_cache(camera.camera_id)
+            results["cameras_deleted"] += 1
 
         db.delete(node)
         results["nodes_deleted"] += 1

@@ -36,7 +36,6 @@ from app.models.models import (
     Setting,
     StreamAccessLog,
 )
-from app.services.storage import get_storage
 from app.mcp.activity import tracker, McpEvent
 
 logger = logging.getLogger(__name__)
@@ -315,8 +314,7 @@ def get_camera(
 @mcp.tool(
     name="get_stream_url",
     description=(
-        "Get a temporary HLS stream URL for a camera. "
-        "The URL is pre-signed and expires after a few minutes. "
+        "Get the HLS stream URL for a camera. "
         "Use this to watch a live camera feed."
     ),
     annotations={"readOnlyHint": True},
@@ -335,13 +333,11 @@ def get_stream_url(
         if not cam:
             raise ToolError(f"Camera '{camera_id}' not found")
 
-        storage = get_storage()
-        url = storage.generate_stream_url(camera_id, org_id)
         return {
             "camera_id": camera_id,
-            "stream_url": url,
+            "stream_url": f"/api/cameras/{camera_id}/stream.m3u8",
             "format": "HLS",
-            "note": "URL expires in ~5 minutes. Open in a browser or HLS player.",
+            "note": "Requires Bearer auth. Open in the dashboard or an HLS player with auth headers.",
         }
     finally:
         db.close()

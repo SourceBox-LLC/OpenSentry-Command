@@ -1,35 +1,34 @@
-# OpenSentry Command Center
+<p align="center">
+  <h1 align="center">OpenSentry Command Center</h1>
+  <p align="center">
+    Cloud dashboard for managing and viewing your security cameras in real time.
+    <br />
+    <a href="https://opensentry-command.fly.dev">Live App</a>
+    &middot;
+    <a href="#quick-start">Quick Start</a>
+    &middot;
+    <a href="#api-reference">API Reference</a>
+    &middot;
+    <a href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode">CloudNode</a>
+  </p>
+</p>
 
-**Cloud-hosted security camera management with real-time HLS streaming.**
-
-Built with **FastAPI + React + Clerk Authentication + Tigris Storage**
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Backend-FastAPI_2.0-009688.svg" alt="FastAPI"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React_19-61DAFB.svg" alt="React"></a>
+</p>
 
 ---
 
-## Architecture
+OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It receives live HLS video streams from [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) devices on your local network, stores segments in Tigris object storage, and serves them to any browser. Authentication and multi-tenant isolation are handled by Clerk.
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  CloudNode      │────▶│  Tigris/S3      │◀────│  Command Center │
-│  (Rust)         │     │  (Video Storage) │     │  (FastAPI)       │
-│  USB Camera     │     │                  │     │  + React         │
-│  Codec Detect   │     │  - HLS Segments  │     │  + Clerk Auth    │
-│  Segment Upload │     │  - M3U8 Playlist │     │                  │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-        │                                                │
-        │ POST /upload-url                              │ GET /stream.m3u8
-        │ POST /upload-complete                         │ GET /segment/{id}
-        │ POST /playlist                                │
-        │ POST /register (codec info)                   │
-        └────────────────────────────────────────────────┘
-```
-
-**Key Components:**
-- **CloudNode** (Rust) - Captures USB camera, detects codec, uploads HLS segments to Tigris
-- **Command Center** (FastAPI) - Serves HLS manifests with codec info, handles authentication
-- **MCP Server** - AI tool interface allowing MCP clients (Claude Code, etc.) to view cameras, check status, and query logs
-- **Tigris/S3** - Object storage for video segments and playlists
-- **Clerk** - Multi-tenant authentication with organization-based access
+**What it does:**
+- Receives and stores live HLS video from CloudNode devices
+- Serves camera feeds to the browser via presigned URLs (no backend proxy)
+- Manages camera nodes, groups, alerts, and media
+- Multi-tenant with organization-based access control
+- Audit logging for all stream access
 
 ---
 
@@ -37,92 +36,188 @@ Built with **FastAPI + React + Clerk Authentication + Tigris Storage**
 
 ### Prerequisites
 
-- Python 3.10+
-- Node.js 18+
-- uv (Python package manager)
-- Tigris/S3 bucket for video storage
+- **Python** 3.10+
+- **Node.js** 18+
+- **uv** ([Python package manager](https://docs.astral.sh/uv/))
 
-### Backend Setup
+### 1. Backend
 
 ```bash
 cd backend
-
-# Copy environment file
-cp .env.example .env
-
-# Edit .env with your settings
-# Required: CLERK_SECRET_KEY, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
-# Required: AWS_ENDPOINT_URL_S3 (Tigris endpoint)
-# Required: TIGRIS_BUCKET_NAME
-
-# Install dependencies
+cp .env.example .env    # Edit with your Clerk keys and Tigris credentials
 uv sync
-
-# Run development server
-uv run fastapi dev app/main.py
+uv run python start.py
 ```
 
-### Frontend Setup
+API available at `http://localhost:8000`
+
+### 2. Frontend
 
 ```bash
 cd frontend
-
-# Copy environment file
-cp .env.example .env
-
-# Edit .env
-# Set VITE_API_URL=http://localhost:8000
-# Set VITE_CLERK_PUBLISHABLE_KEY (from Clerk dashboard)
-
-# Install dependencies
+cp .env.example .env    # Set VITE_CLERK_PUBLISHABLE_KEY
 npm install
-
-# Run development server
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`
+App available at `http://localhost:5173`
+
+### 3. Connect a CloudNode
+
+Create a camera node from the Settings page, then run [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) with those credentials:
+
+```bash
+opensentry-cloudnode setup
+# Enter your Node ID, API Key, and Command Center URL
+```
+
+Cameras auto-register when the CloudNode connects.
 
 ---
 
-## Environment Variables
+## Architecture
 
-### Backend (`.env`)
-
-```env
-# Clerk Authentication
-CLERK_SECRET_KEY=sk_test_xxx
-CLERK_PUBLISHABLE_KEY=pk_test_xxx
-CLERK_JWKS_URL=https://xxx.clerk.accounts.dev/.well-known/jwks.json
-
-# Tigris/S3 Storage
-AWS_ACCESS_KEY_ID=xxx
-AWS_SECRET_ACCESS_KEY=xxx
-AWS_ENDPOINT_URL_S3=https://fly.storage.tigris.dev
-AWS_REGION=auto
-TIGRIS_BUCKET_NAME=opensentry-storage
-
-# Database
-DATABASE_URL=sqlite:///./opensentry.db
-
-# Frontend URL (for CORS)
-FRONTEND_URL=http://localhost:5173
-
-# Upload/Stream URL Expiry
-UPLOAD_URL_EXPIRY_SECONDS=3600
-STREAM_URL_EXPIRY_SECONDS=300
-
-# Segment Cleanup
-SEGMENT_RETENTION_COUNT=60
-CLEANUP_INTERVAL=20
+```
+   CloudNode (Rust)                  Command Center                    Browser
+  ┌──────────────┐            ┌───────────────────────┐         ┌──────────────┐
+  │ USB Camera   │            │  FastAPI Backend       │         │  React 19    │
+  │      ↓       │            │                        │         │              │
+  │ FFmpeg (HLS) │──upload──→ │  Tigris Object Storage │←─GET──→ │  HLS.js      │
+  │              │  segments  │                        │ presigned│  (video)     │
+  │              │──register─→│  SQLite / PostgreSQL   │  URLs   │              │
+  │              │──heartbeat→│  Clerk Auth            │←─JWT───→│  Clerk Auth  │
+  └──────────────┘            └───────────────────────┘         └──────────────┘
 ```
 
-### Frontend (`.env`)
+**Video pipeline:** CloudNode transcodes USB camera video into HLS segments, uploads `.ts` files directly to Tigris via presigned PUT URLs, and posts the playlist. The browser fetches the playlist from the backend (which rewrites segment paths to presigned GET URLs), then downloads segments directly from Tigris.
 
-```env
-VITE_API_URL=http://localhost:8000
-VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxx
-```
+**Authentication:** Clerk handles user sign-up, login, and organization management. The backend validates JWT tokens and extracts organization-scoped permissions. CloudNodes authenticate with API keys (SHA-256 hashed in the database).
+
+**Storage:** Tigris (S3-compatible) for video segments. SQLite (dev) or PostgreSQL (production) for application data. Old segments are automatically cleaned up based on retention settings.
+
+---
+
+## Configuration
+
+### Backend environment variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CLERK_SECRET_KEY` | Yes | | Clerk backend API key |
+| `CLERK_PUBLISHABLE_KEY` | Yes | | Clerk frontend key |
+| `CLERK_JWKS_URL` | No | | JWT validation endpoint |
+| `CLERK_WEBHOOK_SECRET` | No | | Webhook signature verification |
+| `DATABASE_URL` | No | `sqlite:///./opensentry.db` | Database connection string |
+| `FRONTEND_URL` | No | `http://localhost:5173` | CORS origin |
+| `AWS_ENDPOINT_URL_S3` | Yes | | Tigris S3 endpoint |
+| `AWS_ACCESS_KEY_ID` | Yes | | Tigris access key |
+| `AWS_SECRET_ACCESS_KEY` | Yes | | Tigris secret key |
+| `AWS_REGION` | No | `auto` | S3 region |
+| `BUCKET_NAME` | No | | Tigris bucket name |
+| `STREAM_URL_EXPIRY_SECONDS` | No | `300` | Presigned URL lifetime |
+| `UPLOAD_URL_EXPIRY_SECONDS` | No | `300` | Upload URL lifetime |
+| `UPLOAD_TIMEOUT_MINUTES` | No | `10` | Pending upload timeout |
+| `SEGMENT_RETENTION_COUNT` | No | `60` | Segments to keep per camera |
+| `CLEANUP_INTERVAL` | No | `20` | Cleanup every N uploads |
+| `AUDIT_LOG_RETENTION_DAYS` | No | `7` | Stream access log retention |
+| `SESSION_TIMEOUT` | No | `30` | Session timeout (minutes) |
+
+### Frontend environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VITE_CLERK_PUBLISHABLE_KEY` | Yes | Clerk publishable key |
+| `VITE_API_URL` | No | Backend URL (default: `http://localhost:8000`) |
+| `VITE_LOCAL_HLS` | No | Set `true` to stream directly from CloudNode on localhost |
+
+---
+
+## API Reference
+
+### Cameras
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/cameras` | User | List all cameras |
+| GET | `/api/cameras/{camera_id}` | User | Get camera details |
+| POST | `/api/cameras/{camera_id}/codec` | Node | Report video/audio codec |
+
+### Camera Groups
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/camera-groups` | User | List groups |
+| POST | `/api/camera-groups` | Admin | Create group |
+| DELETE | `/api/camera-groups/{group_id}` | Admin | Delete group |
+| PUT | `/api/cameras/{camera_id}/group` | Admin | Assign camera to group |
+
+### Camera Nodes
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/nodes` | Admin | List all nodes |
+| POST | `/api/nodes` | Admin | Create a node |
+| GET | `/api/nodes/{node_id}` | Admin | Get node details |
+| DELETE | `/api/nodes/{node_id}` | Admin | Delete node |
+| POST | `/api/nodes/{node_id}/rotate-key` | Admin | Rotate API key |
+| POST | `/api/nodes/register` | Node | CloudNode registration |
+| POST | `/api/nodes/heartbeat` | Node | CloudNode heartbeat |
+
+### HLS Streaming
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/cameras/{camera_id}/stream.m3u8` | User | HLS playlist (presigned segment URLs) |
+| GET | `/api/cameras/{camera_id}/segment/{file}` | User | Segment proxy fallback |
+| POST | `/api/cameras/{camera_id}/playlist` | Node | Update playlist |
+| GET | `/api/cameras/{camera_id}/stream-url` | User | Get presigned playlist URL |
+| POST | `/api/cameras/{camera_id}/upload-url` | Node | Get presigned upload URL |
+| POST | `/api/cameras/{camera_id}/upload-complete` | Node | Confirm upload |
+
+### Settings & Media
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/settings` | User | All settings |
+| GET/POST | `/api/settings/notifications` | User | Notification settings |
+| GET/POST | `/api/settings/recording` | User | Recording settings |
+| GET | `/api/media` | User | List media |
+| GET | `/api/media/{media_id}` | User | Get media |
+| DELETE | `/api/media/{media_id}` | Admin | Delete media |
+
+### Alerts & Audit
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/alerts` | User | List alerts |
+| GET | `/api/alerts/{alert_id}` | User | Get alert |
+| DELETE | `/api/alerts/{alert_id}` | Admin | Delete alert |
+| GET | `/api/audit-logs` | Admin | List audit logs |
+| GET | `/api/audit/stream-logs` | Admin | Stream access logs |
+| GET | `/api/audit/stream-logs/stats` | Admin | Stream access stats |
+
+### System
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/health` | None | Health check |
+| POST | `/api/webhooks/clerk` | Webhook | Clerk subscription events |
+
+**Auth types:** `User` = Clerk JWT, `Admin` = Clerk JWT with admin permission, `Node` = `X-Node-API-Key` header.
+
+---
+
+## Permissions
+
+Access control uses Clerk organizations with V2 JWT permissions:
+
+| Permission | Grants |
+|------------|--------|
+| `org:admin:admin` | Full access (nodes, groups, media, audit logs) |
+| `org:cameras:manage_cameras` | Manage cameras and nodes |
+| `org:cameras:view_cameras` | View cameras and live feeds |
+
+Admin permission is required for node management, group management, media deletion, and audit log access. View permission is sufficient for watching streams and viewing camera status.
 
 ---
 
@@ -131,285 +226,89 @@ VITE_CLERK_PUBLISHABLE_KEY=pk_test_xxx
 ```
 backend/
 ├── app/
+│   ├── main.py              # FastAPI app, CORS, SPA middleware
 │   ├── api/
-│   │   ├── cameras.py        # Camera CRUD, settings, alerts
-│   │   ├── hls.py            # HLS playlist/segment serving
-│   │   ├── nodes.py          # CloudNode registration, heartbeat
-│   │   ├── streams.py        # Upload URL generation, cleanup
-│   │   ├── audit.py          # Stream access logs
-│   │   ├── mcp_activity.py   # MCP activity SSE + REST + DB logs
-│   │   └── webhooks.py       # Clerk webhooks
+│   │   ├── cameras.py       # Camera, group, settings, alert, media endpoints
+│   │   ├── nodes.py         # CloudNode registration, heartbeat, CRUD
+│   │   ├── hls.py           # HLS playlist and segment delivery
+│   │   ├── streams.py       # Presigned URL generation, upload management
+│   │   ├── audit.py         # Stream access logging
+│   │   └── webhooks.py      # Clerk subscription webhooks
 │   ├── core/
-│   │   ├── auth.py           # Clerk JWT verification, permissions
-│   │   ├── config.py         # Settings from environment
-│   │   ├── database.py       # SQLAlchemy setup
-│   │   └── clerk.py          # Clerk client
-│   ├── mcp/
-│   │   ├── server.py         # MCP tool definitions (FastMCP)
-│   │   └── activity.py       # In-memory tracker + DB persistence
+│   │   ├── auth.py          # Clerk JWT validation, permission enforcement
+│   │   ├── config.py        # Environment variable loading
+│   │   ├── clerk.py         # Clerk SDK initialization
+│   │   └── database.py      # SQLAlchemy engine and session
 │   ├── models/
-│   │   └── models.py         # SQLAlchemy models
+│   │   └── models.py        # Camera, CameraNode, CameraGroup, Media,
+│   │                        # Alert, Setting, AuditLog, StreamAccessLog
 │   ├── schemas/
-│   │   └── schemas.py        # Pydantic request/response schemas
-│   ├── services/
-│   │   └── storage.py        # Tigris/S3 operations
-│   └── main.py               # FastAPI app entry + MCP mount
+│   │   └── schemas.py       # Pydantic request/response schemas
+│   └── services/
+│       ├── storage.py       # Tigris S3 operations
+│       └── codec_prober.py  # FFprobe codec detection
 ├── .env.example
-└── pyproject.toml
+├── pyproject.toml
+└── start.py                 # Uvicorn entry point
 
 frontend/
-├── src/
-│   ├── components/
-│   │   ├── HlsPlayer.jsx     # HLS.js video player
-│   │   ├── CameraCard.jsx    # Camera feed display
-│   │   ├── AddNodeModal.jsx  # Node creation
-│   │   └── ...
-│   ├── pages/
-│   │   ├── DashboardPage.jsx # Camera grid view
-│   │   ├── SettingsPage.jsx  # Node management
-│   │   ├── AdminPage.jsx     # Stream logs + MCP activity
-│   │   ├── McpPage.jsx       # MCP Control Center (live monitoring)
-│   │   └── ...
-│   ├── services/
-│   │   └── api.js            # API client
-│   └── App.jsx               # Routes and auth
-├── .env.example
-└── package.json
-```
-
----
-
-## API Endpoints
-
-### Authentication Required (Clerk JWT)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/cameras` | List cameras |
-| GET | `/api/cameras/{id}` | Get camera details |
-| GET | `/api/camera-groups` | List camera groups |
-| POST | `/api/camera-groups` | Create group |
-| DELETE | `/api/camera-groups/{id}` | Delete group |
-| PUT | `/api/cameras/{id}/group` | Assign camera to group |
-| GET | `/api/settings` | Get all settings |
-| POST | `/api/settings/recording` | Update recording settings |
-| GET | `/api/nodes` | List nodes |
-| POST | `/api/nodes` | Create node |
-| GET | `/api/nodes/{id}` | Get node details |
-| DELETE | `/api/nodes/{id}` | Delete node |
-| POST | `/api/nodes/{id}/rotate-key` | Regenerate API key |
-
-### Node Authentication (API Key)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/nodes/register` | Register CloudNode |
-| POST | `/api/nodes/heartbeat` | Node heartbeat |
-| POST | `/api/nodes/validate` | Validate credentials |
-| POST | `/api/cameras/{id}/upload-url` | Get presigned upload URL |
-| POST | `/api/cameras/{id}/upload-complete` | Confirm segment upload |
-| POST | `/api/cameras/{id}/playlist` | Update HLS playlist |
-| POST | `/api/cameras/{id}/codec` | Report detected codec |
-
-### HLS Streaming (Clerk JWT)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/cameras/{id}/stream.m3u8` | Get HLS playlist |
-| GET | `/api/cameras/{id}/segment/{filename}` | Get HLS segment |
-
-### MCP (Model Context Protocol)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/mcp/` | MCP JSON-RPC endpoint (Bearer token auth) |
-| GET | `/mcp/` | MCP Control Center dashboard |
-
-### MCP Activity (Clerk JWT, Admin)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/mcp/activity/stream` | SSE stream of live MCP tool calls |
-| GET | `/api/mcp/activity/recent` | Recent in-memory events |
-| GET | `/api/mcp/activity/sessions` | Active MCP client sessions |
-| GET | `/api/mcp/activity/stats` | Real-time aggregate stats |
-| GET | `/api/mcp/activity/logs` | Persisted MCP logs (DB-backed) |
-| GET | `/api/mcp/activity/logs/stats` | Historical MCP statistics |
-
----
-
-## MCP Integration
-
-The Command Center doubles as an MCP server, allowing AI clients (Claude Code, Cursor, etc.) to interact with cameras and system data via the [Model Context Protocol](https://modelcontextprotocol.io/).
-
-### Available Tools (Read-Only)
-
-| Tool | Description |
-|------|-------------|
-| `view_camera` | Live JPEG snapshot from a camera |
-| `watch_camera` | Multiple snapshots over time (2-10 frames) |
-| `list_cameras` | List all cameras with status |
-| `get_camera` | Camera details by ID |
-| `get_stream_url` | Pre-signed HLS stream URL |
-| `list_nodes` | List all camera nodes |
-| `get_node` | Node details by ID |
-| `list_camera_groups` | List camera groups |
-| `get_recording_settings` | Current recording configuration |
-| `get_stream_logs` | Stream access history |
-| `get_stream_stats` | Aggregated stream statistics |
-| `get_system_status` | System overview (cameras, nodes, plan) |
-
-### Connecting Claude Code
-
-```bash
-claude mcp add opensentry \
-  --transport http \
-  --url https://your-domain.fly.dev/mcp/ \
-  --header "Authorization: Bearer YOUR_MCP_API_KEY" \
-  --scope user
-```
-
-Generate an API key from the MCP Control Center page in the web dashboard.
-
-### Rate Limits
-
-MCP tool calls are rate limited per API key based on the organization's plan:
-
-| Plan | Calls/min |
-|------|-----------|
-| Pro | 30 |
-| Business | 120 |
-
-Exceeding the limit returns an error until the sliding window resets.
-
-### Architecture
-
-- MCP server built with [FastMCP](https://github.com/jlowin/fastmcp), mounted at `/mcp/` inside the FastAPI app
-- Stateless HTTP transport — each request is an independent JSON-RPC call
-- Auth via Bearer token using org-scoped MCP API keys (SHA-256 hashed)
-- Per-key sliding-window rate limiting based on org plan
-- All tool calls are logged to the database and streamed via SSE to the MCP Control Center
-- Visual tools (`view_camera`, `watch_camera`) send WebSocket commands to the CloudNode to capture live JPEG snapshots
-- Automatic log retention: logs older than 90 days are cleaned up daily (configurable via `LOG_RETENTION_DAYS`)
-
----
-
-## CloudNode Integration
-
-The Rust CloudNode sends:
-
-1. **Registration** (`POST /api/nodes/register`)
-   - Node ID, API key, camera list
-   - Detected video/audio codecs
-
-2. **Heartbeat** (`POST /api/nodes/heartbeat`)
-   - Camera status updates
-
-3. **Segment Upload**
-   - Request presigned URL (`POST /api/cameras/{id}/upload-url`)
-   - Upload to Tigris
-   - Confirm upload (`POST /api/cameras/{id}/upload-complete`)
-   - Update playlist (`POST /api/cameras/{id}/playlist`)
-
----
-
-## Codec Detection
-
-CloudNode detects codecs during setup and stores them in the database:
-
-```rust
-// CloudNode setup
-let codec_info = detect_codec_from_camera(&camera_device)?;
-// Returns: { video_codec: "avc1.42e01e", audio_codec: "mp4a.40.2" }
-
-// Sent during registration
-POST /api/nodes/register
-{
-  "node_id": "...",
-  "cameras": [...],
-  "video_codec": "avc1.42e01e",
-  "audio_codec": "mp4a.40.2"
-}
-```
-
-Backend uses stored codecs in HLS manifest:
-```python
-# hls.py
-video_codec = node.video_codec or "avc1.42e01e"
-audio_codec = node.audio_codec or "mp4a.40.2"
-playlist_text = re.sub(
-    r"(#EXT-X-VERSION:\d+)",
-    rf"\1\n#EXT-X-CODECS:{video_codec},{audio_codec}",
-    playlist_text,
-)
-```
-
----
-
-## Permissions
-
-Clerk V2 JWT format:
-
-```python
-# Required permissions:
-org:admin:admin           # Full admin access
-org:cameras:manage_cameras # Create/delete nodes
-org:cameras:view_cameras  # View camera feeds
-```
-
----
-
-## Deployment
-
-### Fly.io
-
-```bash
-# Install flyctl
-flyctl deploy
-```
-
-Environment variables set in `fly.toml` or via `flyctl secrets set`
-
-### Docker
-
-```bash
-docker build -t opensentry-command .
-docker run -p 8000:8000 --env-file .env opensentry-command
+└── src/
+    ├── pages/
+    │   └── DashboardPage.jsx    # Camera grid, status, controls
+    └── components/
+        └── HlsPlayer.jsx       # HLS.js video player
 ```
 
 ---
 
 ## Development
 
+### Backend
+
 ```bash
-# Backend - FastAPI with auto-reload
 cd backend
-uv run fastapi dev app/main.py
-
-# Frontend - Vite with hot reload
-cd frontend
-npm run dev
-
-# Run tests (if present)
-cd backend
-uv run pytest
+uv sync
+uv run python start.py          # Runs on :8000 with auto-reload
 ```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev                      # Runs on :5173
+npm run build                    # Production build → backend/static/
+```
+
+### Database
+
+SQLite for development (`opensentry.db` in backend directory). Tables are created automatically on startup. For production, set `DATABASE_URL` to a PostgreSQL connection string.
 
 ---
 
-## Cleaned Up
+## Deployment
 
-- Removed legacy Flask codebase (`opensentry_command/`)
-- Removed outdated Docker files
-- Removed unused Pygame/RTSP code
-- Consolidated to FastAPI + React architecture
+The app is deployed on [Fly.io](https://fly.io) with Tigris object storage:
+
+1. Frontend is built and served as static files by the FastAPI backend
+2. SPA middleware routes non-API requests to `index.html`
+3. Tigris handles all video segment storage (S3-compatible)
+4. Clerk handles authentication (no user database needed)
+
+Production URL: [opensentry-command.fly.dev](https://opensentry-command.fly.dev)
 
 ---
 
 ## License
 
-GNU General Public License v3.0 - See [LICENSE](LICENSE)
+MIT -- Free for personal and commercial use.
 
 ---
 
-**Built with FastAPI, React, Clerk, and Tigris Object Storage**
+<p align="center">
+  <a href="https://opensentry-command.fly.dev">OpenSentry Command Center</a>
+  &middot;
+  <a href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode">CloudNode</a>
+  &middot;
+  Made by <a href="https://github.com/SourceBox-LLC">SourceBox LLC</a>
+</p>

@@ -113,11 +113,14 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     elif event_type == "organization.deleted":
         org_id = data.get("id")
         if org_id:
-            # Clean up all org data: nodes (cascades to cameras), groups, keys, logs, settings
+            # Clean up in-memory caches and delete all DB records.
+            from app.api.hls import cleanup_camera_cache
             nodes = db.query(CameraNode).filter_by(org_id=org_id).all()
             camera_count = 0
             for node in nodes:
-                camera_count += len(node.cameras) if node.cameras else 0
+                for camera in (node.cameras or []):
+                    cleanup_camera_cache(camera.camera_id)
+                    camera_count += 1
                 db.delete(node)  # cascade deletes cameras
 
             group_count = db.query(CameraGroup).filter_by(org_id=org_id).delete()
