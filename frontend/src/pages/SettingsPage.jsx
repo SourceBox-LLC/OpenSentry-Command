@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getPlanInfo, getSettings, updateRecordingSettings } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateRecordingSettings } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
+import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
@@ -27,6 +28,7 @@ function SettingsPage() {
   const { getToken } = useAuth()
   const { organization, membership } = useOrganization()
   const { showToast } = useToasts()
+  const { planInfo, refreshPlanInfo } = usePlanInfo()
   const [nodes, setNodes] = useState([])
   const [nodesLoading, setNodesLoading] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -34,9 +36,6 @@ function SettingsPage() {
   const [selectedNode, setSelectedNode] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
-
-  // Plan info
-  const [planInfo, setPlanInfo] = useState(null)
 
   // Recording settings
   const [recording, setRecording] = useState(null)
@@ -58,23 +57,12 @@ function SettingsPage() {
   useEffect(() => {
     if (organization) {
       loadNodes()
-      loadPlanInfo()
       loadSettings()
       // Poll nodes every 30s to detect status changes
       const interval = setInterval(loadNodes, 30000)
       return () => clearInterval(interval)
     }
   }, [organization])
-
-  const loadPlanInfo = async () => {
-    try {
-      const token = await getToken()
-      const data = await getPlanInfo(() => Promise.resolve(token))
-      setPlanInfo(data)
-    } catch (err) {
-      console.error("Failed to load plan info:", err)
-    }
-  }
 
   const loadSettings = async () => {
     try {
@@ -152,7 +140,7 @@ function SettingsPage() {
     try {
       const result = await createNodeApi(() => Promise.resolve(token), name)
       await loadNodes()
-      await loadPlanInfo()
+      await refreshPlanInfo()
       showToast(`Node "${name}" created successfully`, "success")
       return result
     } catch (err) {
@@ -168,7 +156,7 @@ function SettingsPage() {
       const token = await getToken()
       await deleteNodeApi(() => Promise.resolve(token), nodeId)
       await loadNodes()
-      await loadPlanInfo()
+      await refreshPlanInfo()
       setDeleteConfirm(null)
       showToast("Node deleted and storage cleaned up", "success")
     } catch (err) {

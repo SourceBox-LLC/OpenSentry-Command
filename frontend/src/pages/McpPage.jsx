@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
 import {
-  getMcpKeys, createMcpKey, revokeMcpKey, getPlanInfo,
+  getMcpKeys, createMcpKey, revokeMcpKey,
   getMcpActivity, getMcpSessions, getMcpStats,
 } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
+import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 
 const MCP_URL = `${window.location.origin}/mcp`
@@ -50,7 +51,7 @@ function McpPage() {
   const { showToast } = useToasts()
 
   // Plan & auth
-  const [planInfo, setPlanInfo] = useState(null)
+  const { planInfo } = usePlanInfo()
 
   // Live activity
   const [events, setEvents] = useState([])
@@ -81,21 +82,6 @@ function McpPage() {
     return "linux"
   })
   const [configTab, setConfigTab] = useState("auto")
-
-  // Load plan info
-  useEffect(() => {
-    if (organization) loadPlanInfo()
-  }, [organization])
-
-  const loadPlanInfo = async () => {
-    try {
-      const token = await getToken()
-      const data = await getPlanInfo(() => Promise.resolve(token))
-      setPlanInfo(data)
-    } catch (err) {
-      console.error("Failed to load plan info:", err)
-    }
-  }
 
   // Load initial activity data + start polling
   useEffect(() => {

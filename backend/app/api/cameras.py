@@ -209,16 +209,18 @@ async def get_all_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """Get all settings for the user's organization."""
+    vals = Setting.get_many(db, user.org_id, {
+        "scheduled_recording": "false",
+        "scheduled_start": "06:00",
+        "scheduled_end": "17:00",
+        "continuous_24_7": "false",
+    })
     return {
         "recording": {
-            "scheduled_recording": Setting.get(
-                db, user.org_id, "scheduled_recording", "false"
-            )
-            == "true",
-            "scheduled_start": Setting.get(db, user.org_id, "scheduled_start", "06:00"),
-            "scheduled_end": Setting.get(db, user.org_id, "scheduled_end", "17:00"),
-            "continuous_24_7": Setting.get(db, user.org_id, "continuous_24_7", "false")
-            == "true",
+            "scheduled_recording": vals["scheduled_recording"] == "true",
+            "scheduled_start": vals["scheduled_start"],
+            "scheduled_end": vals["scheduled_end"],
+            "continuous_24_7": vals["continuous_24_7"] == "true",
         },
     }
 
@@ -228,15 +230,17 @@ async def get_recording_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """Get recording settings."""
+    vals = Setting.get_many(db, user.org_id, {
+        "scheduled_recording": "false",
+        "scheduled_start": "06:00",
+        "scheduled_end": "17:00",
+        "continuous_24_7": "false",
+    })
     return {
-        "scheduled_recording": Setting.get(
-            db, user.org_id, "scheduled_recording", "false"
-        )
-        == "true",
-        "scheduled_start": Setting.get(db, user.org_id, "scheduled_start", "06:00"),
-        "scheduled_end": Setting.get(db, user.org_id, "scheduled_end", "17:00"),
-        "continuous_24_7": Setting.get(db, user.org_id, "continuous_24_7", "false")
-        == "true",
+        "scheduled_recording": vals["scheduled_recording"] == "true",
+        "scheduled_start": vals["scheduled_start"],
+        "scheduled_end": vals["scheduled_end"],
+        "continuous_24_7": vals["continuous_24_7"] == "true",
     }
 
 

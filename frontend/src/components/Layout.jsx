@@ -1,37 +1,18 @@
 import { Outlet, Link, useLocation } from "react-router-dom"
-import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization, useAuth } from "@clerk/clerk-react"
-import { useState, useEffect } from "react"
-import { getPlanInfo } from "../services/api"
+import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization } from "@clerk/clerk-react"
+import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import ToastContainer from "./ToastContainer.jsx"
 
 function Layout() {
   const { organization, isLoaded: orgLoaded, membership } = useOrganization()
-  const { getToken } = useAuth()
+  const { planInfo } = usePlanInfo()
   const location = useLocation()
-  const [planFeatures, setPlanFeatures] = useState([])
-
-  const [planName, setPlanName] = useState(null)
 
   const isAdmin = orgLoaded && membership?.role === "org:admin"
+  const planFeatures = planInfo?.features || []
+  const planName = planInfo?.plan || null
   const hasAdminFeature = planFeatures.includes("admin")
   const isPro = planName === "pro" || planName === "business"
-
-  useEffect(() => {
-    if (organization && isAdmin) {
-      loadPlanFeatures()
-    }
-  }, [organization])
-
-  const loadPlanFeatures = async () => {
-    try {
-      const token = await getToken()
-      const data = await getPlanInfo(() => Promise.resolve(token))
-      setPlanFeatures(data.features || [])
-      setPlanName(data.plan || null)
-    } catch (err) {
-      // Silently fail — nav still works, just hides admin link
-    }
-  }
 
   const isActive = (path) => location.pathname === path ? "nav-link active" : "nav-link"
 

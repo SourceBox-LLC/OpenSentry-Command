@@ -1,6 +1,8 @@
 import httpx
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.database import get_db
 from clerk_backend_api.security import AuthenticateRequestOptions
 from app.core.clerk import clerk
 
@@ -197,20 +199,19 @@ async def require_admin(user: AuthUser = Depends(get_current_user)) -> AuthUser:
     return user
 
 
-async def require_active_billing(user: AuthUser = Depends(require_admin)) -> AuthUser:
+async def require_active_billing(
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> AuthUser:
     """Admin + payment must not be past due.  Use for write operations
     (create node, create key, etc.) so past-due orgs can still read
-    their data but can't provision new resources."""
-    from app.core.database import get_db, SessionLocal
+    their data but can't provision new resources.
+    Reuses the request's existing DB session instead of opening a new one."""
     from app.models.models import Setting
 
-    db = SessionLocal()
-    try:
-        if Setting.get(db, user.org_id, "payment_past_due", "false") == "true":
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail="Your payment is past due. Please update your billing information before making changes.",
-            )
-    finally:
-        db.close()
+    if Setting.get(db, user.org_id, "payment_past_due", "false") == "true":
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Your payment is past due. Please update your billing information before making changes.",
+        )
     return user

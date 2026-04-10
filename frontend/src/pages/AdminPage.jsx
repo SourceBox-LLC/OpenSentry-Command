@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getStreamLogs, getStreamStats, getNodes, getPlanInfo, getMcpLogs, getMcpLogStats } from "../services/api"
+import { getStreamLogs, getStreamStats, getNodes, getMcpLogs, getMcpLogStats } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
+import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 
 function AdminPage() {
   const { getToken } = useAuth()
   const { organization } = useOrganization()
   const { showToast } = useToasts()
+  const { planInfo, loading: planLoading } = usePlanInfo()
   const [logs, setLogs] = useState([])
   const [stats, setStats] = useState(null)
   const [nodes, setNodes] = useState([])
   const [loading, setLoading] = useState(true)
   const [statsLoading, setStatsLoading] = useState(true)
-  const [planInfo, setPlanInfo] = useState(null)
-  const [planLoading, setPlanLoading] = useState(true)
 
   const [filters, setFilters] = useState({
     camera_id: "",
@@ -41,12 +41,6 @@ function AdminPage() {
   const [mcpTotal, setMcpTotal] = useState(0)
   const [mcpDays, setMcpDays] = useState(7)
 
-  useEffect(() => {
-    if (organization) {
-      loadPlanInfo()
-    }
-  }, [organization])
-
   // Only load audit data once we know the plan allows it
   useEffect(() => {
     if (planInfo && planInfo.features?.includes("admin")) {
@@ -57,19 +51,6 @@ function AdminPage() {
       loadMcpStats()
     }
   }, [planInfo])
-
-  const loadPlanInfo = async () => {
-    try {
-      setPlanLoading(true)
-      const token = await getToken()
-      const data = await getPlanInfo(() => Promise.resolve(token))
-      setPlanInfo(data)
-    } catch (err) {
-      console.error("Failed to load plan info:", err)
-    } finally {
-      setPlanLoading(false)
-    }
-  }
 
   useEffect(() => {
     if (organization && planInfo?.features?.includes("admin")) {

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getCameras, getPlanInfo } from "../services/api"
+import { getCameras } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
+import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import CameraCard from "../components/CameraCard.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 
@@ -10,10 +11,10 @@ function DashboardPage() {
   const { getToken } = useAuth()
   const { organization, membership } = useOrganization()
   const { showToast } = useToasts()
+  const { planInfo, refreshPlanInfo } = usePlanInfo()
   const [cameras, setCameras] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [planInfo, setPlanInfo] = useState(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const prevCamerasRef = useRef(null)
@@ -70,12 +71,20 @@ function DashboardPage() {
         }
       }
 
-      // Only update state if data actually changed
-      const prevKeys = prevCamerasRef.current ? Object.keys(prevCamerasRef.current).join(',') : ''
-      const newKeys = Object.keys(camerasMap).join(',')
-
-      if (prevKeys !== newKeys ||
-          JSON.stringify(prevCamerasRef.current) !== JSON.stringify(camerasMap)) {
+      // Only update state if data actually changed (shallow field comparison
+      // instead of JSON.stringify — avoids blocking the main thread).
+      const prev = prevCamerasRef.current
+      let changed = !prev || Object.keys(camerasMap).length !== Object.keys(prev).length
+      if (!changed) {
+        for (const [id, cam] of Object.entries(camerasMap)) {
+          const p = prev[id]
+          if (!p || p.status !== cam.status || p.name !== cam.name || p.last_seen !== cam.last_seen) {
+            changed = true
+            break
+          }
+        }
+      }
+      if (changed) {
         prevCamerasRef.current = camerasMap
         setCameras(camerasMap)
       }
@@ -89,39 +98,22 @@ function DashboardPage() {
     }
   }, [organization, getToken])
 
-  const loadPlanInfo = useCallback(async () => {
-    if (!organization) return
-    try {
-      const token = await getToken()
-      const data = await getPlanInfo(() => Promise.resolve(token))
-      setPlanInfo(data)
-    } catch (err) {
-      console.error("[Dashboard] Error loading plan info:", err)
-    }
-  }, [organization, getToken])
-
   useEffect(() => {
     if (!organization) return
 
     loadCameras()
-    loadPlanInfo()
     const interval = setInterval(loadCameras, 5000)
-    // Refresh plan info less frequently (every 60s)
-    const planInterval = setInterval(loadPlanInfo, 60000)
-    return () => {
-      clearInterval(interval)
-      clearInterval(planInterval)
-    }
-  }, [organization, loadCameras, loadPlanInfo])
+    return () => clearInterval(interval)
+  }, [organization, loadCameras])
 
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
     prevCamerasRef.current = null // force state update
     await loadCameras()
-    await loadPlanInfo()
+    await refreshPlanInfo()
     setRefreshing(false)
-  }, [loadCameras, loadPlanInfo])
+  }, [loadCameras, refreshPlanInfo])
 
   const getStats = () => {
     const cameraList = Object.values(cameras)

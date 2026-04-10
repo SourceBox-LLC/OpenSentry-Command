@@ -95,6 +95,20 @@ class Setting(Base):
         return setting.value if setting else default
 
     @staticmethod
+    def get_many(db, org_id: str, keys_defaults: dict) -> dict:
+        """Fetch multiple settings in a single query.
+        keys_defaults: {key: default_value, ...}
+        Returns: {key: value, ...}
+        """
+        rows = (
+            db.query(Setting)
+            .filter(Setting.org_id == org_id, Setting.key.in_(keys_defaults.keys()))
+            .all()
+        )
+        found = {row.key: row.value for row in rows}
+        return {k: found.get(k, default) for k, default in keys_defaults.items()}
+
+    @staticmethod
     def set(db, org_id: str, key: str, value: str):
         setting = db.query(Setting).filter_by(org_id=org_id, key=key).first()
         if setting:

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import Hls from "hls.js"
-import { useAuth } from "@clerk/clerk-react"
+import { useSharedToken } from "../hooks/useSharedToken.jsx"
 
 // Set to true to connect directly to CloudNode on localhost:8080
 // Set to false to use backend proxy with authentication
@@ -9,7 +9,7 @@ const LOCAL_TEST_MODE = import.meta.env.VITE_LOCAL_HLS === "true"
 function HlsPlayer({ cameraId, cameraName }) {
     const videoRef = useRef(null)
     const hlsRef = useRef(null)
-    const { getToken } = useAuth()
+    const { getCurrentToken, refreshNow } = useSharedToken()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [isLive, setIsLive] = useState(false)
@@ -29,14 +29,10 @@ function HlsPlayer({ cameraId, cameraName }) {
                     ? `http://localhost:8080/hls/${cameraId}/stream.m3u8`
                     : `${API_URL}/api/cameras/${cameraId}/stream.m3u8`
 
-                // Pre-fetch the auth token BEFORE creating hls.js.
-                // xhrSetup is called synchronously — an async callback
-                // would return a Promise that hls.js never awaits, so
-                // the request would fire without the Authorization header.
-                let authToken = null
-                if (!LOCAL_TEST_MODE) {
-                    authToken = await getToken()
-                }
+                // Get the current shared auth token. xhrSetup reads the
+                // latest token on each request via getCurrentToken(), so
+                // no per-player refresh interval is needed.
+                let authToken = LOCAL_TEST_MODE ? null : getCurrentToken()
 
                 if (Hls.isSupported()) {
                     const hls = new Hls({
@@ -45,8 +41,10 @@ function HlsPlayer({ cameraId, cameraName }) {
                             // Presigned Tigris URLs already carry auth in the query
                             // string — sending an Authorization header to Tigris
                             // triggers a CORS preflight that Tigris rejects.
-                            if (authToken && url.startsWith(ownOrigin)) {
-                                xhr.setRequestHeader("Authorization", `Bearer ${authToken}`)
+                            // Read the latest shared token on each request.
+                            const token = LOCAL_TEST_MODE ? null : getCurrentToken()
+                            if (token && url.startsWith(ownOrigin)) {
+                                xhr.setRequestHeader("Authorization", `Bearer ${token}`)
                             }
                         },
 
@@ -82,29 +80,6 @@ function HlsPlayer({ cameraId, cameraName }) {
                     })
 
                     hlsRef.current = hls
-
-                    // Refresh the auth token every 30 seconds so it never
-                    // reaches Clerk's 60s expiry. If a refresh fails, the
-                    // next attempt is only 30s away (not 50s).
-                    const tokenRefreshInterval = setInterval(async () => {
-                        try {
-                            authToken = await getToken()
-                        } catch (e) {
-                            console.warn("[HlsPlayer] Token refresh failed:", e)
-                        }
-                    }, 30000)
-
-                    // Store interval ID for cleanup
-                    hls._tokenRefreshInterval = tokenRefreshInterval
-
-                    // Helper: refresh token immediately (called on auth failures)
-                    const refreshTokenNow = async () => {
-                        try {
-                            authToken = await getToken()
-                        } catch (e) {
-                            console.warn("[HlsPlayer] Urgent token refresh failed:", e)
-                        }
-                    }
 
                     hls.loadSource(playlistUrl)
                     hls.attachMedia(video)
@@ -163,11 +138,10 @@ function HlsPlayer({ cameraId, cameraName }) {
                             switch (data.type) {
                                 case Hls.ErrorTypes.NETWORK_ERROR:
                                     // Network errors are often caused by an expired
-                                    // auth token (401). Refresh the token immediately
-                                    // before retrying, so the next request uses a
-                                    // fresh token instead of the stale one.
+                                    // auth token (401). Refresh the shared token
+                                    // immediately before retrying.
                                     console.warn("[HlsPlayer] Network error, refreshing token and retrying:", data.details)
-                                    refreshTokenNow().then(() => {
+                                    refreshNow().then(() => {
                                         hls.startLoad()
                                     })
                                     break
@@ -196,9 +170,6 @@ function HlsPlayer({ cameraId, cameraName }) {
 
         return () => {
             if (hlsRef.current) {
-                if (hlsRef.current._tokenRefreshInterval) {
-                    clearInterval(hlsRef.current._tokenRefreshInterval)
-                }
                 if (hlsRef.current._stallCheck) {
                     clearInterval(hlsRef.current._stallCheck)
                 }
@@ -206,7 +177,7 @@ function HlsPlayer({ cameraId, cameraName }) {
                 hlsRef.current = null
             }
         }
-    }, [cameraId, getToken])
+    }, [cameraId, getCurrentToken])
 
     if (error) {
         return (

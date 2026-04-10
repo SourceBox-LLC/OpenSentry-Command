@@ -37,6 +37,7 @@ _playlist_cache: dict[str, tuple[str, float]] = {}
 # playlist periodically even if the CloudNode hasn't pushed an update,
 # so that segment URLs never expire while still in the playlist.
 _PLAYLIST_CACHE_MAX_AGE = 300.0  # 5 minutes — well within 15-min URL expiry
+_CACHE_MAX_CAMERAS = 500  # Evict oldest entries above this limit
 
 # Track playlist update count per camera to trigger periodic Tigris cleanup.
 # Old segments pile up on Tigris since batch uploads have no confirm step.
@@ -50,6 +51,27 @@ _playlist_update_count: dict[str, int] = {}
 # {(user_id, camera_id): monotonic_timestamp_of_last_log}
 _ACCESS_LOG_INTERVAL = 300.0  # 5 minutes
 _last_access_logged: dict[tuple[str, str], float] = {}
+_ACCESS_LOG_MAX_ENTRIES = 10000  # Evict stale entries above this limit
+
+
+def _evict_caches():
+    """Evict stale entries from module-level caches to prevent unbounded growth."""
+    now = time.monotonic()
+
+    # Evict expired playlist caches
+    if len(_playlist_cache) > _CACHE_MAX_CAMERAS:
+        # Sort by timestamp, keep newest
+        sorted_entries = sorted(_playlist_cache.items(), key=lambda x: x[1][1])
+        for camera_id, _ in sorted_entries[:len(sorted_entries) - _CACHE_MAX_CAMERAS]:
+            del _playlist_cache[camera_id]
+            _playlist_update_count.pop(camera_id, None)
+
+    # Evict stale access log entries (older than 2x the log interval)
+    if len(_last_access_logged) > _ACCESS_LOG_MAX_ENTRIES:
+        cutoff = now - (_ACCESS_LOG_INTERVAL * 2)
+        stale_keys = [k for k, ts in _last_access_logged.items() if ts < cutoff]
+        for k in stale_keys:
+            del _last_access_logged[k]
 
 
 def _maybe_log_access(
@@ -308,11 +330,11 @@ async def update_hls_playlist(
         )
         _playlist_cache[camera_id] = (rewritten, time.monotonic())
 
-        # Periodically clean up old segments on Tigris. Batch uploads
-        # don't have a confirm step, so segments pile up indefinitely.
+        # Periodically clean up old segments on Tigris and evict stale caches.
         count = _playlist_update_count.get(camera_id, 0) + 1
         _playlist_update_count[camera_id] = count
         if count % settings.CLEANUP_INTERVAL == 0:
+            _evict_caches()
             asyncio.ensure_future(
                 _cleanup_old_segments(node.org_id, camera_id)
             )
