@@ -137,8 +137,11 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
             db.close()
             raise ToolError("Unauthorized: invalid or revoked API key")
 
-        # Look up org plan and enforce access + rate limit
-        plan = Setting.get(db, mcp_key.org_id, "org_plan", "free_org")
+        # Look up org plan and enforce access + rate limit. Uses the
+        # resolver so orgs whose subscription webhook never landed
+        # still get checked against the live Clerk subscription state.
+        from app.core.plans import resolve_org_plan
+        plan = resolve_org_plan(db, mcp_key.org_id)
         limit = RATE_LIMITS.get(plan)
         if limit is None:
             db.close()
@@ -649,7 +652,8 @@ def get_system_status() -> dict:
         online_cameras = sum(1 for c in cameras if c.effective_status != "offline")
         online_nodes = sum(1 for n in nodes if n.effective_status not in ("offline", "pending"))
 
-        plan = Setting.get(db, org_id, "org_plan", "free_org")
+        from app.core.plans import resolve_org_plan
+        plan = resolve_org_plan(db, org_id)
 
         return {
             "org_id": org_id,
