@@ -17,9 +17,8 @@ Always run the latest version.
 |---------|-------------|
 | **Clerk Authentication** | JWT-based authentication with organization-scoped permissions |
 | **API Key Hashing** | CloudNode API keys stored as SHA-256 hashes |
-| **Presigned URLs** | Time-limited S3 URLs for all video content (default 5 min) |
+| **Same-origin Streaming** | Live segments served through the authenticated backend — no third-party storage in the live video path |
 | **Tenant Isolation** | All queries scoped by `org_id` -- no cross-org data access |
-| **Rate Limiting** | Stream URL generation capped at 10 req/min per IP |
 | **CORS** | Explicit origin allowlist (no wildcards with credentials) |
 | **Audit Logging** | Stream access tracked with user ID, IP, and user agent |
 | **Encrypted Storage** | CloudNode encrypts API key at rest with AES-256-GCM |
@@ -55,7 +54,7 @@ Always run the latest version.
 - CloudNode-to-backend communication
 - Authentication and authorization
 - Data storage and tenant isolation
-- Presigned URL generation and expiry
+- HLS segment cache and playlist serving
 
 ### Out of Scope
 

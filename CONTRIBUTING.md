@@ -59,11 +59,10 @@ See the [CloudNode README](https://github.com/SourceBox-LLC/OpenSentry-CloudNode
 backend/
 ├── app/
 │   ├── main.py           # FastAPI app, CORS, SPA middleware
-│   ├── api/              # Route handlers (cameras, nodes, hls, streams, audit, webhooks)
+│   ├── api/              # Route handlers (cameras, nodes, hls, audit, webhooks)
 │   ├── core/             # Auth (Clerk JWT), config, database
 │   ├── models/           # SQLAlchemy models
-│   ├── schemas/          # Pydantic schemas
-│   └── services/         # Tigris storage, codec probing
+│   └── schemas/          # Pydantic schemas
 ├── pyproject.toml
 └── start.py
 
@@ -85,8 +84,8 @@ src/
 ├── node/                  # Node lifecycle orchestration
 ├── server/                # HTTP server (warp)
 ├── setup/                 # Interactive setup wizard
-├── streaming/             # HLS generation and upload
-└── storage/               # SQLite database
+├── streaming/             # HLS generation and segment push
+└── storage/               # SQLite database (recordings, snapshots, segments)
 ```
 
 ## Coding Guidelines

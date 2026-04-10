@@ -37,20 +37,19 @@ function HlsPlayer({ cameraId, cameraName }) {
                 if (Hls.isSupported()) {
                     const hls = new Hls({
                         xhrSetup: (xhr, url) => {
-                            // Only send auth header to our own backend.
-                            // Presigned Tigris URLs already carry auth in the query
-                            // string — sending an Authorization header to Tigris
-                            // triggers a CORS preflight that Tigris rejects.
-                            // Read the latest shared token on each request.
+                            // Send the shared auth token to our own backend.
+                            // Live segments are served same-origin from the
+                            // backend proxy, so the Authorization header rides
+                            // along with every fetch — no presigned URLs.
                             const token = LOCAL_TEST_MODE ? null : getCurrentToken()
                             if (token && url.startsWith(ownOrigin)) {
                                 xhr.setRequestHeader("Authorization", `Bearer ${token}`)
                             }
                         },
 
-                        // ── Latency tuning (1-second segments) ────────────────
-                        // Pipeline latency (FFmpeg → upload → Tigris → browser) is ~2-3s.
-                        // With 1s segments, 3 segments = 3s behind live — enough
+                        // ── Latency tuning ────────────────────────────────────
+                        // Pipeline latency (FFmpeg → push → backend cache → browser) is ~2-3s.
+                        // With 1s segments, 4 segments behind live = enough
                         // headroom to absorb upload jitter without stalling.
                         liveSyncDurationCount: 4,        // stay 4 segments (4s) behind live
                         liveMaxLatencyDurationCount: 8,  // if >8 segs (8s) behind, jump to live

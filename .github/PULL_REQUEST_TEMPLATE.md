@@ -27,7 +27,7 @@ Fixes #
 - [ ] Backend (FastAPI API)
 - [ ] CloudNode (Rust)
 - [ ] Authentication (Clerk)
-- [ ] Storage (Tigris/S3)
+- [ ] HLS streaming / segment cache
 - [ ] Docker/Deployment
 - [ ] Documentation
 

@@ -21,11 +21,11 @@
 
 ---
 
-OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It receives live HLS video streams from [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) devices on your local network, stores segments in Tigris object storage, and serves them to any browser. Authentication and multi-tenant isolation are handled by Clerk.
+OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It receives live HLS video streams from [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) devices on your local network, caches segments in memory, and proxies them to any browser. Authentication and multi-tenant isolation are handled by Clerk.
 
 **What it does:**
-- Receives and stores live HLS video from CloudNode devices
-- Serves camera feeds to the browser via presigned URLs (no backend proxy)
+- Receives live HLS video from CloudNode devices and proxies it to the browser
+- Caches segments in memory (~3.75 MB per camera) — no S3, no presigned URLs
 - Manages camera nodes, groups, alerts, and media
 - Multi-tenant with organization-based access control
 - Audit logging for all stream access
@@ -44,7 +44,7 @@ OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It rece
 
 ```bash
 cd backend
-cp .env.example .env    # Edit with your Clerk keys and Tigris credentials
+cp .env.example .env    # Edit with your Clerk keys
 uv sync
 uv run python start.py
 ```
@@ -82,18 +82,18 @@ Cameras auto-register when the CloudNode connects.
   ┌──────────────┐            ┌───────────────────────┐         ┌──────────────┐
   │ USB Camera   │            │  FastAPI Backend       │         │  React 19    │
   │      ↓       │            │                        │         │              │
-  │ FFmpeg (HLS) │──upload──→ │  Tigris Object Storage │←─GET──→ │  HLS.js      │
-  │              │  segments  │                        │ presigned│  (video)     │
+  │ FFmpeg (HLS) │──push─────→│  In-memory segment     │←─GET──→ │  HLS.js      │
+  │              │  segments  │  cache (~15 segs/cam)  │ proxy   │  (video)     │
   │              │──register─→│  SQLite / PostgreSQL   │  URLs   │              │
   │              │──heartbeat→│  Clerk Auth            │←─JWT───→│  Clerk Auth  │
   └──────────────┘            └───────────────────────┘         └──────────────┘
 ```
 
-**Video pipeline:** CloudNode transcodes USB camera video into HLS segments, uploads `.ts` files directly to Tigris via presigned PUT URLs, and posts the playlist. The browser fetches the playlist from the backend (which rewrites segment paths to presigned GET URLs), then downloads segments directly from Tigris.
+**Video pipeline:** CloudNode transcodes USB camera video into HLS segments and pushes each `.ts` file directly to the backend via `POST /api/cameras/{id}/push-segment`. The backend caches segments in memory (15 per camera by default) and serves them through the same-origin proxy at `GET /api/cameras/{id}/segment/{file}`. The browser fetches the rewritten playlist and downloads segments through the backend — no S3, no presigned URLs.
 
 **Authentication:** Clerk handles user sign-up, login, and organization management. The backend validates JWT tokens and extracts organization-scoped permissions. CloudNodes authenticate with API keys (SHA-256 hashed in the database).
 
-**Storage:** Tigris (S3-compatible) for video segments. SQLite (dev) or PostgreSQL (production) for application data. Old segments are automatically cleaned up based on retention settings.
+**Storage:** Live segments live in the backend's in-memory cache. SQLite (dev) or PostgreSQL (production) for application data. Recordings and snapshots are stored locally on each CloudNode. Old segments fall out of the cache automatically based on `SEGMENT_CACHE_MAX_PER_CAMERA`.
 
 ---
 
@@ -109,17 +109,11 @@ Cameras auto-register when the CloudNode connects.
 | `CLERK_WEBHOOK_SECRET` | No | | Webhook signature verification |
 | `DATABASE_URL` | No | `sqlite:///./opensentry.db` | Database connection string |
 | `FRONTEND_URL` | No | `http://localhost:5173` | CORS origin |
-| `AWS_ENDPOINT_URL_S3` | Yes | | Tigris S3 endpoint |
-| `AWS_ACCESS_KEY_ID` | Yes | | Tigris access key |
-| `AWS_SECRET_ACCESS_KEY` | Yes | | Tigris secret key |
-| `AWS_REGION` | No | `auto` | S3 region |
-| `BUCKET_NAME` | No | | Tigris bucket name |
-| `STREAM_URL_EXPIRY_SECONDS` | No | `300` | Presigned URL lifetime |
-| `UPLOAD_URL_EXPIRY_SECONDS` | No | `300` | Upload URL lifetime |
-| `UPLOAD_TIMEOUT_MINUTES` | No | `10` | Pending upload timeout |
-| `SEGMENT_RETENTION_COUNT` | No | `60` | Segments to keep per camera |
-| `CLEANUP_INTERVAL` | No | `20` | Cleanup every N uploads |
+| `SEGMENT_CACHE_MAX_PER_CAMERA` | No | `15` | Segments cached in memory per camera |
+| `SEGMENT_PUSH_MAX_BYTES` | No | `2097152` | Max bytes per pushed segment (2 MB) |
+| `CLEANUP_INTERVAL` | No | `20` | Run cache eviction every N playlist updates |
 | `AUDIT_LOG_RETENTION_DAYS` | No | `7` | Stream access log retention |
+| `INACTIVE_CAMERA_CLEANUP_HOURS` | No | `24` | Free caches for cameras offline this long |
 | `SESSION_TIMEOUT` | No | `30` | Session timeout (minutes) |
 
 ### Frontend environment variables
@@ -167,12 +161,11 @@ Cameras auto-register when the CloudNode connects.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/cameras/{camera_id}/stream.m3u8` | User | HLS playlist (presigned segment URLs) |
-| GET | `/api/cameras/{camera_id}/segment/{file}` | User | Segment proxy fallback |
+| GET | `/api/cameras/{camera_id}/stream.m3u8` | User | HLS playlist (cached, with relative segment URLs) |
+| GET | `/api/cameras/{camera_id}/segment/{file}` | User | Serve cached segment from memory |
+| POST | `/api/cameras/{camera_id}/push-segment` | Node | Push a `.ts` segment into the in-memory cache |
 | POST | `/api/cameras/{camera_id}/playlist` | Node | Update playlist |
-| GET | `/api/cameras/{camera_id}/stream-url` | User | Get presigned playlist URL |
-| POST | `/api/cameras/{camera_id}/upload-url` | Node | Get presigned upload URL |
-| POST | `/api/cameras/{camera_id}/upload-complete` | Node | Confirm upload |
+| POST | `/api/cameras/{camera_id}/codec` | Node | Report video/audio codec |
 
 ### Settings & Media
 
@@ -226,12 +219,11 @@ Admin permission is required for node management, group management, media deleti
 ```
 backend/
 ├── app/
-│   ├── main.py              # FastAPI app, CORS, SPA middleware
+│   ├── main.py              # FastAPI app, CORS, SPA middleware, cleanup loop
 │   ├── api/
 │   │   ├── cameras.py       # Camera, group, settings, alert, media endpoints
 │   │   ├── nodes.py         # CloudNode registration, heartbeat, CRUD
-│   │   ├── hls.py           # HLS playlist and segment delivery
-│   │   ├── streams.py       # Presigned URL generation, upload management
+│   │   ├── hls.py           # HLS playlist + in-memory segment cache + push-segment
 │   │   ├── audit.py         # Stream access logging
 │   │   └── webhooks.py      # Clerk subscription webhooks
 │   ├── core/
@@ -242,11 +234,8 @@ backend/
 │   ├── models/
 │   │   └── models.py        # Camera, CameraNode, CameraGroup, Media,
 │   │                        # Alert, Setting, AuditLog, StreamAccessLog
-│   ├── schemas/
-│   │   └── schemas.py       # Pydantic request/response schemas
-│   └── services/
-│       ├── storage.py       # Tigris S3 operations
-│       └── codec_prober.py  # FFprobe codec detection
+│   └── schemas/
+│       └── schemas.py       # Pydantic request/response schemas
 ├── .env.example
 ├── pyproject.toml
 └── start.py                 # Uvicorn entry point
@@ -288,12 +277,14 @@ SQLite for development (`opensentry.db` in backend directory). Tables are create
 
 ## Deployment
 
-The app is deployed on [Fly.io](https://fly.io) with Tigris object storage:
+The app is deployed on [Fly.io](https://fly.io):
 
 1. Frontend is built and served as static files by the FastAPI backend
 2. SPA middleware routes non-API requests to `index.html`
-3. Tigris handles all video segment storage (S3-compatible)
+3. Live video segments are cached in the backend's process memory — no external storage
 4. Clerk handles authentication (no user database needed)
+
+Memory sizing: each camera uses ~3.75 MB of cache (`SEGMENT_CACHE_MAX_PER_CAMERA × ~250 KB`). The default Fly instance is 1 GB, which comfortably handles ~150 cameras with headroom. Bump `[[vm]] memory_mb` if you need more.
 
 Production URL: [opensentry-command.fly.dev](https://opensentry-command.fly.dev)
 
