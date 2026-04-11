@@ -1002,3 +1002,167 @@ def finalize_incident(
         return incident.to_dict()
     finally:
         db.close()
+
+
+@mcp.tool(
+    name="list_incidents",
+    description=(
+        "List incident reports for this organization, most recent first. "
+        "Use this to check what incidents are already open before filing a "
+        "duplicate, to follow up on past reports, or to look at activity "
+        "patterns. Returns compact rows (id, title, severity, status, camera, "
+        "timestamps, evidence count) without the full report body — call "
+        "get_incident for the full detail of a specific one."
+    ),
+    annotations={"readOnlyHint": True},
+)
+@tracked
+def list_incidents(
+    status: Annotated[
+        str | None,
+        "Filter by status: open, acknowledged, resolved, or dismissed",
+    ] = None,
+    severity: Annotated[
+        str | None,
+        "Filter by severity: low, medium, high, or critical",
+    ] = None,
+    camera_id: Annotated[
+        str | None,
+        "Filter to incidents attached to a specific camera",
+    ] = None,
+    limit: Annotated[
+        int,
+        Field(description="Max number of incidents to return", ge=1, le=100),
+    ] = 20,
+    offset: Annotated[
+        int,
+        Field(description="How many rows to skip (for pagination)", ge=0),
+    ] = 0,
+) -> dict:
+    if status is not None and status not in INCIDENT_STATUSES:
+        raise ToolError(
+            f"Invalid status '{status}'. Must be one of: {', '.join(INCIDENT_STATUSES)}"
+        )
+    if severity is not None and severity not in INCIDENT_SEVERITIES:
+        raise ToolError(
+            f"Invalid severity '{severity}'. Must be one of: {', '.join(INCIDENT_SEVERITIES)}"
+        )
+
+    org_id, db = _auth()
+    try:
+        q = db.query(Incident).filter_by(org_id=org_id)
+        if status is not None:
+            q = q.filter(Incident.status == status)
+        if severity is not None:
+            q = q.filter(Incident.severity == severity)
+        if camera_id is not None:
+            q = q.filter(Incident.camera_id == camera_id)
+
+        total = q.count()
+        rows = (
+            q.order_by(Incident.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        # Strip the report body from the list view — call get_incident to read it.
+        incidents = []
+        for r in rows:
+            d = r.to_dict(include_evidence=False)
+            # Keep a short preview so agents can scan without a second call
+            report_text = d.pop("report", "") or ""
+            d["has_report"] = bool(report_text.strip())
+            incidents.append(d)
+
+        return {
+            "total": total,
+            "returned": len(incidents),
+            "offset": offset,
+            "limit": limit,
+            "incidents": incidents,
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="get_incident",
+    description=(
+        "Get the full detail of a single incident: summary, full markdown "
+        "report, all observations, and all evidence metadata (including "
+        "evidence ids you can pass to get_incident_snapshot to see the "
+        "attached images). Use this to read back a past report in full."
+    ),
+    annotations={"readOnlyHint": True},
+)
+@tracked
+def get_incident(
+    incident_id: Annotated[int, "The incident id to fetch"],
+) -> dict:
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+        return incident.to_dict(include_evidence=True)
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="get_incident_snapshot",
+    description=(
+        "Fetch a snapshot image that was previously attached to an incident "
+        "as evidence. Returns the stored JPEG so you can actually SEE what "
+        "was captured. Pair with get_incident to discover evidence ids."
+    ),
+    annotations={"readOnlyHint": True},
+)
+@tracked
+def get_incident_snapshot(
+    incident_id: Annotated[int, "The incident id the snapshot belongs to"],
+    evidence_id: Annotated[int, "The evidence id from get_incident's evidence list"],
+) -> Image:
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+
+        evidence = (
+            db.query(IncidentEvidence)
+            .filter_by(id=evidence_id, incident_id=incident_id)
+            .first()
+        )
+        if not evidence:
+            raise ToolError(
+                f"Evidence {evidence_id} not found on incident {incident_id}"
+            )
+        if evidence.kind != "snapshot" or evidence.data is None:
+            raise ToolError(
+                f"Evidence {evidence_id} is not a snapshot with attached image data"
+            )
+
+        # Map stored mime type to the Image format fastmcp expects.
+        mime = (evidence.data_mime or "image/jpeg").lower()
+        if mime == "image/jpeg" or mime == "image/jpg":
+            fmt = "jpeg"
+        elif mime == "image/png":
+            fmt = "png"
+        elif mime == "image/webp":
+            fmt = "webp"
+        else:
+            fmt = "jpeg"  # sensible fallback — the data likely still decodes
+
+        return Image(data=bytes(evidence.data), format=fmt)
+    finally:
+        db.close()
