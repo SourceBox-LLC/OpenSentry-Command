@@ -94,6 +94,7 @@ function App() {
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingPage />} />
           <Route path="/docs" element={<DocsPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
           <Route path="/legal/:page" element={<LegalPage />} />
         </Route>
 
@@ -115,14 +116,6 @@ function App() {
 
         {/* Authenticated routes with Layout */}
         <Route element={<Layout />}>
-          <Route
-            path="/pricing"
-            element={
-              <RequireOrg>
-                <PricingPage />
-              </RequireOrg>
-            }
-          />
           <Route
             path="/dashboard"
             element={

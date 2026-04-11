@@ -2,11 +2,47 @@ import { useState } from "react"
 import { Link } from "react-router-dom"
 import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization } from "@clerk/clerk-react"
 
+// Extracted into its own component so useOrganization() only runs when there
+// is an active Clerk session — otherwise Clerk logs a console warning on every
+// public-page render.
+function SignedInActions() {
+  const { organization, isLoaded: orgLoaded, membership } = useOrganization()
+  const isAdmin = orgLoaded && membership?.role === "org:admin"
+
+  return (
+    <>
+      {orgLoaded && organization && (
+        <>
+          <OrganizationSwitcher
+            hidePersonal
+            afterCreateOrganizationUrl="/dashboard"
+            afterSelectOrganizationUrl="/dashboard"
+            createOrganizationMode="modal"
+          />
+          <nav className="nav-links">
+            <Link to="/dashboard" className="nav-link">
+              Dashboard
+            </Link>
+            {isAdmin && (
+              <>
+                <Link to="/settings" className="nav-link">
+                  Settings
+                </Link>
+                <Link to="/admin" className="nav-link">
+                  Admin
+                </Link>
+              </>
+            )}
+          </nav>
+        </>
+      )}
+      <UserButton afterSignOutUrl="/" />
+    </>
+  )
+}
+
 function LandingNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const { organization, isLoaded: orgLoaded, membership } = useOrganization()
-
-  const isAdmin = orgLoaded && membership?.role === "org:admin"
 
   return (
     <nav className="landing-nav">
@@ -43,32 +79,7 @@ function LandingNav() {
           </SignedOut>
 
           <SignedIn>
-            {orgLoaded && organization && (
-              <>
-                <OrganizationSwitcher
-                  hidePersonal
-                  afterCreateOrganizationUrl="/dashboard"
-                  afterSelectOrganizationUrl="/dashboard"
-                  createOrganizationMode="modal"
-                />
-                <nav className="nav-links">
-                  <Link to="/dashboard" className="nav-link">
-                    Dashboard
-                  </Link>
-                  {isAdmin && (
-                    <>
-                      <Link to="/settings" className="nav-link">
-                        Settings
-                      </Link>
-                      <Link to="/admin" className="nav-link">
-                        Admin
-                      </Link>
-                    </>
-                  )}
-                </nav>
-              </>
-            )}
-            <UserButton afterSignOutUrl="/" />
+            <SignedInActions />
           </SignedIn>
         </div>
 

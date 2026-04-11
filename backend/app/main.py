@@ -48,8 +48,12 @@ mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
 app = FastAPI(
     title="OpenSentry Command Center API",
     description="FastAPI backend with Clerk authentication for OpenSentry Command Center",
-    version="2.0.0",
+    version="2.1.0",
     lifespan=mcp_app.lifespan,  # Required for MCP session manager
+    # Move FastAPI's auto docs off /docs so the React DocsPage can own that path.
+    docs_url="/api-docs",
+    redoc_url="/api-redoc",
+    openapi_url="/api/openapi.json",
 )
 
 app.state.limiter = limiter
@@ -189,8 +193,9 @@ if static_dir.exists():
 
     @app.middleware("http")
     async def spa_middleware(request: Request, call_next):
-        # Let API, WebSocket, install, and OpenAPI docs routes pass through
-        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.", "/docs", "/redoc", "/openapi.json")):
+        # Let API, WebSocket, and install routes pass through. /docs is owned by
+        # the React DocsPage; FastAPI's auto docs live at /api-docs (see ctor).
+        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.")):
             return await call_next(request)
 
         # MCP endpoint: only pass POST requests (JSON-RPC) to the MCP server;

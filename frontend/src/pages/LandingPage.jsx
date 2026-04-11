@@ -477,7 +477,7 @@ function LandingPage() {
 }`}</pre>
               </div>
               <div className="landing-mcp-tools-count">
-                <span>12</span> tools available
+                <span>22</span> tools available
               </div>
             </div>
           </div>

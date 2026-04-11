@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Backend-FastAPI_2.0-009688.svg" alt="FastAPI"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Backend-FastAPI_2.1-009688.svg" alt="FastAPI"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/Frontend-React_19-61DAFB.svg" alt="React"></a>
 </p>
 
@@ -26,9 +26,9 @@ OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It rece
 **What it does:**
 - Receives live HLS video from CloudNode devices and proxies it to the browser
 - Caches segments in memory (~3.75 MB per camera) — no S3, no presigned URLs
-- Manages camera nodes, groups, alerts, and media
+- Manages camera nodes and groups, with per-org Clerk authentication
 - Multi-tenant with organization-based access control
-- Audit logging for all stream access
+- Audit logging for all stream access and MCP tool calls
 - MCP server exposing 22 tools so AI clients can view cameras, file incident reports with snapshots and short video clips, and read back past investigations
 
 ---
@@ -135,7 +135,9 @@ Cameras auto-register when the CloudNode connects.
 |--------|----------|------|-------------|
 | GET | `/api/cameras` | User | List all cameras |
 | GET | `/api/cameras/{camera_id}` | User | Get camera details |
-| POST | `/api/cameras/{camera_id}/codec` | Node | Report video/audio codec |
+| POST | `/api/cameras/{camera_id}/snapshot` | User | Ask the node to capture a snapshot locally |
+| POST | `/api/cameras/{camera_id}/recording` | User | Start/stop recording on the node |
+| POST | `/api/cameras/{camera_id}/codec` | Node | Report video/audio codec (called by CloudNode) |
 
 ### Camera Groups
 
@@ -151,10 +153,13 @@ Cameras auto-register when the CloudNode connects.
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/nodes` | Admin | List all nodes |
-| POST | `/api/nodes` | Admin | Create a node |
+| POST | `/api/nodes` | Admin | Create a node (requires active billing) |
 | GET | `/api/nodes/{node_id}` | Admin | Get node details |
 | DELETE | `/api/nodes/{node_id}` | Admin | Delete node |
 | POST | `/api/nodes/{node_id}/rotate-key` | Admin | Rotate API key |
+| GET | `/api/nodes/plan` | User | Current plan, usage, and limits |
+| GET | `/api/nodes/ws-status` | Admin | Which org nodes are WebSocket-connected |
+| POST | `/api/nodes/validate` | Node | Validate a node_id + API key pair (used by CloudNode setup wizard) |
 | POST | `/api/nodes/register` | Node | CloudNode registration |
 | POST | `/api/nodes/heartbeat` | Node | CloudNode heartbeat |
 
@@ -168,24 +173,20 @@ Cameras auto-register when the CloudNode connects.
 | POST | `/api/cameras/{camera_id}/playlist` | Node | Update playlist |
 | POST | `/api/cameras/{camera_id}/codec` | Node | Report video/audio codec |
 
-### Settings & Media
+### Settings
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/settings` | User | All settings |
-| GET/POST | `/api/settings/notifications` | User | Notification settings |
-| GET/POST | `/api/settings/recording` | User | Recording settings |
-| GET | `/api/media` | User | List media |
-| GET | `/api/media/{media_id}` | User | Get media |
-| DELETE | `/api/media/{media_id}` | Admin | Delete media |
+| GET | `/api/settings/recording` | User | Recording settings |
+| POST | `/api/settings/recording` | Admin | Update recording settings |
+| POST | `/api/settings/danger/wipe-logs` | Admin | Permanently delete all stream + MCP logs (Pro/Business only) |
+| POST | `/api/settings/danger/full-reset` | Admin | Wipe all nodes, cameras, logs, and settings for the org (Pro/Business only) |
 
-### Alerts & Audit
+### Audit
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/alerts` | User | List alerts |
-| GET | `/api/alerts/{alert_id}` | User | Get alert |
-| DELETE | `/api/alerts/{alert_id}` | Admin | Delete alert |
 | GET | `/api/audit-logs` | Admin | List audit logs |
 | GET | `/api/audit/stream-logs` | Admin | Stream access logs |
 | GET | `/api/audit/stream-logs/stats` | Admin | Stream access stats |
@@ -250,8 +251,8 @@ backend/
 ├── app/
 │   ├── main.py              # FastAPI app, CORS, SPA middleware, cleanup loop
 │   ├── api/
-│   │   ├── cameras.py       # Camera, group, settings, alert, media endpoints
-│   │   ├── nodes.py         # CloudNode registration, heartbeat, CRUD
+│   │   ├── cameras.py       # Camera, group, settings, audit log, danger-zone endpoints
+│   │   ├── nodes.py         # CloudNode registration, heartbeat, CRUD, plan info
 │   │   ├── hls.py           # HLS playlist + in-memory segment cache + push-segment
 │   │   ├── audit.py         # Stream access logging
 │   │   ├── incidents.py     # AI-generated incident reports (CRUD + evidence blobs)
@@ -261,7 +262,7 @@ backend/
 │   │   ├── ws.py            # WebSocket helpers
 │   │   └── webhooks.py      # Clerk subscription webhooks
 │   ├── mcp/
-│   │   └── server.py        # FastMCP server + all 20 MCP tools
+│   │   └── server.py        # FastMCP server + all 22 MCP tools
 │   ├── core/
 │   │   ├── auth.py          # Clerk JWT validation, permission enforcement
 │   │   ├── config.py        # Environment variable loading

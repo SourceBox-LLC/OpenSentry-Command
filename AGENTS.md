@@ -178,28 +178,28 @@ Validation constants (also in `models.py`):
 **cameras.py** (prefix `/api`):
 - `GET /cameras` -- list cameras (view)
 - `GET /cameras/{camera_id}` -- get camera (view)
-- `POST /cameras/{camera_id}/codec` -- report codec (node API key)
+- `POST /cameras/{camera_id}/snapshot` -- ask the node to capture & store a snapshot locally (view)
+- `POST /cameras/{camera_id}/recording` -- start/stop recording on the node (view)
+- `POST /cameras/{camera_id}/codec` -- report codec, called by CloudNode after first segment (node API key)
 - `GET /camera-groups` -- list groups (view)
 - `POST /camera-groups` -- create group (admin)
 - `DELETE /camera-groups/{group_id}` -- delete group (admin)
 - `PUT /cameras/{camera_id}/group` -- assign group (admin)
 - `GET /settings` -- all settings (view)
-- `GET|POST /settings/notifications` -- notification settings
-- `GET|POST /settings/recording` -- recording settings
-- `GET /alerts` -- list alerts, filterable by `detection_type`, `camera_id`, `since_hours` (view)
-- `GET /alerts/{alert_id}` -- get alert (view)
-- `DELETE /alerts/{alert_id}` -- delete alert (admin)
-- `GET /media` -- list media (view)
-- `GET /media/{media_id}` -- get media (view)
-- `DELETE /media/{media_id}` -- delete media (admin)
+- `GET /settings/recording` -- recording settings (view)
+- `POST /settings/recording` -- update recording settings (admin)
 - `GET /audit-logs` -- audit logs (admin)
-- `GET /health` -- health check (no auth)
+- `POST /settings/danger/wipe-logs` -- permanently delete all stream + MCP logs (admin, requires `admin` feature flag)
+- `POST /settings/danger/full-reset` -- wipe all nodes/cameras/logs/settings for the org (admin, requires `admin` feature flag)
 
 **nodes.py** (prefix `/api/nodes`):
+- `POST /validate` -- validate node_id + API key pair, used by CloudNode setup wizard (API key)
 - `POST /register` -- CloudNode registration (API key)
 - `POST /heartbeat` -- CloudNode heartbeat (API key)
 - `GET /` -- list nodes (admin)
-- `POST /` -- create node (admin)
+- `GET /plan` -- current plan, usage, and limits for the org (any signed-in user)
+- `POST /` -- create node (admin, requires active billing)
+- `GET /ws-status` -- which org nodes are currently WebSocket-connected (admin)
 - `GET /{node_id}` -- get node (admin)
 - `DELETE /{node_id}` -- delete node (admin)
 - `POST /{node_id}/rotate-key` -- rotate API key (admin)
@@ -209,7 +209,6 @@ Validation constants (also in `models.py`):
 - `GET /segment/{filename}` -- serve cached `.ts` segment from memory (JWT)
 - `POST /push-segment?filename=…` -- CloudNode pushes `.ts` segment into cache (API key)
 - `POST /playlist` -- update playlist (API key)
-- `POST /codec` -- update codec info (API key)
 
 **audit.py** (prefix `/api`):
 - `GET /audit/stream-logs` -- stream access logs (admin)
@@ -277,7 +276,8 @@ Exposes 22 tools:
 | `get_incident_clip` | read | Metadata about a previously attached clip (size, duration, mime) |
 
 **Top-level** (`main.py`):
-- `GET /api/health` -- `{"status": "healthy", "version": "2.0.0"}`
+- `GET /api/health` -- `{"status": "healthy", "version": "2.1.0"}` (no auth)
+- FastAPI auto-docs are at `/api-docs` (Swagger) and `/api-redoc` (ReDoc); the OpenAPI schema is at `/api/openapi.json`. The `/docs` URL is owned by the React DocsPage, not Swagger.
 
 ## CORS
 
