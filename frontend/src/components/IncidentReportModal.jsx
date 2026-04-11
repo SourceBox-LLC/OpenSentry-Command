@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import Hls from "hls.js"
 import { useAuth } from "@clerk/clerk-react"
 import {
   getIncident,
   patchIncident,
   fetchIncidentEvidenceBlobUrl,
+  incidentEvidencePlaylistUrl,
 } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 
@@ -245,6 +247,82 @@ function EvidenceImage({ incidentId, evidenceId, caption, getToken, onClick }) {
   )
 }
 
+function EvidenceVideo({ incidentId, evidenceId, caption, getToken }) {
+  const videoRef = useRef(null)
+  const hlsRef = useRef(null)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+
+    let cancelled = false
+    const playlistUrl = incidentEvidencePlaylistUrl(incidentId, evidenceId)
+    const ownOrigin = (import.meta.env.VITE_API_URL || "") || window.location.origin
+
+    if (!Hls.isSupported()) {
+      setError("HLS is not supported in this browser")
+      return undefined
+    }
+
+    const hls = new Hls({
+      // Clip is a single short segment — VOD playback, no live tuning needed.
+      xhrSetup: async (xhr, url) => {
+        // Both the playlist and the segment ride on the same JWT as the
+        // live player; getToken is async (Clerk).
+        try {
+          const token = getToken ? await getToken() : null
+          if (token && url.startsWith(ownOrigin)) {
+            xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+          }
+        } catch {
+          /* swallow — request will 401 and surface as a load error */
+        }
+      },
+      // VOD-friendly buffering for very short clips
+      maxBufferLength: 60,
+      maxMaxBufferLength: 60,
+    })
+    hlsRef.current = hls
+
+    hls.loadSource(playlistUrl)
+    hls.attachMedia(video)
+
+    hls.on(Hls.Events.ERROR, (_evt, data) => {
+      if (cancelled) return
+      if (data.fatal) {
+        setError(`Playback error: ${data.details || data.type}`)
+        try { hls.destroy() } catch { /* noop */ }
+      }
+    })
+
+    return () => {
+      cancelled = true
+      if (hlsRef.current) {
+        try { hlsRef.current.destroy() } catch { /* noop */ }
+        hlsRef.current = null
+      }
+    }
+  }, [incidentId, evidenceId, getToken])
+
+  return (
+    <div className="incident-evidence-clip">
+      {error ? (
+        <div className="incident-evidence-error">{error}</div>
+      ) : (
+        <video
+          ref={videoRef}
+          className="incident-evidence-clip-video"
+          controls
+          playsInline
+          muted
+        />
+      )}
+      {caption && <div className="incident-evidence-caption">{caption}</div>}
+    </div>
+  )
+}
+
 function IncidentReportModal({ incidentId, onClose, onUpdated }) {
   const { getToken } = useAuth()
   const { showToast } = useToasts()
@@ -306,6 +384,10 @@ function IncidentReportModal({ incidentId, onClose, onUpdated }) {
 
   const snapshots = useMemo(
     () => (incident?.evidence || []).filter((e) => e.kind === "snapshot" && e.has_data),
+    [incident]
+  )
+  const clips = useMemo(
+    () => (incident?.evidence || []).filter((e) => e.kind === "clip" && e.has_data),
     [incident]
   )
   const observations = useMemo(
@@ -396,6 +478,23 @@ function IncidentReportModal({ incidentId, onClose, onUpdated }) {
                 </section>
               )}
 
+              {clips.length > 0 && (
+                <section className="incident-section">
+                  <h3 className="incident-section-title">Clips ({clips.length})</h3>
+                  <div className="incident-evidence-clip-grid">
+                    {clips.map((e) => (
+                      <EvidenceVideo
+                        key={e.id}
+                        incidentId={incident.id}
+                        evidenceId={e.id}
+                        caption={e.text || e.camera_id}
+                        getToken={getToken}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {observations.length > 0 && (
                 <section className="incident-section">
                   <h3 className="incident-section-title">Observations</h3>
@@ -423,7 +522,9 @@ function IncidentReportModal({ incidentId, onClose, onUpdated }) {
                         <span className="incident-timeline-text">
                           {e.kind === "snapshot"
                             ? `snapshot of ${e.camera_id}${e.text ? ` — ${e.text}` : ""}`
-                            : e.text}
+                            : e.kind === "clip"
+                              ? `clip from ${e.camera_id}${e.text ? ` — ${e.text}` : ""}`
+                              : e.text}
                         </span>
                       </li>
                     ))}

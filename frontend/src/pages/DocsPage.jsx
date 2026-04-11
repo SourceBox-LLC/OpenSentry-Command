@@ -223,20 +223,23 @@ function DocsPage() {
             <p>
               When an AI client is connected over MCP, it can open structured incident reports
               on your behalf. Each report has a severity, status, markdown write-up, attached
-              snapshots, and a timeline of observations — all editable from the Incidents tab
-              in the dashboard.
+              snapshots, video clips, and a timeline of observations — all editable from the
+              Incidents tab in the dashboard.
             </p>
             <ul>
               <li><strong>Create</strong> — Agents open an incident when they notice something worth
                 flagging (possible intruder, equipment fault, unexpected motion).</li>
-              <li><strong>Investigate</strong> — They can attach fresh JPEG snapshots from any camera
-                as evidence and log text observations as they check other feeds.</li>
+              <li><strong>Investigate</strong> — They can attach fresh JPEG snapshots from any camera,
+                save short video clips from a camera's recent live buffer, and log text observations
+                as they check other feeds.</li>
               <li><strong>Finalize</strong> — A markdown report is written at the end with what was
                 seen, what was ruled out, and any recommended actions.</li>
               <li><strong>Review</strong> — Humans open the Incidents tab, read the report, view the
-                evidence thumbnails, and mark each incident acknowledged, resolved, or dismissed.</li>
+                evidence thumbnails, play back the captured clips, and mark each incident
+                acknowledged, resolved, or dismissed.</li>
               <li><strong>Look back</strong> — Agents can also list and re-read past incidents
-                (including fetching their snapshots) so they can follow up without losing context.</li>
+                (including fetching their snapshots and clip metadata) so they can follow up without
+                losing context.</li>
             </ul>
             <p className="docs-subtle">
               Requires MCP access (Pro or Business) and an MCP API key. See
@@ -322,7 +325,7 @@ function DocsPage() {
 
             <h3>Available Tools</h3>
             <p className="docs-subtle">
-              20 tools grouped by capability. VISUAL tools return images the model can look at,
+              22 tools grouped by capability. VISUAL tools return images the model can look at,
               READ tools return structured data, and WRITE tools create or update state.
             </p>
 
@@ -332,13 +335,13 @@ function DocsPage() {
                 <span className="docs-endpoint-method get">VISUAL</span>
                 <span className="docs-endpoint-path">view_camera</span>
               </div>
-              <p>See what a camera sees right now. Returns a live JPEG snapshot image that the AI can analyze.</p>
+              <p>See what a camera sees <em>right now</em> — returns a single live JPEG the agent can actually look at. Use for a one-shot situational check ("is anyone in the workshop?"). For motion or change over time, use <code>watch_camera</code>. To preserve what was seen, follow up with <code>attach_snapshot</code>.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">VISUAL</span>
                 <span className="docs-endpoint-path">watch_camera</span>
               </div>
-              <p>Take multiple snapshots over time (2-10 frames, 1-30s interval). Useful for observing activity or changes.</p>
+              <p>Burst of 2–10 snapshots from one camera, 1–30s apart. Use when a single <code>view_camera</code> frame isn't enough — to confirm whether a subject is moving, whether motion is sustained or fleeting, or whether something is returning to a scene. For longer evidence retention on an incident, use <code>attach_clip</code>.</p>
             </div>
 
             <h4>Cameras, nodes &amp; groups</h4>
@@ -347,37 +350,37 @@ function DocsPage() {
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">list_cameras</span>
               </div>
-              <p>List all cameras with status, codec, and group info.</p>
+              <p>Every camera in the org with status, codec, and group assignment. Start here when the agent doesn't yet know what cameras exist — most other camera tools take a <code>camera_id</code> from this output.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_camera</span>
               </div>
-              <p>Get details for a specific camera by ID.</p>
+              <p>Full metadata for one camera (status, codec, node, group, last seen). Use after <code>list_cameras</code> to inspect one closely. Returns text only — for the actual image, use <code>view_camera</code>.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_stream_url</span>
               </div>
-              <p>Get the authenticated HLS stream URL for a camera.</p>
+              <p>Returns the authenticated HLS playlist URL for a camera. This is a URL a human or HLS player can open — the agent <em>cannot</em> watch video from it. Use only when handing a stream URL back to the user. To see a frame, use <code>view_camera</code> or <code>watch_camera</code>.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">list_nodes</span>
               </div>
-              <p>List all camera nodes with status and camera count.</p>
+              <p>Every CloudNode (the physical box running cameras on the local network) with status, hostname, and camera count. Use when troubleshooting at the box level — e.g. whether a whole node is offline vs whether one of its cameras is. For per-camera state, use <code>list_cameras</code>.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_node</span>
               </div>
-              <p>Get details for a specific node.</p>
+              <p>Full detail for one CloudNode by <code>node_id</code> (hostname, IP, port, status, camera count). Use after <code>list_nodes</code> when you need detail on one specific box — e.g. to confirm which physical device the user should power-cycle.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">list_camera_groups</span>
               </div>
-              <p>List all camera groups in the organization.</p>
+              <p>Camera groups defined in the dashboard — user-defined zones (e.g. "Front yard", "Workshop") that bundle cameras together. Use when the user names a place and you need to find which cameras live there.</p>
             </div>
 
             <h4>Settings, logs &amp; system</h4>
@@ -386,25 +389,25 @@ function DocsPage() {
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_recording_settings</span>
               </div>
-              <p>View current recording config (continuous, scheduled, time range).</p>
+              <p>The org's recording configuration: whether 24/7 continuous recording is on, whether scheduled recording is on, and the scheduled start/end times. Use when the user asks "are we recording right now?", or before filing an incident if it matters whether the moment was being recorded to disk on the CloudNode.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_stream_logs</span>
               </div>
-              <p>View stream access history (who watched which camera, when).</p>
+              <p>Recent stream-access log entries (one row per user × camera × ~5min window). Use to audit who watched a sensitive camera, check whether a user reviewed a feed during a time of interest, or investigate suspicious viewing activity. Filter by <code>camera_id</code> to scope to one feed.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_stream_stats</span>
               </div>
-              <p>Aggregated statistics: views by camera, user, and day.</p>
+              <p>Aggregated stream-viewing stats over the last N days: totals, by-camera, and by-user. Use to find the most-watched cameras, build a usage summary, or establish a baseline before deciding whether a viewing pattern looks unusual. For per-event detail, use <code>get_stream_logs</code>.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_system_status</span>
               </div>
-              <p>High-level overview: total cameras, online/offline counts, node count, plan info.</p>
+              <p>High-level snapshot of the org's deployment: camera count with online/offline split, node count with online/offline split, and the active plan. Good first call to orient before drilling in. For per-camera detail, use <code>list_cameras</code>.</p>
             </div>
 
             <h4>Incident reports</h4>
@@ -425,6 +428,12 @@ function DocsPage() {
                 <span className="docs-endpoint-path">attach_snapshot</span>
               </div>
               <p>Capture a fresh JPEG from a camera and store it as evidence on an incident. Good for freezing what you saw at the moment of investigation.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method post">WRITE</span>
+                <span className="docs-endpoint-path">attach_clip</span>
+              </div>
+              <p>Save the most recent ~15 seconds of a camera's live buffer as a video clip on an incident. Pulls from the in-memory HLS cache (no recording is started) and stores a single .ts blob the human reviewer can play back from the dashboard.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method post">WRITE</span>
@@ -461,6 +470,12 @@ function DocsPage() {
                 <span className="docs-endpoint-path">get_incident_snapshot</span>
               </div>
               <p>Fetch a snapshot image that was previously attached to an incident as evidence so the agent can actually see what was captured.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method get">READ</span>
+                <span className="docs-endpoint-path">get_incident_clip</span>
+              </div>
+              <p>Read metadata about a clip (size, approximate duration, mime, source camera) previously attached with <code>attach_clip</code>. Agents can't watch video, but this confirms the clip is saved and tells the human reviewer what to expect.</p>
             </div>
           </section>
 
@@ -669,7 +684,10 @@ function DocsPage() {
             <p>Permanently delete an incident and all of its evidence (cascades).</p>
 
             <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}/evidence/{"{evidence_id}"}</span></div>
-            <p>Stream a snapshot blob attached as evidence — used by the dashboard to render thumbnails in the incident report modal.</p>
+            <p>Stream a snapshot or clip blob attached as evidence — used by the dashboard to render thumbnails and play back clips in the incident report modal.</p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}/evidence/{"{evidence_id}"}/playlist.m3u8</span></div>
+            <p>Synthetic single-segment HLS playlist for a clip evidence item, so the dashboard can reuse hls.js to play back captured video with the same JWT auth as the live player.</p>
 
             <h3>MCP Endpoint</h3>
             <p>Streamable HTTP transport at <code>/mcp</code>. Authenticate with <code>Authorization: Bearer osc_...</code> header.</p>

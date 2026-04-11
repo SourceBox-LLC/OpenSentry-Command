@@ -40,6 +40,7 @@ from app.models.models import (
     Setting,
     StreamAccessLog,
 )
+from app.api.hls import _segment_cache
 from app.mcp.activity import tracker, McpEvent
 
 logger = logging.getLogger(__name__)
@@ -282,7 +283,11 @@ def tracked(func):
 
 @mcp.tool(
     name="list_cameras",
-    description="List all cameras in the organization with their current status, codec info, and group assignment.",
+    description=(
+        "List every camera in the organization with status, codec info, and "
+        "group assignment. Start here when you don't yet know what cameras "
+        "exist — most other camera tools take a camera_id from this output."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -297,7 +302,11 @@ def list_cameras() -> list[dict]:
 
 @mcp.tool(
     name="get_camera",
-    description="Get detailed information about a specific camera by its camera_id.",
+    description=(
+        "Get full metadata for one camera by camera_id (status, codec, node, "
+        "group, last seen). Use after list_cameras to inspect one closely. "
+        "Returns text only — for the actual image, use view_camera."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -321,8 +330,11 @@ def get_camera(
 @mcp.tool(
     name="get_stream_url",
     description=(
-        "Get the HLS stream URL for a camera. "
-        "Use this to watch a live camera feed."
+        "Return the authenticated HLS playlist URL for a camera. This is a URL "
+        "a human or HLS player can open — YOU cannot watch video from it. Use "
+        "only when you need to hand a stream URL back to the user. To see a "
+        "frame yourself, use view_camera (single frame) or watch_camera "
+        "(multi-frame burst)."
     ),
     annotations={"readOnlyHint": True},
 )
@@ -357,9 +369,12 @@ def get_stream_url(
 @mcp.tool(
     name="view_camera",
     description=(
-        "See what a camera sees RIGHT NOW. Returns a live JPEG snapshot image "
-        "from the camera. The camera node must be online and actively streaming. "
-        "Use this to visually inspect a camera feed."
+        "See what a camera sees RIGHT NOW — returns a single live JPEG you "
+        "can actually look at. Use for a one-shot situational check ('is "
+        "anyone in the workshop?'). For motion or change over time, use "
+        "watch_camera instead. To preserve what you saw as evidence on an "
+        "incident, follow up with attach_snapshot. The camera's node must be "
+        "online."
     ),
     annotations={"readOnlyHint": True},
 )
@@ -410,9 +425,12 @@ async def view_camera(
 @mcp.tool(
     name="watch_camera",
     description=(
-        "Take multiple snapshots from a camera over a time period to observe "
-        "activity or changes. Returns a series of JPEG images. "
-        "Useful for monitoring movement or verifying camera coverage."
+        "Take a burst of snapshots from one camera (count × interval_seconds "
+        "wide). Use when a single view_camera frame isn't enough — to confirm "
+        "whether a subject is moving, whether motion is sustained or fleeting, "
+        "or whether something is returning to a scene. Each frame is a JPEG "
+        "you can look at. The total window is short by design (max 10 frames "
+        "× 30s); for longer evidence retention on an incident, use attach_clip."
     ),
     annotations={"readOnlyHint": True},
 )
@@ -473,7 +491,12 @@ async def watch_camera(
 
 @mcp.tool(
     name="list_camera_groups",
-    description="List all camera groups in the organization.",
+    description=(
+        "List the camera groups defined in the dashboard. A group is a "
+        "user-defined zone (e.g. 'Front yard', 'Workshop') that bundles "
+        "cameras together. Use when the user names a place and you need to "
+        "find which cameras live there."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -494,7 +517,13 @@ def list_camera_groups() -> list[dict]:
 
 @mcp.tool(
     name="list_nodes",
-    description="List all camera nodes in the organization with status and camera count.",
+    description=(
+        "List every CloudNode (the physical box running cameras on the local "
+        "network) for the org with status, hostname, and camera count. Use "
+        "when troubleshooting at the box level — e.g. whether a whole node "
+        "is offline vs whether one of its cameras is. For per-camera state, "
+        "use list_cameras."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -509,7 +538,12 @@ def list_nodes() -> list[dict]:
 
 @mcp.tool(
     name="get_node",
-    description="Get detailed information about a specific camera node.",
+    description=(
+        "Get full detail for one CloudNode by node_id (hostname, IP, port, "
+        "status, camera count). Use after list_nodes when you need detail on "
+        "one specific box — e.g. to confirm which physical device the user "
+        "should power-cycle."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -536,7 +570,13 @@ def get_node(
 
 @mcp.tool(
     name="get_recording_settings",
-    description="Get current recording settings: continuous 24/7 mode, scheduled recording, and schedule times.",
+    description=(
+        "Return the org's recording configuration: whether 24/7 continuous "
+        "recording is on, whether scheduled recording is on, and the "
+        "scheduled start/end times. Use when the user asks 'are we recording "
+        "right now?', or before filing an incident if it's relevant whether "
+        "the moment was being recorded to disk on the CloudNode."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -561,7 +601,13 @@ def get_recording_settings() -> dict:
 
 @mcp.tool(
     name="get_stream_logs",
-    description="Get recent stream access logs showing who watched which camera and when.",
+    description=(
+        "Get recent stream-access log entries (one row per user × camera × "
+        "~5min window). Use to audit who watched a sensitive camera, check "
+        "whether a user reviewed a feed during a time of interest, or "
+        "investigate suspicious viewing activity. Filter by camera_id to "
+        "scope to one feed."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -582,7 +628,13 @@ def get_stream_logs(
 
 @mcp.tool(
     name="get_stream_stats",
-    description="Get aggregated stream access statistics: total views, views by camera, views by user, views by day.",
+    description=(
+        "Get aggregated stream-viewing stats over the last N days: totals, "
+        "by-camera, and by-user. Use to find the most-watched cameras, build "
+        "a usage summary, or establish a baseline before deciding whether a "
+        "viewing pattern looks unusual. For per-event detail, use "
+        "get_stream_logs."
+    ),
     annotations={"readOnlyHint": True},
 )
 @tracked
@@ -641,8 +693,10 @@ def get_stream_stats(
 @mcp.tool(
     name="get_system_status",
     description=(
-        "Get a high-level overview of the organization's OpenSentry system: "
-        "total cameras, online/offline counts, node count, and plan info."
+        "High-level snapshot of the org's OpenSentry deployment: camera count "
+        "with online/offline split, node count with online/offline split, and "
+        "the active plan. Good first call to orient before drilling in. For "
+        "per-camera detail, use list_cameras."
     ),
     annotations={"readOnlyHint": True},
 )
@@ -897,6 +951,124 @@ async def attach_snapshot(
         db.commit()
         db.refresh(evidence)
         return evidence.to_dict()
+    finally:
+        db.close()
+
+
+# Approximate seconds per HLS segment — CloudNode currently emits 2s .ts files.
+# This is only used to map a requested duration_seconds to a segment count and
+# to populate EXTINF in the synthetic playlist; the actual playback duration
+# comes from the TS PCR timestamps and will be exactly correct.
+_APPROX_SEGMENT_SECONDS = 2.0
+
+
+@mcp.tool(
+    name="attach_clip",
+    description=(
+        "Save a short video clip from a camera's recent live buffer as evidence "
+        "on an incident. Pulls the most recent N segments from the in-memory "
+        "HLS cache (no recording is started — this captures what's already "
+        "buffered) and stores them as a single .ts blob the human reviewer can "
+        "play back from the dashboard. Use after attach_snapshot when motion "
+        "context matters more than a single frame. The camera's stream must "
+        "have been live recently — only segments still in the buffer (~30s "
+        "depending on server config) are available."
+    ),
+)
+@tracked
+def attach_clip(
+    incident_id: Annotated[int, "The incident id to attach the clip to"],
+    camera_id: Annotated[str, "The camera_id to capture from"],
+    duration_seconds: Annotated[
+        int,
+        Field(
+            description=(
+                "How many seconds of recent video to capture (clamped to what's "
+                "in the buffer; default 15)"
+            ),
+            ge=2,
+            le=60,
+        ),
+    ] = 15,
+    note: Annotated[
+        str | None,
+        "Optional caption for this clip (e.g. 'subject crossing into yard')",
+    ] = None,
+) -> dict:
+    # Verify ownership before touching the cache.
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+        cam = (
+            db.query(Camera)
+            .filter_by(org_id=org_id, camera_id=camera_id)
+            .first()
+        )
+        if not cam:
+            raise ToolError(f"Camera '{camera_id}' not found")
+    finally:
+        db.close()
+
+    # Pull the most recent segments from the live cache.
+    cam_cache = _segment_cache.get(camera_id)
+    if not cam_cache:
+        raise ToolError(
+            f"No buffered segments for camera '{camera_id}'. The stream must be "
+            "live (or have been live very recently) for attach_clip to work."
+        )
+
+    wanted = max(1, int(round(duration_seconds / _APPROX_SEGMENT_SECONDS)))
+    sorted_filenames = sorted(cam_cache.keys())
+    selected = sorted_filenames[-wanted:]
+    if not selected:
+        raise ToolError(f"No segments available in buffer for camera '{camera_id}'")
+
+    # Concatenate raw .ts bytes — MPEG-TS is byte-concat-safe (PCR timestamps
+    # carry through) so the result plays end-to-end without remuxing.
+    chunks: list[bytes] = []
+    for filename in selected:
+        entry = cam_cache.get(filename)
+        if entry:
+            chunks.append(entry[0])
+    if not chunks:
+        raise ToolError(
+            f"Buffer entries for '{camera_id}' were evicted before they could "
+            "be read; try again."
+        )
+    blob = b"".join(chunks)
+    segment_count = len(chunks)
+    approx_duration = round(segment_count * _APPROX_SEGMENT_SECONDS, 1)
+
+    db = SessionLocal()
+    try:
+        evidence = IncidentEvidence(
+            incident_id=incident_id,
+            kind="clip",
+            text=note.strip() if note else None,
+            camera_id=camera_id,
+            data=blob,
+            # Encode the duration as a MIME parameter so the playback endpoint
+            # can populate EXTINF without a schema migration. Browsers ignore
+            # parameters they don't recognise on `video/mp2t`.
+            data_mime=f"video/mp2t;duration={approx_duration}",
+        )
+        db.add(evidence)
+        incident = db.query(Incident).filter_by(id=incident_id).first()
+        if incident:
+            incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        db.commit()
+        db.refresh(evidence)
+        result = evidence.to_dict()
+        result["segment_count"] = segment_count
+        result["approx_duration_seconds"] = approx_duration
+        result["bytes"] = len(blob)
+        return result
     finally:
         db.close()
 
@@ -1164,5 +1336,74 @@ def get_incident_snapshot(
             fmt = "jpeg"  # sensible fallback — the data likely still decodes
 
         return Image(data=bytes(evidence.data), format=fmt)
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="get_incident_clip",
+    description=(
+        "Look up metadata about a video clip previously attached to an "
+        "incident with attach_clip. Returns size, approximate duration, MIME, "
+        "and the camera it came from. Note: this returns metadata only — "
+        "the agent can't watch video, but a human reviewer can play the clip "
+        "from the dashboard. Use this to confirm a clip was saved correctly."
+    ),
+    annotations={"readOnlyHint": True},
+)
+@tracked
+def get_incident_clip(
+    incident_id: Annotated[int, "The incident id the clip belongs to"],
+    evidence_id: Annotated[int, "The evidence id from get_incident's evidence list"],
+) -> dict:
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+
+        evidence = (
+            db.query(IncidentEvidence)
+            .filter_by(id=evidence_id, incident_id=incident_id)
+            .first()
+        )
+        if not evidence:
+            raise ToolError(
+                f"Evidence {evidence_id} not found on incident {incident_id}"
+            )
+        if evidence.kind != "clip" or evidence.data is None:
+            raise ToolError(
+                f"Evidence {evidence_id} is not a clip with attached video data"
+            )
+
+        # Pull the duration parameter back out of the MIME type if present.
+        mime = evidence.data_mime or "video/mp2t"
+        approx_duration: float | None = None
+        if ";" in mime:
+            base_mime, *params = [p.strip() for p in mime.split(";")]
+            for p in params:
+                if p.startswith("duration="):
+                    try:
+                        approx_duration = float(p.split("=", 1)[1])
+                    except (ValueError, IndexError):
+                        pass
+        else:
+            base_mime = mime
+
+        d = evidence.to_dict()
+        d.update({
+            "mime": base_mime,
+            "approx_duration_seconds": approx_duration,
+            "bytes": len(evidence.data),
+            "playback_hint": (
+                "A human reviewer can play this clip from the dashboard's "
+                "incident detail view; agents cannot watch video directly."
+            ),
+        })
+        return d
     finally:
         db.close()

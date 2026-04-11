@@ -5144,6 +5144,32 @@ body {
     text-align: center;
 }
 
+.incident-evidence-clip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 0.8rem;
+}
+
+.incident-evidence-clip {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.incident-evidence-clip-video {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    display: block;
+}
+
+.incident-evidence-clip .incident-evidence-caption {
+    border-top: 1px solid var(--border-color);
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 0.5; }
     50% { opacity: 0.8; }

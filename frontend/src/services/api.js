@@ -232,3 +232,11 @@ export async function fetchIncidentEvidenceBlobUrl(getToken, incidentId, evidenc
   const blob = await response.blob()
   return URL.createObjectURL(blob)
 }
+
+// Absolute URL to the synthetic HLS playlist for a clip evidence item.
+// hls.js loads this and resolves the segment URL inside it (which points back
+// at the regular blob endpoint). Auth is added via xhrSetup, same as the
+// live HlsPlayer.
+export function incidentEvidencePlaylistUrl(incidentId, evidenceId) {
+  return `${API_URL}/api/incidents/${incidentId}/evidence/${evidenceId}/playlist.m3u8`
+}

@@ -53,7 +53,7 @@ backend/
 │   │   ├── ws.py               # WebSocket helpers
 │   │   └── webhooks.py         # Clerk subscription webhook handler
 │   ├── mcp/
-│   │   └── server.py           # FastMCP server + 20 tools (cameras, nodes, incidents)
+│   │   └── server.py           # FastMCP server + 22 tools (cameras, nodes, incidents w/ clips)
 │   ├── core/
 │   │   ├── auth.py             # Clerk JWT validation, V2 permission decoder, dependencies
 │   │   ├── config.py           # Environment variable loading (Config class)
@@ -148,7 +148,7 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 | `AuditLog` | `event`, `user_id`, `ip_address`, `details` | Security audit trail |
 | `StreamAccessLog` | `user_id`, `camera_id`, `ip_address`, `user_agent` | Stream playback audit |
 | `Incident` | `title`, `summary`, `report`, `severity`, `status`, `camera_id`, `created_by`, `resolved_at`, `resolved_by` | AI-generated incident report (open/ack/resolved/dismissed) |
-| `IncidentEvidence` | `incident_id`, `kind` (`snapshot`\|`observation`), `text`, `camera_id`, `data` (BLOB), `data_mime` | Snapshot or text observation attached to an incident |
+| `IncidentEvidence` | `incident_id`, `kind` (`snapshot`\|`clip`\|`observation`), `text`, `camera_id`, `data` (BLOB), `data_mime` | Snapshot image, video clip (MPEG-TS bytes), or text observation attached to an incident |
 | `McpApiKey` | `name`, `key_hash`, `last_used_at`, `revoked_at` | MCP API keys (org-scoped, SHA-256 hashed) |
 | `McpToolCall` | `key_id`, `tool_name`, `params_json`, `status`, `duration_ms`, `error` | MCP tool call audit log |
 
@@ -221,7 +221,8 @@ Validation constants (also in `models.py`):
 - `GET /{incident_id}` -- incident detail with full evidence list (admin)
 - `PATCH /{incident_id}` -- update status, severity, summary, or report (admin)
 - `DELETE /{incident_id}` -- delete incident + cascade evidence (admin)
-- `GET /{incident_id}/evidence/{evidence_id}` -- stream snapshot blob by content type (admin)
+- `GET /{incident_id}/evidence/{evidence_id}` -- stream snapshot or clip blob by content type (admin)
+- `GET /{incident_id}/evidence/{evidence_id}/playlist.m3u8` -- synthetic single-segment HLS playlist for clip playback (admin)
 
 **mcp_keys.py** (prefix `/api/mcp`):
 - `POST /keys` -- generate a new MCP API key, returns the plaintext `osc_...` once (admin)
@@ -248,7 +249,7 @@ Validation constants (also in `models.py`):
 
 **mcp/server.py** — FastMCP streamable HTTP server mounted at `/mcp` via FastMCP.
 Authenticates with `Authorization: Bearer osc_...` against `McpApiKey.key_hash`.
-Exposes 20 tools:
+Exposes 22 tools:
 
 | Tool | Kind | Purpose |
 |------|------|---------|
@@ -266,12 +267,14 @@ Exposes 20 tools:
 | `get_system_status` | read | Org-wide snapshot (cameras on/offline, plan, nodes) |
 | `create_incident` | write | Open a new incident (title, summary, severity) |
 | `attach_snapshot` | write | Capture a JPEG and attach it as evidence |
+| `attach_clip` | write | Save the recent live buffer as a video clip on an incident (pulls from in-memory HLS cache) |
 | `add_observation` | write | Append a text observation to an incident |
 | `update_incident` | write | Change status / severity / summary |
 | `finalize_incident` | write | Write the markdown report and mark ready for review |
 | `list_incidents` | read | Previous incidents (filter by status/severity/camera) |
 | `get_incident` | read | Full detail of one incident incl. evidence metadata |
 | `get_incident_snapshot` | visual | Fetch a previously attached snapshot image |
+| `get_incident_clip` | read | Metadata about a previously attached clip (size, duration, mime) |
 
 **Top-level** (`main.py`):
 - `GET /api/health` -- `{"status": "healthy", "version": "2.0.0"}`

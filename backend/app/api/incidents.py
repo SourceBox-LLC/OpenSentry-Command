@@ -198,7 +198,7 @@ async def get_incident_evidence(
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Stream a snapshot blob for an evidence item.
+    """Stream a snapshot or clip blob for an evidence item.
     Returns 404 if the incident doesn't belong to the caller's org or
     if the evidence row has no binary payload."""
     # Org check via the parent incident
@@ -215,8 +215,74 @@ async def get_incident_evidence(
     if not evidence or not evidence.data:
         raise HTTPException(status_code=404, detail="Evidence blob not found")
 
+    # Strip any MIME parameters (we use video/mp2t;duration=N internally to
+    # remember clip length without a schema migration — browsers don't need it).
+    raw_mime = evidence.data_mime or "application/octet-stream"
+    media_type = raw_mime.split(";", 1)[0].strip() or "application/octet-stream"
+
     return Response(
         content=evidence.data,
-        media_type=evidence.data_mime or "application/octet-stream",
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+@router.get("/{incident_id}/evidence/{evidence_id}/playlist.m3u8")
+async def get_incident_evidence_playlist(
+    incident_id: int,
+    evidence_id: int,
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Synthetic single-segment HLS playlist for a clip evidence blob.
+    Lets the dashboard reuse hls.js to play attach_clip captures with the
+    same JWT auth as the live player. Returns 404 unless the evidence is a
+    clip with attached video data."""
+    _get_owned_incident(db, user.org_id, incident_id)
+
+    evidence = (
+        db.query(IncidentEvidence)
+        .filter(
+            IncidentEvidence.id == evidence_id,
+            IncidentEvidence.incident_id == incident_id,
+        )
+        .first()
+    )
+    if not evidence or not evidence.data or evidence.kind != "clip":
+        raise HTTPException(status_code=404, detail="Clip not found")
+
+    # Pull the duration parameter back out of the stored mime, falling back
+    # to a generous default that's >= max EXTINF (HLS spec requirement).
+    duration = 60.0
+    raw_mime = evidence.data_mime or ""
+    if ";" in raw_mime:
+        for param in raw_mime.split(";")[1:]:
+            param = param.strip()
+            if param.startswith("duration="):
+                try:
+                    duration = float(param.split("=", 1)[1])
+                except (ValueError, IndexError):
+                    pass
+    target_duration = max(1, int(duration) + 1)
+
+    # Use an absolute path for the segment so hls.js doesn't try to resolve it
+    # against the playlist URL (which lives at .../playlist.m3u8 — relative
+    # resolution would land in the wrong place).
+    segment_url = f"/api/incidents/{incident_id}/evidence/{evidence_id}"
+
+    playlist = (
+        "#EXTM3U\n"
+        "#EXT-X-VERSION:3\n"
+        f"#EXT-X-TARGETDURATION:{target_duration}\n"
+        "#EXT-X-MEDIA-SEQUENCE:0\n"
+        "#EXT-X-PLAYLIST-TYPE:VOD\n"
+        f"#EXTINF:{duration:.3f},\n"
+        f"{segment_url}\n"
+        "#EXT-X-ENDLIST\n"
+    )
+
+    return Response(
+        content=playlist,
+        media_type="application/vnd.apple.mpegurl",
         headers={"Cache-Control": "private, max-age=300"},
     )

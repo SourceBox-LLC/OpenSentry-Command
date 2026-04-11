@@ -29,7 +29,7 @@ OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It rece
 - Manages camera nodes, groups, alerts, and media
 - Multi-tenant with organization-based access control
 - Audit logging for all stream access
-- MCP server exposing 20 tools so AI clients can view cameras, file incident reports, and read back past investigations
+- MCP server exposing 22 tools so AI clients can view cameras, file incident reports with snapshots and short video clips, and read back past investigations
 
 ---
 
@@ -201,11 +201,12 @@ AI-generated incident reports. Agents write them via the MCP tools below; admins
 | GET | `/api/incidents/{incident_id}` | Admin | Get incident detail + all evidence metadata |
 | PATCH | `/api/incidents/{incident_id}` | Admin | Acknowledge / resolve / dismiss / edit an incident |
 | DELETE | `/api/incidents/{incident_id}` | Admin | Delete an incident (cascades to evidence) |
-| GET | `/api/incidents/{incident_id}/evidence/{evidence_id}` | Admin | Stream a snapshot blob attached as evidence |
+| GET | `/api/incidents/{incident_id}/evidence/{evidence_id}` | Admin | Stream a snapshot or clip blob attached as evidence |
+| GET | `/api/incidents/{incident_id}/evidence/{evidence_id}/playlist.m3u8` | Admin | Synthetic single-segment HLS playlist for clip playback in the dashboard |
 
 ### MCP (for AI clients)
 
-Streamable HTTP MCP server exposing 20 tools. See [AGENTS.md](AGENTS.md) for the full tool list. Requires a Pro or Business plan + an MCP API key generated from the dashboard.
+Streamable HTTP MCP server exposing 22 tools. See [AGENTS.md](AGENTS.md) for the full tool list. Requires a Pro or Business plan + an MCP API key generated from the dashboard.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
