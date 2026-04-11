@@ -6,7 +6,12 @@ const PlanInfoContext = createContext(null)
 
 const REFRESH_INTERVAL = 60000 // 60 seconds
 
-export function PlanInfoProvider({ children }) {
+const EMPTY_PLAN_INFO = { planInfo: null, loading: false, refreshPlanInfo: () => {} }
+
+// Inner provider that actually calls useOrganization(). Only mounted when the
+// user has an active Clerk session — otherwise Clerk logs a warning on every
+// public-page render.
+function ActivePlanInfoProvider({ children }) {
   const { getToken } = useAuth()
   const { organization } = useOrganization()
   const [planInfo, setPlanInfo] = useState(null)
@@ -48,6 +53,22 @@ export function PlanInfoProvider({ children }) {
       {children}
     </PlanInfoContext.Provider>
   )
+}
+
+export function PlanInfoProvider({ children }) {
+  const { isLoaded, isSignedIn } = useAuth()
+
+  // Public pages: provide an empty context so consumers don't crash, but don't
+  // call useOrganization() (which would warn about missing session).
+  if (!isLoaded || !isSignedIn) {
+    return (
+      <PlanInfoContext.Provider value={EMPTY_PLAN_INFO}>
+        {children}
+      </PlanInfoContext.Provider>
+    )
+  }
+
+  return <ActivePlanInfoProvider>{children}</ActivePlanInfoProvider>
 }
 
 export function usePlanInfo() {
