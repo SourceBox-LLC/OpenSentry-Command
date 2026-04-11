@@ -1250,6 +1250,17 @@
   color: #ef4444;
 }
 
+.docs-endpoint-method.patch {
+  background: rgba(168, 85, 247, 0.2);
+  color: #a855f7;
+}
+
+.docs-subtle {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 1rem;
+}
+
 .docs-endpoint-path {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   color: var(--text-primary);

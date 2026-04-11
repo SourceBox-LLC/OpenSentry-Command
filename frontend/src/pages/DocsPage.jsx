@@ -216,7 +216,32 @@ function DocsPage() {
               <li><strong>Stream Access Logs</strong> — See who watched which camera and when</li>
               <li><strong>Usage Statistics</strong> — Views by camera, by user, and by day</li>
               <li><strong>Audit Trail</strong> — Full history of actions taken in your organization</li>
+              <li><strong>MCP Tool Activity</strong> — Every tool call made by connected AI clients</li>
             </ul>
+
+            <h3>AI Incident Reports</h3>
+            <p>
+              When an AI client is connected over MCP, it can open structured incident reports
+              on your behalf. Each report has a severity, status, markdown write-up, attached
+              snapshots, and a timeline of observations — all editable from the Incidents tab
+              in the dashboard.
+            </p>
+            <ul>
+              <li><strong>Create</strong> — Agents open an incident when they notice something worth
+                flagging (possible intruder, equipment fault, unexpected motion).</li>
+              <li><strong>Investigate</strong> — They can attach fresh JPEG snapshots from any camera
+                as evidence and log text observations as they check other feeds.</li>
+              <li><strong>Finalize</strong> — A markdown report is written at the end with what was
+                seen, what was ruled out, and any recommended actions.</li>
+              <li><strong>Review</strong> — Humans open the Incidents tab, read the report, view the
+                evidence thumbnails, and mark each incident acknowledged, resolved, or dismissed.</li>
+              <li><strong>Look back</strong> — Agents can also list and re-read past incidents
+                (including fetching their snapshots) so they can follow up without losing context.</li>
+            </ul>
+            <p className="docs-subtle">
+              Requires MCP access (Pro or Business) and an MCP API key. See
+              the <a href="#mcp">MCP Integration</a> section for setup.
+            </p>
           </section>
 
           {/* ── MCP Integration ──────────────────────────────── */}
@@ -296,6 +321,12 @@ function DocsPage() {
             </div>
 
             <h3>Available Tools</h3>
+            <p className="docs-subtle">
+              20 tools grouped by capability. VISUAL tools return images the model can look at,
+              READ tools return structured data, and WRITE tools create or update state.
+            </p>
+
+            <h4>Live viewing</h4>
             <div className="docs-mcp-tools">
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">VISUAL</span>
@@ -308,7 +339,10 @@ function DocsPage() {
                 <span className="docs-endpoint-path">watch_camera</span>
               </div>
               <p>Take multiple snapshots over time (2-10 frames, 1-30s interval). Useful for observing activity or changes.</p>
+            </div>
 
+            <h4>Cameras, nodes &amp; groups</h4>
+            <div className="docs-mcp-tools">
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">list_cameras</span>
@@ -344,7 +378,10 @@ function DocsPage() {
                 <span className="docs-endpoint-path">list_camera_groups</span>
               </div>
               <p>List all camera groups in the organization.</p>
+            </div>
 
+            <h4>Settings, logs &amp; system</h4>
+            <div className="docs-mcp-tools">
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>
                 <span className="docs-endpoint-path">get_recording_settings</span>
@@ -368,6 +405,62 @@ function DocsPage() {
                 <span className="docs-endpoint-path">get_system_status</span>
               </div>
               <p>High-level overview: total cameras, online/offline counts, node count, plan info.</p>
+            </div>
+
+            <h4>Incident reports</h4>
+            <p className="docs-subtle">
+              Let the agent file, investigate, and read back structured incident reports.
+              Everything written by these tools shows up in the Incidents tab of the dashboard
+              for a human to review.
+            </p>
+            <div className="docs-mcp-tools">
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method post">WRITE</span>
+                <span className="docs-endpoint-path">create_incident</span>
+              </div>
+              <p>Open a new incident with a title, summary, severity, and (optionally) a primary camera. Returns the new <code>incident_id</code> to pass to follow-up tools.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method post">WRITE</span>
+                <span className="docs-endpoint-path">attach_snapshot</span>
+              </div>
+              <p>Capture a fresh JPEG from a camera and store it as evidence on an incident. Good for freezing what you saw at the moment of investigation.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method post">WRITE</span>
+                <span className="docs-endpoint-path">add_observation</span>
+              </div>
+              <p>Append a free-form text observation (what you checked, what you ruled out) to an incident as you investigate.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method post">WRITE</span>
+                <span className="docs-endpoint-path">update_incident</span>
+              </div>
+              <p>Change an incident's status (open / acknowledged / resolved / dismissed), severity, or summary — e.g. to escalate or dismiss a false alarm.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method post">WRITE</span>
+                <span className="docs-endpoint-path">finalize_incident</span>
+              </div>
+              <p>Write the full long-form incident report in markdown and mark it ready for the human reviewer. Call this once at the end of an investigation.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method get">READ</span>
+                <span className="docs-endpoint-path">list_incidents</span>
+              </div>
+              <p>List previous incidents (most recent first) with optional filters for status, severity, or camera. Skips the full report body — use <code>get_incident</code> for detail.</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method get">READ</span>
+                <span className="docs-endpoint-path">get_incident</span>
+              </div>
+              <p>Fetch one incident's full detail: summary, markdown report, observations, and evidence metadata (with ids to pass to <code>get_incident_snapshot</code>).</p>
+
+              <div className="docs-endpoint">
+                <span className="docs-endpoint-method get">VISUAL</span>
+                <span className="docs-endpoint-path">get_incident_snapshot</span>
+              </div>
+              <p>Fetch a snapshot image that was previously attached to an incident as evidence so the agent can actually see what was captured.</p>
             </div>
           </section>
 
@@ -553,6 +646,30 @@ function DocsPage() {
 
             <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/audit/stream-logs</span></div>
             <p>Stream access history. Admin only. Filterable by camera and user.</p>
+
+            <h3>Incident Reports</h3>
+            <p>
+              AI-generated incident reports written by the MCP agent and reviewed by
+              admins from the dashboard. All endpoints require admin permission.
+            </p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents</span></div>
+            <p>List incidents for the org (newest first). Supports <code>status</code>, <code>severity</code>, <code>camera_id</code>, <code>limit</code>, and <code>offset</code> query params.</p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/counts</span></div>
+            <p>Aggregate counts for the stat bar and badges — total, open, open critical, open high.</p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}</span></div>
+            <p>Fetch a single incident with its full markdown report and all evidence metadata.</p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method patch">PATCH</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}</span></div>
+            <p>Acknowledge, resolve, dismiss, or otherwise edit an incident's status, severity, summary, or report.</p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method delete">DELETE</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}</span></div>
+            <p>Permanently delete an incident and all of its evidence (cascades).</p>
+
+            <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}/evidence/{"{evidence_id}"}</span></div>
+            <p>Stream a snapshot blob attached as evidence — used by the dashboard to render thumbnails in the incident report modal.</p>
 
             <h3>MCP Endpoint</h3>
             <p>Streamable HTTP transport at <code>/mcp</code>. Authenticate with <code>Authorization: Bearer osc_...</code> header.</p>

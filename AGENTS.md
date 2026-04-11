@@ -46,7 +46,14 @@ backend/
 │   │   ├── nodes.py            # CloudNode registration, heartbeat, key rotation
 │   │   ├── hls.py              # HLS playlist + in-memory segment cache + push-segment
 │   │   ├── audit.py            # Stream access logs and statistics
+│   │   ├── incidents.py        # AI-generated incident reports (CRUD + evidence blobs)
+│   │   ├── mcp_keys.py         # MCP API key generation / listing / revocation
+│   │   ├── mcp_activity.py     # MCP tool call activity logs, stats, SSE stream
+│   │   ├── install.py          # Signed CloudNode installer endpoints
+│   │   ├── ws.py               # WebSocket helpers
 │   │   └── webhooks.py         # Clerk subscription webhook handler
+│   ├── mcp/
+│   │   └── server.py           # FastMCP server + 20 tools (cameras, nodes, incidents)
 │   ├── core/
 │   │   ├── auth.py             # Clerk JWT validation, V2 permission decoder, dependencies
 │   │   ├── config.py           # Environment variable loading (Config class)
@@ -57,15 +64,19 @@ backend/
 │   └── schemas/
 │       └── schemas.py          # Pydantic request/response schemas
 ├── start.py                    # Uvicorn entrypoint (0.0.0.0:8000, reload=True)
-├── pyproject.toml              # Dependencies (FastAPI, SQLAlchemy, Clerk, etc.)
+├── pyproject.toml              # Dependencies (FastAPI, SQLAlchemy, Clerk, FastMCP, etc.)
 └── .env.example
 
 frontend/
 └── src/
     ├── pages/
-    │   └── DashboardPage.jsx   # Camera grid with status cards and controls
+    │   ├── DashboardPage.jsx       # Camera grid with status cards and controls
+    │   ├── McpPage.jsx             # MCP key management + agent activity + incident list
+    │   ├── AdminPage.jsx           # Stream logs, MCP activity, audit trail
+    │   └── DocsPage.jsx            # In-app documentation
     └── components/
-        └── HlsPlayer.jsx      # HLS.js player with Clerk JWT auth
+        ├── HlsPlayer.jsx           # HLS.js player with Clerk JWT auth
+        └── IncidentReportModal.jsx # Incident detail view (markdown + evidence)
 ```
 
 ## Architecture
@@ -136,6 +147,14 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 | `Setting` | `key`, `value` | Per-org key-value settings |
 | `AuditLog` | `event`, `user_id`, `ip_address`, `details` | Security audit trail |
 | `StreamAccessLog` | `user_id`, `camera_id`, `ip_address`, `user_agent` | Stream playback audit |
+| `Incident` | `title`, `summary`, `report`, `severity`, `status`, `camera_id`, `created_by`, `resolved_at`, `resolved_by` | AI-generated incident report (open/ack/resolved/dismissed) |
+| `IncidentEvidence` | `incident_id`, `kind` (`snapshot`\|`observation`), `text`, `camera_id`, `data` (BLOB), `data_mime` | Snapshot or text observation attached to an incident |
+| `McpApiKey` | `name`, `key_hash`, `last_used_at`, `revoked_at` | MCP API keys (org-scoped, SHA-256 hashed) |
+| `McpToolCall` | `key_id`, `tool_name`, `params_json`, `status`, `duration_ms`, `error` | MCP tool call audit log |
+
+Validation constants (also in `models.py`):
+- `INCIDENT_STATUSES` = `{"open", "acknowledged", "resolved", "dismissed"}`
+- `INCIDENT_SEVERITIES` = `{"low", "medium", "high", "critical"}`
 
 ## API Routes
 
@@ -147,6 +166,11 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 | `nodes.py` | `/api/nodes` | nodes |
 | `hls.py` | `/api/cameras/{camera_id}` | streaming |
 | `audit.py` | `/api` | audit |
+| `incidents.py` | `/api/incidents` | incidents |
+| `mcp_keys.py` | `/api/mcp` | mcp |
+| `mcp_activity.py` | `/api/mcp/activity` | mcp-activity |
+| `install.py` | (none) | installation |
+| `ws.py` | (none) | ws |
 | `webhooks.py` | `/api/webhooks` | webhooks |
 
 ### All endpoints
@@ -191,8 +215,63 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 - `GET /audit/stream-logs` -- stream access logs (admin)
 - `GET /audit/stream-logs/stats` -- stream stats by camera/user/day (admin)
 
+**incidents.py** (prefix `/api/incidents`):
+- `GET /` -- list incidents with optional `status`, `severity`, `camera_id`, `limit`, `offset` (admin)
+- `GET /counts` -- aggregate counts (open, open_critical, open_high, total) (admin)
+- `GET /{incident_id}` -- incident detail with full evidence list (admin)
+- `PATCH /{incident_id}` -- update status, severity, summary, or report (admin)
+- `DELETE /{incident_id}` -- delete incident + cascade evidence (admin)
+- `GET /{incident_id}/evidence/{evidence_id}` -- stream snapshot blob by content type (admin)
+
+**mcp_keys.py** (prefix `/api/mcp`):
+- `POST /keys` -- generate a new MCP API key, returns the plaintext `osc_...` once (admin)
+- `GET /keys` -- list MCP API keys for the org (admin)
+- `DELETE /keys/{key_id}` -- revoke an MCP API key (admin)
+
+**mcp_activity.py** (prefix `/api/mcp/activity`):
+- `GET /stream` -- SSE stream of live MCP tool calls (admin)
+- `GET /recent` -- recent tool calls (admin)
+- `GET /sessions` -- session summaries (admin)
+- `GET /stats` -- aggregated stats by tool / key / time (admin)
+- `GET /logs` -- MCP tool call log, filterable (admin)
+- `GET /logs/stats` -- summary counts for logs (admin)
+
+**install.py** (no prefix):
+- `GET /install.sh` / `GET /install.ps1` -- signed CloudNode installer scripts (no auth)
+- `GET /mcp-setup.sh` / `GET /mcp-setup.ps1` -- signed MCP setup helpers (no auth)
+
+**ws.py** (no prefix):
+- `WS /ws/node` -- WebSocket channel for CloudNode realtime control (API key in query)
+
 **webhooks.py** (prefix `/api/webhooks`):
 - `POST /clerk` -- Clerk subscription events (webhook signature)
+
+**mcp/server.py** — FastMCP streamable HTTP server mounted at `/mcp` via FastMCP.
+Authenticates with `Authorization: Bearer osc_...` against `McpApiKey.key_hash`.
+Exposes 20 tools:
+
+| Tool | Kind | Purpose |
+|------|------|---------|
+| `list_cameras` | read | All cameras with status/codec/group |
+| `get_camera` | read | One camera by id |
+| `get_stream_url` | read | Authenticated HLS URL for a camera |
+| `view_camera` | visual | Live JPEG from a camera (agent can see it) |
+| `watch_camera` | visual | Multi-frame burst (2-10 frames, 1-30s apart) |
+| `list_camera_groups` | read | Camera groups for the org |
+| `list_nodes` | read | CloudNodes + their status |
+| `get_node` | read | One node by id |
+| `get_recording_settings` | read | Current recording config |
+| `get_stream_logs` | read | Stream access audit entries |
+| `get_stream_stats` | read | Aggregated views by camera/user/day |
+| `get_system_status` | read | Org-wide snapshot (cameras on/offline, plan, nodes) |
+| `create_incident` | write | Open a new incident (title, summary, severity) |
+| `attach_snapshot` | write | Capture a JPEG and attach it as evidence |
+| `add_observation` | write | Append a text observation to an incident |
+| `update_incident` | write | Change status / severity / summary |
+| `finalize_incident` | write | Write the markdown report and mark ready for review |
+| `list_incidents` | read | Previous incidents (filter by status/severity/camera) |
+| `get_incident` | read | Full detail of one incident incl. evidence metadata |
+| `get_incident_snapshot` | visual | Fetch a previously attached snapshot image |
 
 **Top-level** (`main.py`):
 - `GET /api/health` -- `{"status": "healthy", "version": "2.0.0"}`
