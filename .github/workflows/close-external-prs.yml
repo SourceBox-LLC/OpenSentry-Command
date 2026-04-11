@@ -1,0 +1,56 @@
+name: Close External PRs
+
+# Auto-close pull requests opened by anyone outside the core team.
+# OpenSentry is source-available but does not accept external code
+# contributions — see CONTRIBUTING.md for details.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    # Skip PRs from collaborators, members, and the repo owner.
+    if: |
+      github.event.pull_request.author_association != 'OWNER' &&
+      github.event.pull_request.author_association != 'MEMBER' &&
+      github.event.pull_request.author_association != 'COLLABORATOR'
+    steps:
+      - name: Comment and close
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const author = context.payload.pull_request.user.login;
+            const body = [
+              `Hi @${author}, thanks for taking the time to open this PR.`,
+              ``,
+              `OpenSentry is **source-available under AGPL-3.0** but does not currently accept external code contributions. This PR is being closed automatically — it is not a reflection of the quality of your work.`,
+              ``,
+              `If you found a bug or have an idea, we would still love to hear about it:`,
+              ``,
+              `- Bug reports → [Issues](https://github.com/${context.repo.owner}/${context.repo.repo}/issues)`,
+              `- Feature ideas / questions → [Discussions](https://github.com/${context.repo.owner}/${context.repo.repo}/discussions)`,
+              ``,
+              `See [CONTRIBUTING.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/master/CONTRIBUTING.md) for the full policy.`,
+              ``,
+              `Thanks for your interest in OpenSentry.`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              state: 'closed',
+            });

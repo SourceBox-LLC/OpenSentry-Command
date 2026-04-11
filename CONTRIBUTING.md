@@ -1,12 +1,37 @@
 # Contributing to OpenSentry
 
-Thanks for your interest in contributing! OpenSentry is open source and we welcome contributions from everyone.
+Thanks for your interest in OpenSentry. This document explains how you can help, and what we accept.
 
-## Code of Conduct
+## We do not currently accept external code contributions
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
+OpenSentry is **source-available under AGPL-3.0**. The source is open so you can audit it, self-host it, and learn from it — but we do not accept pull requests from outside the core team at this time.
 
-## Getting Started
+External pull requests opened against this repository will be automatically closed with a link back to this document. This is not personal — we keep the contribution surface narrow so we can move fast, retain clean copyright, and avoid the overhead of a Contributor License Agreement.
+
+## What we *do* welcome
+
+| Channel | What to use it for |
+|---------|--------------------|
+| [Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues) | Bug reports, reproducible problems, security disclosures |
+| [Discussions](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions) | Feature ideas, questions, deployment help |
+| Forks | Self-hosting, private modifications (see AGPL-3.0 for your obligations if you redistribute) |
+
+A clear bug report with steps to reproduce is genuinely valuable — please open one if you hit something broken.
+
+### Reporting bugs
+
+Before filing, check [existing issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues). Include:
+
+- Steps to reproduce
+- Expected vs. actual behavior
+- Relevant logs (redact any secrets)
+- Environment (OS, Python version, browser if UI-related)
+
+### Reporting security issues
+
+See [SECURITY.md](SECURITY.md). Do **not** file public issues for vulnerabilities.
+
+## Self-hosting and development setup
 
 OpenSentry has two main components:
 
@@ -14,16 +39,6 @@ OpenSentry has two main components:
 |-----------|----------|------------|
 | **Command Center** | Python (FastAPI) + React | [OpenSentry-Command](https://github.com/SourceBox-LLC/OpenSentry-Command) |
 | **CloudNode** | Rust | [OpenSentry-CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) |
-
-## How to Contribute
-
-- **Report bugs** -- [Open an issue](https://github.com/SourceBox-LLC/OpenSentry-Command/issues/new)
-- **Suggest features** -- [Start a discussion](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions)
-- **Improve documentation** -- Typos, clarifications, examples
-- **Submit code** -- Bug fixes, new features, refactoring
-- **Review pull requests** -- Help review code from other contributors
-
-## Development Setup
 
 ### Command Center
 
@@ -51,128 +66,10 @@ cargo build --release
 
 See the [CloudNode README](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) for full setup instructions.
 
-## Project Structure
+## License
 
-### Command Center
-
-```
-backend/
-├── app/
-│   ├── main.py           # FastAPI app, CORS, SPA middleware
-│   ├── api/              # Route handlers (cameras, nodes, hls, audit, webhooks)
-│   ├── core/             # Auth (Clerk JWT), config, database
-│   ├── models/           # SQLAlchemy models
-│   └── schemas/          # Pydantic schemas
-├── pyproject.toml
-└── start.py
-
-frontend/
-└── src/
-    ├── pages/            # Page components
-    └── components/       # Reusable UI components
-```
-
-### CloudNode
-
-```
-src/
-├── main.rs               # CLI entry point
-├── dashboard.rs           # Live TUI dashboard
-├── api/                   # Cloud API client + WebSocket
-├── camera/                # Platform-specific camera detection
-├── config/                # Config loading (SQLite → YAML → env → CLI)
-├── node/                  # Node lifecycle orchestration
-├── server/                # HTTP server (warp)
-├── setup/                 # Interactive setup wizard
-├── streaming/             # HLS generation and segment push
-└── storage/               # SQLite database (recordings, snapshots, segments)
-```
-
-## Coding Guidelines
-
-### Python (Command Center Backend)
-
-- Follow [PEP 8](https://pep8.org/)
-- Use type hints where practical
-- Keep functions focused and under 50 lines when possible
-- Use meaningful names
-
-```python
-# Good
-def get_camera_status(camera_id: str) -> dict:
-    """Retrieve current status for a camera."""
-    ...
-
-# Avoid
-def get(id):
-    ...
-```
-
-### JavaScript / React (Frontend)
-
-- Functional components with hooks
-- Use Clerk hooks (`useAuth`, `useOrganization`) for auth state
-- CSS classes for styling (dark theme, no Tailwind)
-
-### Rust (CloudNode)
-
-- No `unwrap()` outside of tests -- use `?` or `anyhow::Context`
-- All errors use the custom `Error` enum
-- Platform-specific code in `camera/platform/`
-
-## Submitting Changes
-
-### 1. Fork and Clone
-
-```bash
-git clone https://github.com/YOUR_USERNAME/OpenSentry-Command.git
-cd OpenSentry-Command
-git remote add upstream https://github.com/SourceBox-LLC/OpenSentry-Command.git
-```
-
-### 2. Create a Branch
-
-```bash
-git checkout -b feature/your-feature-name
-# or
-git checkout -b fix/issue-description
-```
-
-### 3. Commit Your Changes
-
-Use conventional commit messages:
-
-```
-feat: add camera group filtering to dashboard
-
-- Add group selector dropdown
-- Filter camera grid by selected group
-- Persist selection in localStorage
-```
-
-Prefixes: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
-
-### 4. Open a Pull Request
-
-```bash
-git push origin feature/your-feature-name
-```
-
-Then open a PR on GitHub. Include:
-- A clear description of what changed and why
-- Screenshots for UI changes
-- Links to related issues
-
-## Reporting Bugs
-
-Before reporting, check [existing issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues).
-
-Include:
-- Steps to reproduce
-- Expected vs actual behavior
-- Relevant logs
-- Environment (OS, Python version, browser)
+OpenSentry Command Center is licensed under [AGPL-3.0](LICENSE). If you self-host a modified version and offer it to users over a network, AGPL §13 requires you to make your modifications available to those users. Read the license before deploying.
 
 ---
 
-Thank you for contributing to OpenSentry!
+Thank you for your interest in OpenSentry.

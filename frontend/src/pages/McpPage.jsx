@@ -3,10 +3,12 @@ import { useAuth, useOrganization } from "@clerk/clerk-react"
 import {
   getMcpKeys, createMcpKey, revokeMcpKey,
   getMcpActivity, getMcpSessions, getMcpStats,
+  getIncidents, getIncidentCounts,
 } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
+import IncidentReportModal from "../components/IncidentReportModal.jsx"
 
 const MCP_URL = `${window.location.origin}/mcp`
 const API_URL = import.meta.env.VITE_API_URL || ""
@@ -24,7 +26,20 @@ const TOOLS = [
   { name: "get_stream_logs", desc: "View stream access history" },
   { name: "get_stream_stats", desc: "Get aggregated stream statistics" },
   { name: "get_system_status", desc: "System overview: cameras, nodes, plan" },
+  { name: "create_incident", desc: "Open a new AI-authored incident report", write: true },
+  { name: "add_observation", desc: "Append a text observation to an incident", write: true },
+  { name: "attach_snapshot", desc: "Capture a snapshot and attach it as evidence", write: true },
+  { name: "update_incident", desc: "Change an incident's status, severity, or summary", write: true },
+  { name: "finalize_incident", desc: "Write the long-form incident report", write: true },
 ]
+
+const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
+const STATUS_LABELS = {
+  open: "Open",
+  acknowledged: "Acknowledged",
+  resolved: "Resolved",
+  dismissed: "Dismissed",
+}
 
 // Status colors for tool call events
 const STATUS_COLORS = {
@@ -61,6 +76,12 @@ function McpPage() {
   const eventSourceRef = useRef(null)
   const eventsEndRef = useRef(null)
 
+  // AI incident reports
+  const [incidents, setIncidents] = useState([])
+  const [incidentCounts, setIncidentCountsState] = useState({ open: 0, open_critical: 0, open_high: 0, total: 0 })
+  const [incidentFilter, setIncidentFilter] = useState("open") // "open" | "all"
+  const [openIncidentId, setOpenIncidentId] = useState(null)
+
   // Key management (collapsible)
   const [showKeys, setShowKeys] = useState(false)
   const [showTools, setShowTools] = useState(false)
@@ -90,15 +111,20 @@ function McpPage() {
     loadActivity()
     loadSessions()
     loadStats()
+    loadIncidents()
+    loadIncidentCounts()
 
-    // Poll sessions and stats every 10s
+    // Poll sessions, stats, and incidents every 10s
     const interval = setInterval(() => {
       loadSessions()
       loadStats()
+      loadIncidents()
+      loadIncidentCounts()
     }, 10000)
 
     return () => clearInterval(interval)
-  }, [organization, planInfo])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organization, planInfo, incidentFilter])
 
   // SSE stream for real-time events
   useEffect(() => {
@@ -197,6 +223,35 @@ function McpPage() {
       setStats(data)
     } catch (err) {
       console.error("Failed to load stats:", err)
+    }
+  }
+
+  const loadIncidents = async () => {
+    try {
+      const token = await getToken()
+      const params = { limit: 50 }
+      if (incidentFilter === "open") params.status = "open"
+      const data = await getIncidents(() => Promise.resolve(token), params)
+      // Sort by severity (critical first) then by created_at desc — already desc from API
+      const sorted = [...(data.incidents || [])].sort((a, b) => {
+        const sa = SEVERITY_ORDER[a.severity] ?? 9
+        const sb = SEVERITY_ORDER[b.severity] ?? 9
+        if (sa !== sb) return sa - sb
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+      setIncidents(sorted)
+    } catch (err) {
+      console.error("Failed to load incidents:", err)
+    }
+  }
+
+  const loadIncidentCounts = async () => {
+    try {
+      const token = await getToken()
+      const data = await getIncidentCounts(() => Promise.resolve(token))
+      setIncidentCountsState(data)
+    } catch (err) {
+      console.error("Failed to load incident counts:", err)
     }
   }
 
@@ -364,7 +419,7 @@ function McpPage() {
       </div>
 
       {/* Stats Bar */}
-      <div className="mcp-stats-bar">
+      <div className="mcp-stats-bar mcp-stats-bar-5">
         <div className="mcp-stat-item">
           <div className="mcp-stat-value accent-green">{stats?.active_clients ?? 0}</div>
           <div className="mcp-stat-label">Connected Clients</div>
@@ -382,6 +437,12 @@ function McpPage() {
             {stats?.error_count ?? 0}
           </div>
           <div className="mcp-stat-label">Errors</div>
+        </div>
+        <div className="mcp-stat-item">
+          <div className={`mcp-stat-value ${incidentCounts.open > 0 ? "accent-red" : "accent-green"}`}>
+            {incidentCounts.open ?? 0}
+          </div>
+          <div className="mcp-stat-label">Open Incidents</div>
         </div>
       </div>
 
@@ -473,6 +534,75 @@ function McpPage() {
               ))
             )}
           </div>
+        </div>
+      </div>
+
+      {/* AI Incident Reports */}
+      <div className="mcp-incidents-panel">
+        <div className="mcp-panel-header mcp-incidents-header">
+          <h2>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            AI Incident Reports
+          </h2>
+          <div className="mcp-incidents-controls">
+            <button
+              className={`mcp-incidents-filter ${incidentFilter === "open" ? "active" : ""}`}
+              onClick={() => setIncidentFilter("open")}
+            >
+              Open ({incidentCounts.open})
+            </button>
+            <button
+              className={`mcp-incidents-filter ${incidentFilter === "all" ? "active" : ""}`}
+              onClick={() => setIncidentFilter("all")}
+            >
+              All ({incidentCounts.total})
+            </button>
+          </div>
+        </div>
+        <div className="mcp-incidents-list">
+          {incidents.length === 0 ? (
+            <div className="mcp-incidents-empty">
+              <div className="mcp-incidents-empty-icon">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.3">
+                  <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <p>{incidentFilter === "open" ? "No open incidents" : "No incidents yet"}</p>
+              <span>Reports filed by your AI agent will appear here</span>
+            </div>
+          ) : (
+            incidents.map((incident) => (
+              <button
+                key={incident.id}
+                className={`mcp-incident-row mcp-incident-${incident.severity} mcp-incident-status-${incident.status}`}
+                onClick={() => setOpenIncidentId(incident.id)}
+              >
+                <span className={`mcp-incident-sev-dot mcp-incident-sev-${incident.severity}`} />
+                <span className="mcp-incident-time">
+                  {new Date(incident.created_at).toLocaleString([], {
+                    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                  })}
+                </span>
+                <span className="mcp-incident-camera">
+                  {incident.camera_id || "—"}
+                </span>
+                <span className="mcp-incident-title">{incident.title}</span>
+                <span className={`mcp-incident-status mcp-incident-status-badge-${incident.status}`}>
+                  {STATUS_LABELS[incident.status] || incident.status}
+                </span>
+                {incident.evidence_count > 0 && (
+                  <span className="mcp-incident-evidence-count">
+                    {incident.evidence_count} evidence
+                  </span>
+                )}
+              </button>
+            ))
+          )}
         </div>
       </div>
 
@@ -675,6 +805,14 @@ function McpPage() {
       </div>
 
       <UpgradeModal isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} feature="mcp" currentPlan={planInfo?.plan} />
+
+      {openIncidentId !== null && (
+        <IncidentReportModal
+          incidentId={openIncidentId}
+          onClose={() => setOpenIncidentId(null)}
+          onUpdated={() => { loadIncidents(); loadIncidentCounts() }}
+        />
+      )}
     </div>
   )
 }

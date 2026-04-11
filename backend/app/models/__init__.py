@@ -6,6 +6,8 @@ from .models import (
     CameraNode,
     StreamAccessLog,
     McpActivityLog,
+    Incident,
+    IncidentEvidence,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "CameraNode",
     "StreamAccessLog",
     "McpActivityLog",
+    "Incident",
+    "IncidentEvidence",
 ]

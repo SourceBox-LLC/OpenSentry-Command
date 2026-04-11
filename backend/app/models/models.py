@@ -7,6 +7,7 @@ from sqlalchemy import (
     Integer,
     Boolean,
     ForeignKey,
+    LargeBinary,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -267,6 +268,93 @@ class McpActivityLog(Base):
             "duration_ms": self.duration_ms,
             "args_summary": self.args_summary,
             "error": self.error,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
+
+
+# ---------------------------------------------------------------------------
+# AI-generated incident reports
+# ---------------------------------------------------------------------------
+
+INCIDENT_SEVERITIES = ("low", "medium", "high", "critical")
+INCIDENT_STATUSES = ("open", "acknowledged", "resolved", "dismissed")
+
+
+class Incident(Base):
+    """An incident report — typically authored by an MCP agent investigating
+    suspicious activity, but reviewable + actionable from the dashboard."""
+
+    __tablename__ = "incidents"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    camera_id = Column(String(100), nullable=True, index=True)
+    title = Column(String(200), nullable=False)
+    summary = Column(Text, nullable=False)
+    report = Column(Text, default="")
+    severity = Column(String(20), nullable=False, default="medium", index=True)
+    status = Column(String(20), nullable=False, default="open", index=True)
+    created_by = Column(String(150), nullable=False)  # mcp:<key_name> or user:<clerk_id>
+    created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(String(150), nullable=True)
+
+    evidence = relationship(
+        "IncidentEvidence",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+        order_by="IncidentEvidence.timestamp",
+    )
+
+    def to_dict(self, include_evidence: bool = False) -> dict:
+        d = {
+            "id": self.id,
+            "camera_id": self.camera_id,
+            "title": self.title,
+            "summary": self.summary,
+            "report": self.report or "",
+            "severity": self.severity,
+            "status": self.status,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "resolved_by": self.resolved_by,
+            "evidence_count": len(self.evidence) if self.evidence is not None else 0,
+        }
+        if include_evidence:
+            d["evidence"] = [e.to_dict() for e in self.evidence]
+        return d
+
+
+class IncidentEvidence(Base):
+    """A piece of evidence attached to an incident: a snapshot, a text
+    observation, or a logged action the agent took."""
+
+    __tablename__ = "incident_evidence"
+
+    id = Column(Integer, primary_key=True)
+    incident_id = Column(Integer, ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String(20), nullable=False)  # "snapshot" | "observation" | "action"
+    text = Column(Text, nullable=True)
+    camera_id = Column(String(100), nullable=True)
+    data = Column(LargeBinary, nullable=True)
+    data_mime = Column(String(50), nullable=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
+
+    incident = relationship("Incident", back_populates="evidence")
+
+    def to_dict(self) -> dict:
+        # Never inline blob bytes — clients fetch them separately.
+        return {
+            "id": self.id,
+            "incident_id": self.incident_id,
+            "kind": self.kind,
+            "text": self.text,
+            "camera_id": self.camera_id,
+            "has_data": self.data is not None,
+            "data_mime": self.data_mime,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
 

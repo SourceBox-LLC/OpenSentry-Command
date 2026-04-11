@@ -46,7 +46,7 @@ function LandingPage() {
               Private Security<br />Camera System
             </h1>
             <p className="landing-hero-subtitle">
-              Cloud-hosted surveillance with <strong>HLS streaming via global CDN</strong>. 
+              Cloud-hosted surveillance with <strong>same-origin HLS streaming</strong>.
               Multi-tenant organizations with role-based access. Your cameras, accessible from anywhere.
             </p>
             <div className="landing-hero-actions">
@@ -70,8 +70,8 @@ function LandingPage() {
                 <span className="landing-stat-label">Streaming</span>
               </div>
               <div className="landing-stat">
-                <span className="landing-stat-value">CDN</span>
-                <span className="landing-stat-label">Global Delivery</span>
+                <span className="landing-stat-value">Fly.io</span>
+                <span className="landing-stat-label">Global Edge</span>
               </div>
             </div>
           </div>
@@ -103,16 +103,16 @@ function LandingPage() {
               <div className="landing-feature-icon">🔒</div>
               <h3>Fully Encrypted</h3>
               <p>
-                HTTPS web UI with Clerk multi-tenant authentication. HLS streams delivered 
-                via signed URLs with automatic expiration.
+                HTTPS web UI with Clerk multi-tenant authentication. HLS segments are
+                served same-origin behind your JWT — no third-party storage in the live video path.
               </p>
             </div>
             <div className="landing-feature-card">
               <div className="landing-feature-icon">🌐</div>
-              <h3>Global CDN</h3>
+              <h3>In-Memory Streaming</h3>
               <p>
-                HLS segments stored in Tigris/S3 and delivered via Fly.io's global CDN. 
-                Low-latency viewing from anywhere in the world.
+                Live HLS segments are cached in RAM by the Command Center and served directly
+                to viewers — fast, simple, and no per-request object-store fees.
               </p>
             </div>
             <div className="landing-feature-card">
@@ -169,8 +169,8 @@ function LandingPage() {
               </div>
               <h3>CloudNode</h3>
               <p className="landing-arch-desc">
-                Runs on any device with a USB camera. Captures video, generates HLS segments, 
-                and uploads to Tigris cloud storage.
+                Runs on any device with a USB camera. Captures video, generates HLS segments,
+                and pushes them straight to the Command Center over authenticated HTTPS.
               </p>
               <ul className="landing-arch-features">
                 <li>
@@ -254,7 +254,7 @@ function LandingPage() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
-                  HLS streaming via CDN
+                  In-memory HLS segment cache
                 </li>
               </ul>
               <a 
@@ -385,7 +385,7 @@ function LandingPage() {
                 <li>
                   <span className="landing-security-check">✓</span>
                   <div>
-                    <strong>HLS Signed URLs</strong> — Stream URLs expire automatically
+                    <strong>Same-origin HLS</strong> — Live segments served from the authenticated backend, never a third-party bucket
                   </div>
                 </li>
                 <li>
@@ -413,7 +413,7 @@ function LandingPage() {
                 </div>
                 <div className="landing-diagram-node cloud">
                   <span>Command Center</span>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Fly.io + Tigris CDN</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Fly.io + In-memory cache</div>
                 </div>
                 <div className="landing-diagram-arrow">
                   <span>HTTPS</span>

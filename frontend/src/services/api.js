@@ -186,3 +186,49 @@ export async function getMcpLogs(getToken, params = {}) {
 export async function getMcpLogStats(getToken, days = 7) {
   return fetchWithAuth(`/api/mcp/activity/logs/stats?days=${days}`, getToken)
 }
+
+// AI-generated incident reports
+export async function getIncidents(getToken, params = {}) {
+  const queryString = new URLSearchParams(
+    Object.entries(params).filter(([_, v]) => v != null && v !== "")
+  ).toString()
+  const suffix = queryString ? `?${queryString}` : ""
+  return fetchWithAuth(`/api/incidents${suffix}`, getToken)
+}
+
+export async function getIncidentCounts(getToken) {
+  return fetchWithAuth("/api/incidents/counts", getToken)
+}
+
+export async function getIncident(getToken, incidentId) {
+  return fetchWithAuth(`/api/incidents/${incidentId}`, getToken)
+}
+
+export async function patchIncident(getToken, incidentId, patch) {
+  return fetchWithAuth(`/api/incidents/${incidentId}`, getToken, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function deleteIncident(getToken, incidentId) {
+  return fetchWithAuth(`/api/incidents/${incidentId}`, getToken, {
+    method: "DELETE",
+  })
+}
+
+// Returns a Blob URL for an evidence snapshot. Caller must URL.revokeObjectURL when done.
+export async function fetchIncidentEvidenceBlobUrl(getToken, incidentId, evidenceId) {
+  const token = getToken ? await getToken() : null
+  const headers = {}
+  if (token) headers["Authorization"] = `Bearer ${token}`
+  const response = await fetch(
+    `${API_URL}/api/incidents/${incidentId}/evidence/${evidenceId}`,
+    { headers }
+  )
+  if (!response.ok) {
+    throw new Error(`Failed to load evidence (${response.status})`)
+  }
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}

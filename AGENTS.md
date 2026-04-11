@@ -30,8 +30,8 @@ Backend config is loaded from environment variables (see `backend/.env.example`)
 - `SEGMENT_CACHE_MAX_PER_CAMERA` -- segments cached in memory per camera (default 15)
 - `SEGMENT_PUSH_MAX_BYTES` -- max bytes per pushed segment (default 2 MB)
 - `CLEANUP_INTERVAL` -- run cache eviction every N playlist updates (default 20)
-- `AUDIT_LOG_RETENTION_DAYS` -- stream log retention (default 7)
 - `INACTIVE_CAMERA_CLEANUP_HOURS` -- free caches for cameras offline this long (default 24)
+- `AUDIT_LOG_RETENTION_DAYS` -- stream log retention (default 7)
 
 Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
 

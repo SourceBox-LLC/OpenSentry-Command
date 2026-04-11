@@ -129,10 +129,11 @@ function TermsContent() {
       <h2>9. Data and Video Content</h2>
       <p>
         You retain ownership of all video content captured by your cameras and
-        stored through the Service. We do not access, view, or share your
+        served through the Service. We do not access, view, or share your
         video content except as necessary to provide the Service or as required
-        by law. Video segments are stored in your organization's isolated
-        storage namespace.
+        by law. Live video segments are buffered briefly in your organization's
+        isolated in-memory cache for playback; recordings and snapshots are
+        stored locally on your CloudNode.
       </p>
       <p>
         You are solely responsible for the legality of content captured,
@@ -142,11 +143,11 @@ function TermsContent() {
       <h2>10. Third-Party Services</h2>
       <p>
         The Service relies on third-party providers including Clerk
-        (authentication), Tigris/S3 (video storage), and Fly.io (hosting).
-        We are not responsible for the availability, performance, or
-        policies of these third-party services. Outages or changes by
-        these providers may affect the Service, and we shall not be liable
-        for any resulting disruption or data loss.
+        (authentication) and Fly.io (hosting). We are not responsible for
+        the availability, performance, or policies of these third-party
+        services. Outages or changes by these providers may affect the
+        Service, and we shall not be liable for any resulting disruption
+        or data loss.
       </p>
 
       <h2>11. Disclaimer of Warranties</h2>
@@ -319,12 +320,14 @@ function PrivacyContent() {
 
       <h3>Camera and Video Data</h3>
       <p>
-        Video segments captured by your CloudNode cameras are uploaded to
-        cloud storage (Tigris/S3) under your organization's isolated namespace.
-        We do not access, analyze, view, or share your video content except
-        as strictly necessary to provide the Service (e.g., serving HLS
-        streams to authenticated users in your organization). Video segments
-        are automatically cleaned up based on your retention settings.
+        Live video segments captured by your CloudNode cameras are pushed
+        directly to the Command Center backend, where they are held in an
+        in-memory cache only long enough to be served to authorized viewers
+        in your organization. Recordings and snapshots stay on your local
+        CloudNode device. We do not access, analyze, view, or share your
+        video content except as strictly necessary to provide the Service
+        (e.g., serving HLS streams to authenticated users in your
+        organization).
       </p>
 
       <h3>Usage and Log Data</h3>
@@ -367,7 +370,7 @@ function PrivacyContent() {
       <p>We implement the following security measures:</p>
       <ul>
         <li>All API keys are stored as SHA-256 hashes; plaintext keys are never retained</li>
-        <li>Video data is stored in isolated cloud storage namespaces per organization</li>
+        <li>Live video segments are kept in an isolated in-memory cache per organization and never written to a third-party object store</li>
         <li>All connections use HTTPS with HSTS enforcement</li>
         <li>Authentication is handled by Clerk with industry-standard JWT verification</li>
         <li>Organization data is isolated at the database level using org_id scoping</li>
@@ -388,7 +391,6 @@ function PrivacyContent() {
       <ul>
         <li><strong>Authentication:</strong> Clerk (account management, session handling)</li>
         <li><strong>Payment processing:</strong> Stripe via Clerk (subscription billing)</li>
-        <li><strong>Video storage:</strong> Tigris/S3-compatible storage (video segment hosting)</li>
         <li><strong>Hosting:</strong> Fly.io (application hosting)</li>
         <li><strong>Legal requirements:</strong> When required by law, regulation, subpoena, or legal process</li>
         <li><strong>Safety:</strong> To protect the rights, property, or safety of our users or the public</li>
@@ -400,7 +402,8 @@ function PrivacyContent() {
 
       <h2>5. Data Retention</h2>
       <ul>
-        <li>Video segments are retained based on your configured retention settings (default: last 60 segments per camera)</li>
+        <li>Live video segments are held in memory only as long as needed for playback (typically the last ~15 segments per camera) and are evicted automatically</li>
+        <li>Recordings and snapshots are stored locally on your CloudNode device, not on our servers</li>
         <li>Stream access logs, MCP activity logs, and audit logs are retained for 90 days, then automatically deleted</li>
         <li>Account data is retained as long as your account is active</li>
         <li>Upon account or organization deletion, all associated data is permanently deleted</li>
