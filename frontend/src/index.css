@@ -5038,12 +5038,26 @@ body {
     margin: 0.6em 0;
 }
 
-.incident-report-body ul {
+.incident-report-body ul,
+.incident-report-body ol {
     margin: 0.4em 0;
-    padding-left: 1.4em;
+    padding-left: 1.6em;
+}
+
+.incident-report-body ul {
+    list-style: disc;
+}
+
+.incident-report-body ol {
+    list-style: decimal;
 }
 
 .incident-report-body li {
+    margin: 0.2em 0;
+}
+
+.incident-report-body li > ul,
+.incident-report-body li > ol {
     margin: 0.2em 0;
 }
 
