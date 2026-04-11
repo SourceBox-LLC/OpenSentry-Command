@@ -32,6 +32,10 @@ from app.models.models import (
     Camera,
     CameraGroup,
     CameraNode,
+    INCIDENT_SEVERITIES,
+    INCIDENT_STATUSES,
+    Incident,
+    IncidentEvidence,
     McpApiKey,
     Setting,
     StreamAccessLog,
@@ -669,5 +673,332 @@ def get_system_status() -> dict:
                 "offline": len(nodes) - online_nodes,
             },
         }
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Incident Reporting Tools (write)
+# ---------------------------------------------------------------------------
+#
+# These let an MCP agent file a structured, persistent incident report when it
+# observes something noteworthy. Reports show up on the MCP page in the
+# Command Center, where a human can acknowledge / resolve / dismiss them.
+#
+# Workflow the agent should follow:
+#   1. create_incident(...) → returns incident_id
+#   2. attach_snapshot(incident_id, camera_id) for each camera worth capturing
+#   3. add_observation(incident_id, "I checked cameras X, Y, Z; saw...")
+#   4. finalize_incident(incident_id, full_report_markdown)
+# ---------------------------------------------------------------------------
+
+
+def _agent_label() -> str:
+    """Build the `created_by` label from the current MCP key context."""
+    key_name = _ctx_key_name.get("") or "unknown"
+    return f"mcp:{key_name}"
+
+
+async def _capture_snapshot_bytes(
+    org_id: str, camera_id: str
+) -> tuple[bytes, str]:
+    """Pull a fresh JPEG snapshot from a camera node via the WS bridge.
+    Returns (jpeg_bytes, node_id). Raises ToolError on any failure."""
+    db = SessionLocal()
+    try:
+        cam = (
+            db.query(Camera)
+            .filter_by(org_id=org_id, camera_id=camera_id)
+            .first()
+        )
+        if not cam:
+            raise ToolError(f"Camera '{camera_id}' not found")
+        node = db.query(CameraNode).filter_by(id=cam.node_id).first()
+        if not node:
+            raise ToolError(f"Camera '{camera_id}' has no assigned node")
+        node_id = node.node_id
+    finally:
+        db.close()
+
+    from app.api.ws import manager
+
+    if not manager.is_connected(node_id):
+        raise ToolError(f"Node '{node_id}' is offline — cannot capture snapshot")
+
+    try:
+        result = await manager.send_command(
+            node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
+        )
+    except TimeoutError:
+        raise ToolError("Snapshot timed out — camera node did not respond in time")
+    except ValueError as e:
+        raise ToolError(str(e))
+
+    image_b64 = result.get("data", {}).get("image_b64") or result.get("image_b64")
+    if not image_b64:
+        raise ToolError("Camera node did not return image data")
+
+    return base64.b64decode(image_b64), node_id
+
+
+@mcp.tool(
+    name="create_incident",
+    description=(
+        "Open a new incident report. Use when you observe something noteworthy "
+        "(possible intruder, suspicious activity, equipment problem) that the "
+        "user should review later. Returns the new incident_id, which you "
+        "should pass to attach_snapshot/add_observation/finalize_incident as "
+        "you continue investigating."
+    ),
+)
+@tracked
+def create_incident(
+    title: Annotated[str, "Short title for the incident (max 200 chars)"],
+    summary: Annotated[str, "One or two sentence summary of what was observed"],
+    severity: Annotated[
+        str,
+        Field(description="Severity level: low, medium, high, or critical"),
+    ] = "medium",
+    camera_id: Annotated[
+        str | None,
+        "Optional: the primary camera_id this incident relates to",
+    ] = None,
+) -> dict:
+    if severity not in INCIDENT_SEVERITIES:
+        raise ToolError(
+            f"Invalid severity '{severity}'. Must be one of: {', '.join(INCIDENT_SEVERITIES)}"
+        )
+    if not title.strip():
+        raise ToolError("title is required")
+    if not summary.strip():
+        raise ToolError("summary is required")
+
+    org_id, db = _auth()
+    try:
+        if camera_id:
+            cam = (
+                db.query(Camera)
+                .filter_by(org_id=org_id, camera_id=camera_id)
+                .first()
+            )
+            if not cam:
+                raise ToolError(f"Camera '{camera_id}' not found")
+
+        incident = Incident(
+            org_id=org_id,
+            camera_id=camera_id,
+            title=title.strip()[:200],
+            summary=summary.strip(),
+            severity=severity,
+            status="open",
+            created_by=_agent_label(),
+        )
+        db.add(incident)
+        db.commit()
+        db.refresh(incident)
+        return incident.to_dict()
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="add_observation",
+    description=(
+        "Append a text observation to an existing incident. Use this to record "
+        "what you saw on additional cameras, what you ruled out, or any other "
+        "context that will help the human reviewer understand the situation."
+    ),
+)
+@tracked
+def add_observation(
+    incident_id: Annotated[int, "The incident id returned by create_incident"],
+    text: Annotated[str, "Free-form observation text"],
+    camera_id: Annotated[
+        str | None,
+        "Optional: camera this observation pertains to",
+    ] = None,
+) -> dict:
+    if not text.strip():
+        raise ToolError("text is required")
+
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+
+        evidence = IncidentEvidence(
+            incident_id=incident.id,
+            kind="observation",
+            text=text.strip(),
+            camera_id=camera_id,
+        )
+        db.add(evidence)
+        # Touch the incident so updated_at refreshes
+        incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        db.commit()
+        db.refresh(evidence)
+        return evidence.to_dict()
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="attach_snapshot",
+    description=(
+        "Capture a fresh JPEG snapshot from a camera and attach it as evidence "
+        "to an incident. The camera must be online. Use this to preserve what "
+        "you saw at the moment of investigation."
+    ),
+)
+@tracked
+async def attach_snapshot(
+    incident_id: Annotated[int, "The incident id to attach the snapshot to"],
+    camera_id: Annotated[str, "The camera_id to capture from"],
+    note: Annotated[
+        str | None,
+        "Optional caption for this snapshot (e.g. 'workshop entrance')",
+    ] = None,
+) -> dict:
+    # Verify ownership before we hit the camera node
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+    finally:
+        db.close()
+
+    jpeg_bytes, _node_id = await _capture_snapshot_bytes(org_id, camera_id)
+
+    db = SessionLocal()
+    try:
+        evidence = IncidentEvidence(
+            incident_id=incident_id,
+            kind="snapshot",
+            text=note.strip() if note else None,
+            camera_id=camera_id,
+            data=jpeg_bytes,
+            data_mime="image/jpeg",
+        )
+        db.add(evidence)
+        # Touch parent
+        incident = db.query(Incident).filter_by(id=incident_id).first()
+        if incident:
+            incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        db.commit()
+        db.refresh(evidence)
+        return evidence.to_dict()
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="update_incident",
+    description=(
+        "Update an existing incident's status, severity, or summary. Use this "
+        "to escalate severity if the situation worsens, or to mark resolved/"
+        "dismissed if you've confirmed it was a false alarm. Note: humans can "
+        "also acknowledge/resolve from the dashboard."
+    ),
+)
+@tracked
+def update_incident(
+    incident_id: Annotated[int, "The incident id to update"],
+    status: Annotated[
+        str | None,
+        "New status: open, acknowledged, resolved, or dismissed",
+    ] = None,
+    severity: Annotated[
+        str | None,
+        "New severity: low, medium, high, or critical",
+    ] = None,
+    summary: Annotated[str | None, "New summary text"] = None,
+) -> dict:
+    if status is not None and status not in INCIDENT_STATUSES:
+        raise ToolError(
+            f"Invalid status '{status}'. Must be one of: {', '.join(INCIDENT_STATUSES)}"
+        )
+    if severity is not None and severity not in INCIDENT_SEVERITIES:
+        raise ToolError(
+            f"Invalid severity '{severity}'. Must be one of: {', '.join(INCIDENT_SEVERITIES)}"
+        )
+
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+
+        if status is not None:
+            if status in ("resolved", "dismissed") and incident.status not in (
+                "resolved",
+                "dismissed",
+            ):
+                incident.resolved_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+                incident.resolved_by = _agent_label()
+            elif status == "open":
+                incident.resolved_at = None
+                incident.resolved_by = None
+            incident.status = status
+        if severity is not None:
+            incident.severity = severity
+        if summary is not None:
+            incident.summary = summary.strip()
+
+        db.commit()
+        db.refresh(incident)
+        return incident.to_dict()
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="finalize_incident",
+    description=(
+        "Write the full long-form incident report (markdown supported) and "
+        "mark it ready for human review. Call this once at the end of your "
+        "investigation, after you've attached snapshots and added observations."
+    ),
+)
+@tracked
+def finalize_incident(
+    incident_id: Annotated[int, "The incident id to finalize"],
+    report: Annotated[
+        str,
+        "Full incident report in markdown — include what you saw, where, when, "
+        "what you ruled out, and any recommended actions",
+    ],
+) -> dict:
+    if not report.strip():
+        raise ToolError("report is required")
+
+    org_id, db = _auth()
+    try:
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
+        if not incident:
+            raise ToolError(f"Incident {incident_id} not found")
+
+        incident.report = report.strip()
+        incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        db.commit()
+        db.refresh(incident)
+        return incident.to_dict()
     finally:
         db.close()
