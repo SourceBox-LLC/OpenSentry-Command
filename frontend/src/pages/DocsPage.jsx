@@ -445,13 +445,13 @@ function DocsPage() {
                 <span className="docs-endpoint-method post">WRITE</span>
                 <span className="docs-endpoint-path">update_incident</span>
               </div>
-              <p>Change an incident's status (open / acknowledged / resolved / dismissed), severity, or summary — e.g. to escalate or dismiss a false alarm.</p>
+              <p>Edit fields on an existing incident: status, severity, short summary, or the long-form markdown report body. Pass only the fields to change. The <code>report</code> parameter REPLACES the existing body, so include the full revised text. Use this for revisions after new evidence — the first report write should go through <code>finalize_incident</code>.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method post">WRITE</span>
                 <span className="docs-endpoint-path">finalize_incident</span>
               </div>
-              <p>Write the full long-form incident report in markdown and mark it ready for the human reviewer. Call this once at the end of an investigation.</p>
+              <p>Write the long-form markdown report body for the <em>first</em> time at the end of an investigation, after snapshots/clips and observations are attached. For later revisions, use <code>update_incident</code> with its <code>report</code> parameter instead.</p>
 
               <div className="docs-endpoint">
                 <span className="docs-endpoint-method get">READ</span>

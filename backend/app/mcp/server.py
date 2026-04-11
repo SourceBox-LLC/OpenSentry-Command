@@ -1076,10 +1076,14 @@ def attach_clip(
 @mcp.tool(
     name="update_incident",
     description=(
-        "Update an existing incident's status, severity, or summary. Use this "
-        "to escalate severity if the situation worsens, or to mark resolved/"
-        "dismissed if you've confirmed it was a false alarm. Note: humans can "
-        "also acknowledge/resolve from the dashboard."
+        "Edit fields on an existing incident. Use to escalate severity if the "
+        "situation worsens, mark resolved/dismissed after confirming a false "
+        "alarm, fix the short summary, or revise the long-form markdown report "
+        "after new evidence. Pass only the fields you want to change — others "
+        "are left alone. The report parameter REPLACES the existing body, so "
+        "include the full revised text (the agent must already have it in "
+        "context, e.g. from get_incident). For the very first report write, "
+        "use finalize_incident instead."
     ),
 )
 @tracked
@@ -1093,7 +1097,15 @@ def update_incident(
         str | None,
         "New severity: low, medium, high, or critical",
     ] = None,
-    summary: Annotated[str | None, "New summary text"] = None,
+    summary: Annotated[str | None, "New short summary text"] = None,
+    report: Annotated[
+        str | None,
+        (
+            "Full replacement for the long-form markdown report body. Provide "
+            "the COMPLETE revised text — this overwrites the existing body. "
+            "Leave None to keep the current report unchanged."
+        ),
+    ] = None,
 ) -> dict:
     if status is not None and status not in INCIDENT_STATUSES:
         raise ToolError(
@@ -1102,6 +1114,11 @@ def update_incident(
     if severity is not None and severity not in INCIDENT_SEVERITIES:
         raise ToolError(
             f"Invalid severity '{severity}'. Must be one of: {', '.join(INCIDENT_SEVERITIES)}"
+        )
+    if report is not None and not report.strip():
+        raise ToolError(
+            "report cannot be empty — pass None to leave the existing report "
+            "unchanged, or pass the full revised markdown body"
         )
 
     org_id, db = _auth()
@@ -1129,6 +1146,8 @@ def update_incident(
             incident.severity = severity
         if summary is not None:
             incident.summary = summary.strip()
+        if report is not None:
+            incident.report = report.strip()
 
         db.commit()
         db.refresh(incident)
@@ -1140,9 +1159,12 @@ def update_incident(
 @mcp.tool(
     name="finalize_incident",
     description=(
-        "Write the full long-form incident report (markdown supported) and "
-        "mark it ready for human review. Call this once at the end of your "
-        "investigation, after you've attached snapshots and added observations."
+        "Write the long-form markdown report body for the FIRST time at the "
+        "end of your investigation, after you've attached snapshots/clips and "
+        "added observations. This is the normal end-of-investigation step. "
+        "If you need to revise an already-written report after new evidence, "
+        "use update_incident with the report parameter instead — that path is "
+        "designed for revisions."
     ),
 )
 @tracked

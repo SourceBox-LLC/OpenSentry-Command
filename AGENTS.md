@@ -269,8 +269,8 @@ Exposes 22 tools:
 | `attach_snapshot` | write | Capture a JPEG and attach it as evidence |
 | `attach_clip` | write | Save the recent live buffer as a video clip on an incident (pulls from in-memory HLS cache) |
 | `add_observation` | write | Append a text observation to an incident |
-| `update_incident` | write | Change status / severity / summary |
-| `finalize_incident` | write | Write the markdown report and mark ready for review |
+| `update_incident` | write | Change status / severity / summary / report body (revisions) |
+| `finalize_incident` | write | Write the markdown report body for the first time |
 | `list_incidents` | read | Previous incidents (filter by status/severity/camera) |
 | `get_incident` | read | Full detail of one incident incl. evidence metadata |
 | `get_incident_snapshot` | visual | Fetch a previously attached snapshot image |
