@@ -1,7 +1,9 @@
 """Tests for motion detection event endpoints."""
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 from app.models.models import MotionEvent
+from app.api.motion import motion_broadcaster
 
 
 def test_list_motion_events_empty(viewer_client):
@@ -87,3 +89,31 @@ def test_motion_stats(viewer_client, db):
     assert cameras["cam_front"]["peak_score"] == 80
     assert cameras["cam_back"]["event_count"] == 1
     assert cameras["cam_back"]["peak_score"] == 95
+
+
+def test_motion_broadcaster_delivers():
+    """MotionBroadcaster pushes events to subscribers for the matching org."""
+    q = motion_broadcaster.subscribe("org_A")
+    q_other = motion_broadcaster.subscribe("org_B")
+
+    motion_broadcaster.notify("org_A", {"camera_id": "cam1", "score": 75})
+
+    assert not q.empty()
+    event = q.get_nowait()
+    assert event["camera_id"] == "cam1"
+    assert event["score"] == 75
+
+    # Other org's queue should be empty
+    assert q_other.empty()
+
+    motion_broadcaster.unsubscribe("org_A", q)
+    motion_broadcaster.unsubscribe("org_B", q_other)
+
+
+def test_motion_broadcaster_unsubscribe():
+    """Unsubscribed queues stop receiving events."""
+    q = motion_broadcaster.subscribe("org_unsub")
+    motion_broadcaster.unsubscribe("org_unsub", q)
+
+    motion_broadcaster.notify("org_unsub", {"camera_id": "cam2", "score": 50})
+    assert q.empty()

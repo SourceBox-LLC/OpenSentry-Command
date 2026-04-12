@@ -1,12 +1,17 @@
 """
-Motion Events API — query motion detection events reported by CloudNodes.
+Motion Events API — query motion detection events reported by CloudNodes,
+plus SSE streaming for real-time motion alerts in the dashboard.
 """
 
+import asyncio
+import json
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_view
@@ -16,6 +21,58 @@ from app.models.models import MotionEvent
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/motion", tags=["motion"])
+
+
+# ── Motion Event Broadcaster ────────────────────────────────────────
+# Lightweight pub/sub that forwards motion events to SSE subscribers.
+# Called by ws.py after persisting each motion event to the DB.
+
+class MotionBroadcaster:
+    """Push motion events to dashboard SSE connections, scoped by org."""
+
+    def __init__(self):
+        # {org_id: [asyncio.Queue, ...]}
+        self._subscribers: dict[str, list[asyncio.Queue]] = {}
+        self._lock = threading.Lock()
+
+    def notify(self, org_id: str, event_data: dict):
+        """Broadcast a motion event to all SSE subscribers for an org."""
+        queues = self._subscribers.get(org_id, [])
+        dead = []
+        for q in queues:
+            try:
+                q.put_nowait(event_data)
+            except asyncio.QueueFull:
+                dead.append(q)
+        if dead:
+            with self._lock:
+                for q in dead:
+                    try:
+                        self._subscribers[org_id].remove(q)
+                    except (ValueError, KeyError):
+                        pass
+
+    def subscribe(self, org_id: str) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=100)
+        with self._lock:
+            if org_id not in self._subscribers:
+                self._subscribers[org_id] = []
+            self._subscribers[org_id].append(q)
+        logger.info("[Motion] SSE subscriber added for org %s (total: %d)",
+                    org_id, len(self._subscribers[org_id]))
+        return q
+
+    def unsubscribe(self, org_id: str, q: asyncio.Queue):
+        with self._lock:
+            if org_id in self._subscribers:
+                try:
+                    self._subscribers[org_id].remove(q)
+                except ValueError:
+                    pass
+
+
+# Singleton — imported by ws.py to broadcast events.
+motion_broadcaster = MotionBroadcaster()
 
 
 @router.get("/events")
@@ -93,3 +150,42 @@ async def motion_stats(
             for r in rows
         ],
     }
+
+
+# ── SSE Stream ──────────────────────────────────────────────────────
+
+@router.get("/events/stream")
+async def stream_motion_events(user: AuthUser = Depends(require_view)):
+    """
+    SSE endpoint — streams motion detection events in real-time.
+    Used by the dashboard to show instant motion notifications.
+    """
+    org_id = user.org_id
+    queue = motion_broadcaster.subscribe(org_id)
+
+    async def event_generator():
+        try:
+            yield f"data: {json.dumps({'type': 'connected', 'org_id': org_id})}\n\n"
+
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=25.0)
+                    event["type"] = "motion"
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    # Keepalive to prevent connection drop
+                    yield ": keepalive\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            motion_broadcaster.unsubscribe(org_id, queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

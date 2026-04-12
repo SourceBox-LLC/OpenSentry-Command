@@ -9,6 +9,7 @@ function ToastContainer() {
             case 'error': return '✕'
             case 'warning': return '⚠'
             case 'info': return 'ℹ'
+            case 'motion': return '◉'
             default: return '•'
         }
     }

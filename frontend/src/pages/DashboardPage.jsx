@@ -4,6 +4,7 @@ import { useAuth, useOrganization } from "@clerk/clerk-react"
 import { getCameras } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
+import { useMotionAlerts } from "../hooks/useMotionAlerts.jsx"
 import CameraCard from "../components/CameraCard.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 
@@ -21,6 +22,9 @@ function DashboardPage() {
   const toastedOfflinesRef = useRef(new Set())
 
   const isAdmin = membership?.role === "org:admin"
+
+  // Real-time motion detection notifications via SSE
+  useMotionAlerts(cameras)
 
   const loadCameras = useCallback(async () => {
     if (!organization) return

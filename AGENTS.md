@@ -247,6 +247,7 @@ Validation constants (also in `models.py`):
 **motion.py** (prefix `/api/motion`):
 - `GET /events` -- list motion events, filterable by camera_id/hours/limit/offset (view)
 - `GET /events/stats` -- per-camera motion aggregates: count, peak score, latest (view)
+- `GET /events/stream` -- SSE stream of real-time motion events for dashboard notifications (view)
 
 **webhooks.py** (prefix `/api/webhooks`):
 - `POST /clerk` -- Clerk subscription events (webhook signature)

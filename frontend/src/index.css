@@ -764,6 +764,7 @@ body {
 .toast.error { border-left: 3px solid var(--accent-red); }
 .toast.warning { border-left: 3px solid var(--accent-amber); }
 .toast.info { border-left: 3px solid var(--accent-blue); }
+.toast.motion { border-left: 3px solid #a855f7; }
 
 @keyframes slideIn {
     from { transform: translateX(100%); opacity: 0; }
@@ -800,6 +801,7 @@ body {
 .toast.error .toast-icon { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
 .toast.warning .toast-icon { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
 .toast.info .toast-icon { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
+.toast.motion .toast-icon { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
 
 .toast-message {
     font-size: 0.875rem;

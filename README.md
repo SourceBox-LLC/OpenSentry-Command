@@ -211,6 +211,7 @@ AI-generated incident reports. Agents write them via the MCP tools below; admins
 |--------|----------|------|-------------|
 | GET | `/api/motion/events` | User | List motion events (filter: `camera_id`, `hours`, `limit`, `offset`) |
 | GET | `/api/motion/events/stats` | User | Per-camera aggregates: event count, peak score, latest |
+| GET | `/api/motion/events/stream` | User | SSE stream — real-time motion alerts for the dashboard |
 
 ### MCP (for AI clients)
 

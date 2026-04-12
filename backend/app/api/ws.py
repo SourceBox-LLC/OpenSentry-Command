@@ -277,6 +277,15 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
             "Motion event: camera=%s score=%d%% node=%s",
             camera_id, score_int, node_id,
         )
+
+        # Broadcast to SSE subscribers (dashboard notifications)
+        from app.api.motion import motion_broadcaster
+        motion_broadcaster.notify(org_id, {
+            "camera_id": camera_id,
+            "node_id": node_id,
+            "score": score_int,
+            "timestamp": ts.isoformat(),
+        })
     except Exception as e:
         logger.error("Failed to save motion event: %s", e)
         db.rollback()

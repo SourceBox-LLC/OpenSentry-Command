@@ -1,0 +1,102 @@
+import { useEffect, useRef } from "react"
+import { useAuth } from "@clerk/clerk-react"
+import { useToasts } from "./useToasts.jsx"
+
+const API_URL = import.meta.env.VITE_API_URL || ""
+
+/**
+ * Subscribe to the motion-events SSE stream and show a toast for each
+ * motion detection event.  `cameras` is the dashboard's cameras map so
+ * we can resolve camera_id → friendly name.
+ *
+ * Reconnects automatically on disconnect (5 s backoff).
+ */
+export function useMotionAlerts(cameras) {
+  const { getToken } = useAuth()
+  const { showToast } = useToasts()
+  const abortRef = useRef(null)
+  // Keep cameras ref current so the SSE callback always sees the latest map
+  const camerasRef = useRef(cameras)
+  camerasRef.current = cameras
+
+  useEffect(() => {
+    let cancelled = false
+    let reconnectTimer = null
+
+    async function connect() {
+      if (cancelled) return
+
+      let token
+      try {
+        token = await getToken()
+      } catch {
+        // Not signed in yet — retry later
+        reconnectTimer = setTimeout(connect, 5000)
+        return
+      }
+
+      const controller = new AbortController()
+      abortRef.current = controller
+
+      try {
+        const res = await fetch(`${API_URL}/api/motion/events/stream`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        })
+
+        if (!res.ok) {
+          // Auth error or server down — back off
+          reconnectTimer = setTimeout(connect, 5000)
+          return
+        }
+
+        const reader = res.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() // keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue
+            try {
+              const event = JSON.parse(line.slice(6))
+              if (event.type === "motion") {
+                const cam = camerasRef.current[event.camera_id]
+                const name = cam?.name || event.camera_id
+                const score = event.score ?? 0
+                showToast(
+                  `Motion detected on "${name}" (${score}%)`,
+                  "motion",
+                  6000,
+                )
+              }
+            } catch {
+              // Ignore malformed lines
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name === "AbortError") return // intentional disconnect
+      }
+
+      // Stream ended or errored — reconnect after backoff
+      if (!cancelled) {
+        reconnectTimer = setTimeout(connect, 5000)
+      }
+    }
+
+    connect()
+
+    return () => {
+      cancelled = true
+      clearTimeout(reconnectTimer)
+      abortRef.current?.abort()
+    }
+  }, [getToken, showToast])
+}
