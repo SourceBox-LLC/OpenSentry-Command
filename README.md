@@ -28,6 +28,7 @@ OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It rece
 - Caches segments in memory (~3.75 MB per camera) — no S3, no presigned URLs
 - Manages camera nodes and groups, with per-org Clerk authentication
 - Multi-tenant with organization-based access control
+- Motion detection events from CloudNodes with per-camera stats and querying
 - Audit logging for all stream access and MCP tool calls
 - MCP server exposing 22 tools so AI clients can view cameras, file incident reports with snapshots and short video clips, and read back past investigations
 
@@ -204,6 +205,13 @@ AI-generated incident reports. Agents write them via the MCP tools below; admins
 | GET | `/api/incidents/{incident_id}/evidence/{evidence_id}` | Admin | Stream a snapshot or clip blob attached as evidence |
 | GET | `/api/incidents/{incident_id}/evidence/{evidence_id}/playlist.m3u8` | Admin | Synthetic single-segment HLS playlist for clip playback in the dashboard |
 
+### Motion Events
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/motion/events` | User | List motion events (filter: `camera_id`, `hours`, `limit`, `offset`) |
+| GET | `/api/motion/events/stats` | User | Per-camera aggregates: event count, peak score, latest |
+
 ### MCP (for AI clients)
 
 Streamable HTTP MCP server exposing 22 tools. See [AGENTS.md](AGENTS.md) for the full tool list. Requires a Pro or Business plan + an MCP API key generated from the dashboard.
@@ -260,8 +268,9 @@ backend/
 │   │   ├── incidents.py     # AI-generated incident reports (CRUD + evidence blobs)
 │   │   ├── mcp_keys.py      # MCP API key management
 │   │   ├── mcp_activity.py  # MCP tool call activity logs + stats + SSE stream
+│   │   ├── motion.py        # Motion detection event queries + stats
 │   │   ├── install.py       # Signed CloudNode installer endpoints
-│   │   ├── ws.py            # WebSocket helpers
+│   │   ├── ws.py            # WebSocket channel (heartbeat, commands, motion events)
 │   │   └── webhooks.py      # Clerk subscription webhooks
 │   ├── mcp/
 │   │   └── server.py        # FastMCP server + all 22 MCP tools
@@ -273,7 +282,8 @@ backend/
 │   ├── models/
 │   │   └── models.py        # Camera, CameraNode, CameraGroup,
 │   │                        # Setting, AuditLog, StreamAccessLog,
-│   │                        # Incident, IncidentEvidence, McpApiKey, McpToolCall
+│   │                        # Incident, IncidentEvidence, McpApiKey,
+│   │                        # McpActivityLog, MotionEvent
 │   └── schemas/
 │       └── schemas.py       # Pydantic request/response schemas
 ├── .env.example

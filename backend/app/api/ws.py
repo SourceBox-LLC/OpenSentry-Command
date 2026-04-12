@@ -240,14 +240,26 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
         logger.warning("Motion event from node %s missing camera_id or score", node_id)
         return
 
+    # Normalise and clamp score to 0-100
+    try:
+        score_int = max(0, min(100, int(score)))
+    except (ValueError, TypeError):
+        logger.warning("Motion event from node %s has non-numeric score: %r", node_id, score)
+        return
+
     ts = None
     if event_ts:
         try:
             ts = datetime.fromisoformat(event_ts).replace(tzinfo=None)
         except (ValueError, TypeError):
-            pass
+            logger.debug("Unparseable timestamp from node %s, using server time", node_id)
     if ts is None:
         ts = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+
+    try:
+        seq = int(segment_seq) if segment_seq is not None else None
+    except (ValueError, TypeError):
+        seq = None
 
     db: Session = SessionLocal()
     try:
@@ -255,15 +267,15 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
             org_id=org_id,
             camera_id=camera_id,
             node_id=node_id,
-            score=int(score),
-            segment_seq=int(segment_seq) if segment_seq is not None else None,
+            score=score_int,
+            segment_seq=seq,
             timestamp=ts,
         )
         db.add(event)
         db.commit()
         logger.info(
             "Motion event: camera=%s score=%d%% node=%s",
-            camera_id, int(score), node_id,
+            camera_id, score_int, node_id,
         )
     except Exception as e:
         logger.error("Failed to save motion event: %s", e)

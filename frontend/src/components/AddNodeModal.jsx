@@ -46,7 +46,7 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
 
   const exe = os === 'windows' ? 'opensentry-cloudnode.exe' : 'opensentry-cloudnode'
   const quickSetupCmd = credentials
-    ? `${exe} setup --url ${base} --node-id ${credentials.node_id} --key ${credentials.api_key}`
+    ? `${exe} setup --url "${base}" --node-id ${credentials.node_id} --key ${credentials.api_key}`
     : ''
 
   const handleCopy = (text) => {

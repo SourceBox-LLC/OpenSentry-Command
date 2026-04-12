@@ -240,6 +240,13 @@ Validation constants (also in `models.py`):
 
 **ws.py** (no prefix):
 - `WS /ws/node` -- WebSocket channel for CloudNode realtime control (API key in query)
+  - Node → Backend message types: `heartbeat`, `command_result`, `event`
+  - Backend → Node message types: `ack`, `command`, `error`
+  - Event commands: `motion_detected` (payload: camera_id, score, timestamp, segment_seq)
+
+**motion.py** (prefix `/api/motion`):
+- `GET /events` -- list motion events, filterable by camera_id/hours/limit/offset (view)
+- `GET /events/stats` -- per-camera motion aggregates: count, peak score, latest (view)
 
 **webhooks.py** (prefix `/api/webhooks`):
 - `POST /clerk` -- Clerk subscription events (webhook signature)
