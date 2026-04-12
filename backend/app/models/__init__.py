@@ -8,6 +8,7 @@ from .models import (
     McpActivityLog,
     Incident,
     IncidentEvidence,
+    MotionEvent,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "McpActivityLog",
     "Incident",
     "IncidentEvidence",
+    "MotionEvent",
 ]

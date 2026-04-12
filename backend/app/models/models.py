@@ -359,3 +359,36 @@ class IncidentEvidence(Base):
         }
 
 
+class MotionEvent(Base):
+    """A motion detection event reported by a CloudNode.
+
+    Created when a node's FFmpeg scene-change analysis exceeds the
+    configured threshold for a camera segment.
+    """
+
+    __tablename__ = "motion_events"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    camera_id = Column(String(100), nullable=False, index=True)
+    node_id = Column(String(100), nullable=False, index=True)
+    score = Column(Integer, nullable=False)  # 0-100 (normalised)
+    segment_seq = Column(Integer, nullable=True)
+    timestamp = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+        index=True,
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "camera_id": self.camera_id,
+            "node_id": self.node_id,
+            "score": self.score,
+            "segment_seq": self.segment_seq,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+        }
+
+

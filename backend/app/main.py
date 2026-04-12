@@ -13,7 +13,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
-from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents
+from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion
 from app.mcp.server import mcp
 
 logger = logging.getLogger(__name__)
@@ -105,6 +105,7 @@ app.include_router(install.router)
 app.include_router(mcp_keys.router)
 app.include_router(mcp_activity.router)
 app.include_router(incidents.router)
+app.include_router(motion.router)
 
 # Mount MCP server at /mcp
 app.mount("/mcp", mcp_app)
@@ -121,7 +122,7 @@ INACTIVE_CAMERA_CLEANUP_HOURS = int(os.getenv("INACTIVE_CAMERA_CLEANUP_HOURS", "
 async def _log_cleanup_loop():
     """Background task: delete old logs and free segment caches
     for cameras that have been offline."""
-    from app.models.models import StreamAccessLog, McpActivityLog, AuditLog, Camera
+    from app.models.models import StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Camera
 
     while True:
         await asyncio.sleep(LOG_CLEANUP_INTERVAL_HOURS * 3600)
@@ -134,12 +135,13 @@ async def _log_cleanup_loop():
                 stream_count = db.query(StreamAccessLog).filter(StreamAccessLog.accessed_at < cutoff).delete()
                 mcp_count = db.query(McpActivityLog).filter(McpActivityLog.timestamp < cutoff).delete()
                 audit_count = db.query(AuditLog).filter(AuditLog.timestamp < cutoff).delete()
+                motion_count = db.query(MotionEvent).filter(MotionEvent.timestamp < cutoff).delete()
                 db.commit()
-                total = stream_count + mcp_count + audit_count
+                total = stream_count + mcp_count + audit_count + motion_count
                 if total > 0:
                     logger.info(
-                        "[Cleanup] Deleted %d old logs (stream=%d, mcp=%d, audit=%d, retention=%dd)",
-                        total, stream_count, mcp_count, audit_count, LOG_RETENTION_DAYS,
+                        "[Cleanup] Deleted %d old logs (stream=%d, mcp=%d, audit=%d, motion=%d, retention=%dd)",
+                        total, stream_count, mcp_count, audit_count, motion_count, LOG_RETENTION_DAYS,
                     )
             finally:
                 db.close()

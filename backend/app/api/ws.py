@@ -29,7 +29,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.models import CameraNode, Camera
+from app.models import CameraNode, Camera, MotionEvent
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +162,14 @@ async def node_websocket(
                 if correlation_id:
                     manager.resolve_command(correlation_id, data.get("payload", {}))
 
+            elif msg_type == "event":
+                command = data.get("command")
+                payload = data.get("payload", {})
+                if command == "motion_detected":
+                    await _handle_motion_event(node_id, org_id, payload)
+                else:
+                    logger.debug("Unhandled event command from node %s: %s", node_id, command)
+
             else:
                 logger.warning("Unknown WS message type from node %s: %s", node_id, msg_type)
                 await ws.send_json({
@@ -214,6 +222,51 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
         db.commit()
     except Exception as e:
         logger.error("Heartbeat DB error for node %s: %s", node_id, e)
+        db.rollback()
+    finally:
+        db.close()
+
+
+# ── Motion Event Handler ─────────────────────────────────────────────
+
+async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
+    """Persist a motion detection event reported by a CloudNode."""
+    camera_id = payload.get("camera_id")
+    score = payload.get("score")
+    segment_seq = payload.get("segment_seq")
+    event_ts = payload.get("timestamp")  # ISO 8601 from node
+
+    if not camera_id or score is None:
+        logger.warning("Motion event from node %s missing camera_id or score", node_id)
+        return
+
+    ts = None
+    if event_ts:
+        try:
+            ts = datetime.fromisoformat(event_ts).replace(tzinfo=None)
+        except (ValueError, TypeError):
+            pass
+    if ts is None:
+        ts = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+
+    db: Session = SessionLocal()
+    try:
+        event = MotionEvent(
+            org_id=org_id,
+            camera_id=camera_id,
+            node_id=node_id,
+            score=int(score),
+            segment_seq=int(segment_seq) if segment_seq is not None else None,
+            timestamp=ts,
+        )
+        db.add(event)
+        db.commit()
+        logger.info(
+            "Motion event: camera=%s score=%d%% node=%s",
+            camera_id, int(score), node_id,
+        )
+    except Exception as e:
+        logger.error("Failed to save motion event: %s", e)
         db.rollback()
     finally:
         db.close()
