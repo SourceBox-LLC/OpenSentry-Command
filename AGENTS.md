@@ -31,7 +31,7 @@ Backend config is loaded from environment variables (see `backend/.env.example`)
 - `SEGMENT_PUSH_MAX_BYTES` -- max bytes per pushed segment (default 2 MB)
 - `CLEANUP_INTERVAL` -- run cache eviction every N playlist updates (default 20)
 - `INACTIVE_CAMERA_CLEANUP_HOURS` -- free caches for cameras offline this long (default 24)
-- `AUDIT_LOG_RETENTION_DAYS` -- stream log retention (default 7)
+- `LOG_RETENTION_DAYS` -- stream + MCP + audit log retention (default 90)
 
 Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
 
@@ -142,8 +142,6 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 | `Camera` | `camera_id`, `node_id`, `name`, `status`, `video_codec`, `audio_codec`, `group_id` | Camera device registered by CloudNode |
 | `CameraNode` | `node_id`, `api_key_hash`, `hostname`, `status`, `upload_count` | Physical CloudNode device |
 | `CameraGroup` | `name`, `color`, `icon` | User-defined camera grouping |
-| `Media` | `camera_id`, `media_type`, `filename`, `data` (BLOB), `thumbnail` | Snapshots and recordings |
-| `Alert` | `camera_id`, `detection_type`, `confidence`, `region_*` | Detection events (motion, face, object) |
 | `Setting` | `key`, `value` | Per-org key-value settings |
 | `AuditLog` | `event`, `user_id`, `ip_address`, `details` | Security audit trail |
 | `StreamAccessLog` | `user_id`, `camera_id`, `ip_address`, `user_agent` | Stream playback audit |
@@ -224,7 +222,7 @@ Validation constants (also in `models.py`):
 - `GET /{incident_id}/evidence/{evidence_id}/playlist.m3u8` -- synthetic single-segment HLS playlist for clip playback (admin)
 
 **mcp_keys.py** (prefix `/api/mcp`):
-- `POST /keys` -- generate a new MCP API key, returns the plaintext `osc_...` once (admin)
+- `POST /keys` -- generate a new MCP API key, returns the plaintext `osc_...` once (admin, requires active billing)
 - `GET /keys` -- list MCP API keys for the org (admin)
 - `DELETE /keys/{key_id}` -- revoke an MCP API key (admin)
 

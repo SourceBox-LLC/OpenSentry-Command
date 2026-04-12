@@ -18,7 +18,6 @@ class Config:
 
     SESSION_TIMEOUT_MINUTES: int = int(os.getenv("SESSION_TIMEOUT", "30"))
 
-    AUDIT_LOG_RETENTION_DAYS: int = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "7"))
     # Segments kept in memory per camera for the live proxy cache.
     # With 2-second segments, 15 = ~30 seconds — enough for HLS playback buffer.
     SEGMENT_CACHE_MAX_PER_CAMERA: int = int(os.getenv("SEGMENT_CACHE_MAX_PER_CAMERA", "15"))

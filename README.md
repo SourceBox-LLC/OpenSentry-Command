@@ -114,7 +114,7 @@ Cameras auto-register when the CloudNode connects.
 | `SEGMENT_PUSH_MAX_BYTES` | No | `2097152` | Max bytes per pushed segment (2 MB) |
 | `CLEANUP_INTERVAL` | No | `20` | Run cache eviction every N playlist updates |
 | `INACTIVE_CAMERA_CLEANUP_HOURS` | No | `24` | Free caches for cameras offline this long |
-| `AUDIT_LOG_RETENTION_DAYS` | No | `7` | Stream access log retention |
+| `LOG_RETENTION_DAYS` | No | `90` | Stream, MCP, and audit log retention |
 | `SESSION_TIMEOUT` | No | `30` | Session timeout (minutes) |
 
 ### Frontend environment variables
@@ -213,11 +213,14 @@ Streamable HTTP MCP server exposing 22 tools. See [AGENTS.md](AGENTS.md) for the
 |--------|----------|------|-------------|
 | POST | `/mcp` | MCP Key | Streamable HTTP MCP endpoint (`Authorization: Bearer osc_...`) |
 | GET | `/api/mcp/keys` | Admin | List MCP API keys |
-| POST | `/api/mcp/keys` | Admin | Generate a new MCP API key (shown once) |
+| POST | `/api/mcp/keys` | Admin | Generate a new MCP API key (shown once, requires active billing) |
 | DELETE | `/api/mcp/keys/{key_id}` | Admin | Revoke a key |
-| GET | `/api/mcp/activity/logs` | Admin | MCP tool call activity log |
-| GET | `/api/mcp/activity/stats` | Admin | Aggregate MCP usage statistics |
 | GET | `/api/mcp/activity/stream` | Admin | Server-Sent Events stream of live MCP calls |
+| GET | `/api/mcp/activity/recent` | Admin | Recent MCP tool calls |
+| GET | `/api/mcp/activity/sessions` | Admin | MCP session summaries |
+| GET | `/api/mcp/activity/stats` | Admin | Aggregated stats by tool / key / time |
+| GET | `/api/mcp/activity/logs` | Admin | MCP tool call activity log (filterable) |
+| GET | `/api/mcp/activity/logs/stats` | Admin | Summary counts for MCP logs |
 
 ### System
 
@@ -269,8 +272,8 @@ backend/
 │   │   ├── clerk.py         # Clerk SDK initialization
 │   │   └── database.py      # SQLAlchemy engine and session
 │   ├── models/
-│   │   └── models.py        # Camera, CameraNode, CameraGroup, Media,
-│   │                        # Alert, Setting, AuditLog, StreamAccessLog,
+│   │   └── models.py        # Camera, CameraNode, CameraGroup,
+│   │                        # Setting, AuditLog, StreamAccessLog,
 │   │                        # Incident, IncidentEvidence, McpApiKey, McpToolCall
 │   └── schemas/
 │       └── schemas.py       # Pydantic request/response schemas
