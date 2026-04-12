@@ -123,8 +123,8 @@ CloudNode ──API Key──→ FastAPI ──RAM──→ in-memory segment ca
 - Decoded to `org:{feature}:{permission}` format
 
 **Dependencies:**
-- `require_view()` → needs `org:cameras:view_cameras` or admin
-- `require_admin()` → needs `org:admin:admin` or `org:cameras:manage_cameras`
+- `require_view()` → all authenticated org members (no permission check)
+- `require_admin()` → Clerk role `org:admin` / `admin`, or `org:cameras:manage_cameras` permission
 
 ### API key (CloudNode)
 
@@ -147,7 +147,7 @@ All models in `backend/app/models/models.py`. Every model has `org_id` for tenan
 | `StreamAccessLog` | `user_id`, `camera_id`, `ip_address`, `user_agent` | Stream playback audit |
 | `Incident` | `title`, `summary`, `report`, `severity`, `status`, `camera_id`, `created_by`, `resolved_at`, `resolved_by` | AI-generated incident report (open/ack/resolved/dismissed) |
 | `IncidentEvidence` | `incident_id`, `kind` (`snapshot`\|`clip`\|`observation`), `text`, `camera_id`, `data` (BLOB), `data_mime` | Snapshot image, video clip (MPEG-TS bytes), or text observation attached to an incident |
-| `McpApiKey` | `name`, `key_hash`, `last_used_at`, `revoked_at` | MCP API keys (org-scoped, SHA-256 hashed) |
+| `McpApiKey` | `name`, `key_hash`, `last_used_at`, `revoked` (bool) | MCP API keys (org-scoped, SHA-256 hashed) |
 | `McpToolCall` | `key_id`, `tool_name`, `params_json`, `status`, `duration_ms`, `error` | MCP tool call audit log |
 
 Validation constants (also in `models.py`):

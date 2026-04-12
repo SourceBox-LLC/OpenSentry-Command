@@ -171,7 +171,6 @@ Cameras auto-register when the CloudNode connects.
 | GET | `/api/cameras/{camera_id}/segment/{file}` | User | Serve cached segment from memory |
 | POST | `/api/cameras/{camera_id}/push-segment` | Node | Push a `.ts` segment into the in-memory cache |
 | POST | `/api/cameras/{camera_id}/playlist` | Node | Update playlist |
-| POST | `/api/cameras/{camera_id}/codec` | Node | Report video/audio codec |
 
 ### Settings
 
@@ -237,13 +236,13 @@ Streamable HTTP MCP server exposing 22 tools. See [AGENTS.md](AGENTS.md) for the
 
 Access control uses Clerk organizations with V2 JWT permissions:
 
-| Permission | Grants |
-|------------|--------|
-| `org:admin:admin` | Full access (nodes, groups, media, audit logs) |
-| `org:cameras:manage_cameras` | Manage cameras and nodes |
-| `org:cameras:view_cameras` | View cameras and live feeds |
+| Check | Grants |
+|-------|--------|
+| Clerk role `org:admin` / `admin` | Full access (nodes, groups, settings, audit logs) |
+| `org:cameras:manage_cameras` permission | Manage cameras and nodes (alternative admin path) |
+| Any authenticated org member | View cameras and live feeds (no permission check) |
 
-Admin permission is required for node management, group management, media deletion, and audit log access. View permission is sufficient for watching streams and viewing camera status.
+Admin access is required for node management, group management, settings, and audit log access. All authenticated org members can view cameras and streams.
 
 ---
 
@@ -284,9 +283,12 @@ backend/
 frontend/
 └── src/
     ├── pages/
+    │   ├── LandingPage.jsx         # Public landing page
     │   ├── DashboardPage.jsx       # Camera grid, status, controls
+    │   ├── SettingsPage.jsx        # Node management, recording, danger zone
     │   ├── McpPage.jsx             # MCP keys, agent activity, incident list
     │   ├── AdminPage.jsx           # Stream logs, MCP activity, audit trail
+    │   ├── PricingPage.jsx         # Public pricing tiers
     │   └── DocsPage.jsx            # In-app documentation
     └── components/
         ├── HlsPlayer.jsx           # HLS.js video player
