@@ -44,6 +44,11 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
     windows: `irm ${base}/install.ps1 | iex`,
   }
 
+  const exe = os === 'windows' ? 'opensentry-cloudnode.exe' : 'opensentry-cloudnode'
+  const quickSetupCmd = credentials
+    ? `${exe} setup --url ${base} --node-id ${credentials.node_id} --key ${credentials.api_key}`
+    : ''
+
   const handleCopy = (text) => {
     navigator.clipboard.writeText(text)
   }
@@ -170,18 +175,13 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
                   <code>{installCommands[os]}</code>
                   <button className="btn btn-small" onClick={() => handleCopy(installCommands[os])}>Copy</button>
                 </div>
-                <div className="command-box">
-                  <h5>2. Run the setup wizard:</h5>
-                  <code>{os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup'}</code>
-                  <button className="btn btn-small" onClick={() => handleCopy(os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup')}>Copy</button>
+                <div className="command-box quick-setup-box">
+                  <h5>2. Quick Setup (one command):</h5>
+                  <code className="quick-setup-cmd">{quickSetupCmd}</code>
+                  <button className="btn btn-small" onClick={() => handleCopy(quickSetupCmd)}>Copy</button>
                 </div>
                 <div className="command-note">
-                  <strong>Tip:</strong> The setup wizard will ask for your Node ID and API Key shown above.
-                </div>
-                <div className="command-box">
-                  <h5>3. Start CloudNode:</h5>
-                  <code>{os === 'windows' ? 'opensentry-cloudnode.exe' : './opensentry-cloudnode'}</code>
-                  <button className="btn btn-small" onClick={() => handleCopy(os === 'windows' ? 'opensentry-cloudnode.exe' : './opensentry-cloudnode')}>Copy</button>
+                  This configures the node and starts streaming automatically. Or run <code>{exe} setup</code> for the interactive wizard instead.
                 </div>
               </div>
             </div>
