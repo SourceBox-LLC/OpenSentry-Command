@@ -37,14 +37,17 @@ function HlsPlayer({ cameraId, cameraName }) {
 
                 if (Hls.isSupported()) {
                     const hls = new Hls({
+                        // Don't auto-start loading — we call startLoad(-1)
+                        // in MANIFEST_PARSED to ensure playback always begins
+                        // from the live edge, not from a stale buffer position.
+                        autoStartLoad: false,
+
                         xhrSetup: (xhr, url) => {
-                            // Send the shared auth token to our own backend.
-                            // Live segments are served same-origin from the
-                            // backend proxy, so the Authorization header rides
-                            // along with every fetch — no presigned URLs.
                             const token = LOCAL_TEST_MODE ? null : getCurrentToken()
                             if (token && url.startsWith(ownOrigin)) {
                                 xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+                                // Prevent browser from serving cached playlist/segment
+                                xhr.setRequestHeader("Cache-Control", "no-cache")
                             }
                         },
 
