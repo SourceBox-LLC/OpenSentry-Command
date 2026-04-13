@@ -334,3 +334,39 @@ async def update_hls_playlist(
         _evict_caches()
 
     return {"success": True, "message": "Playlist updated"}
+
+
+@router.post("/motion")
+async def push_motion_event(
+    request: Request,
+    camera_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Receive a motion detection event pushed by CloudNode via HTTP.
+    This is a reliable fallback that works even when WebSocket is not connected.
+    """
+    node_api_key = request.headers.get("X-Node-API-Key")
+    if not node_api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
+    api_key_hash = hashlib.sha256(node_api_key.encode()).hexdigest()
+    node = db.query(CameraNode).filter_by(api_key_hash=api_key_hash).first()
+    if not node:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    body = await request.json()
+
+    from app.api.ws import _handle_motion_event
+    await _handle_motion_event(node.node_id, node.org_id, {
+        "camera_id": camera_id,
+        "score": body.get("score"),
+        "segment_seq": body.get("segment_seq"),
+        "timestamp": body.get("timestamp"),
+    })
+
+    return {"success": True}
