@@ -7,9 +7,14 @@ const API_URL = import.meta.env.VITE_API_URL || ""
 /**
  * Subscribe to the motion-events SSE stream and show a toast for each
  * motion detection event.  `cameras` is the dashboard's cameras map so
- * we can resolve camera_id → friendly name.
+ * we can resolve camera_id -> friendly name.
  *
- * Reconnects automatically on disconnect (5 s backoff).
+ * Uses `fetch` + manual line parsing instead of the `EventSource` API
+ * because EventSource doesn't support custom Authorization headers
+ * (Clerk JWT).
+ *
+ * Reconnects automatically on disconnect with exponential backoff
+ * (5 s -> 10 s -> 20 s -> 30 s max).
  */
 export function useMotionAlerts(cameras) {
   const { getToken } = useAuth()
@@ -22,6 +27,8 @@ export function useMotionAlerts(cameras) {
   useEffect(() => {
     let cancelled = false
     let reconnectTimer = null
+    let backoff = 5000
+    const MAX_BACKOFF = 30000
 
     async function connect() {
       if (cancelled) return
@@ -31,7 +38,7 @@ export function useMotionAlerts(cameras) {
         token = await getToken()
       } catch {
         // Not signed in yet — retry later
-        reconnectTimer = setTimeout(connect, 5000)
+        reconnectTimer = setTimeout(connect, backoff)
         return
       }
 
@@ -45,10 +52,13 @@ export function useMotionAlerts(cameras) {
         })
 
         if (!res.ok) {
-          // Auth error or server down — back off
-          reconnectTimer = setTimeout(connect, 5000)
+          reconnectTimer = setTimeout(connect, backoff)
+          backoff = Math.min(backoff * 2, MAX_BACKOFF)
           return
         }
+
+        // Connected — reset backoff
+        backoff = 5000
 
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
@@ -85,9 +95,10 @@ export function useMotionAlerts(cameras) {
         if (err.name === "AbortError") return // intentional disconnect
       }
 
-      // Stream ended or errored — reconnect after backoff
+      // Stream ended or errored — reconnect with backoff
       if (!cancelled) {
-        reconnectTimer = setTimeout(connect, 5000)
+        reconnectTimer = setTimeout(connect, backoff)
+        backoff = Math.min(backoff * 2, MAX_BACKOFF)
       }
     }
 

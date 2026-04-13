@@ -170,7 +170,6 @@ async def stream_motion_events(user: AuthUser = Depends(require_view)):
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=25.0)
-                    event["type"] = "motion"
                     yield f"data: {json.dumps(event)}\n\n"
                 except asyncio.TimeoutError:
                     # Keepalive to prevent connection drop

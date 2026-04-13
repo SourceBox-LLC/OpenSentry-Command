@@ -281,6 +281,7 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
         # Broadcast to SSE subscribers (dashboard notifications)
         from app.api.motion import motion_broadcaster
         motion_broadcaster.notify(org_id, {
+            "type": "motion",
             "camera_id": camera_id,
             "node_id": node_id,
             "score": score_int,
