@@ -26,7 +26,7 @@ _RE_SEGMENT_FILENAME = re.compile(r"^segment_\d+\.ts$")
 #
 # {camera_id: (rewritten_playlist_text, timestamp)}
 _playlist_cache: dict[str, tuple[str, float]] = {}
-_PLAYLIST_CACHE_MAX_AGE = 300.0  # 5 minutes
+_PLAYLIST_CACHE_MAX_AGE = 30.0  # 30 seconds — short for live video
 _CACHE_MAX_CAMERAS = 500
 
 # ── In-memory segment cache ──────────────────────────────────────────
@@ -68,9 +68,9 @@ def _evict_segment_cache(camera_id: str):
 
 
 def _evict_stale_cameras():
-    """Remove segment caches for cameras that haven't received data in 5+ minutes."""
+    """Remove segment caches for cameras that haven't received data recently."""
     now = time.monotonic()
-    cutoff = now - 300.0  # 5 minutes
+    cutoff = now - 60.0  # 1 minute
     stale = []
     for camera_id, segments in _segment_cache.items():
         if not segments:
