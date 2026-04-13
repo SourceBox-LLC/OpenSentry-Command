@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from fastapi import FastAPI, Request
@@ -45,11 +46,23 @@ except Exception:
 # Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
 mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
 
+
+@asynccontextmanager
+async def lifespan(app):
+    """Application lifespan: startup and shutdown hooks."""
+    cleanup_task = asyncio.create_task(_log_cleanup_loop())
+    print(f"[App] OpenSentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
+    async with mcp_app.lifespan(app):
+        yield
+    cleanup_task.cancel()
+    print("[System] Shutdown complete")
+
+
 app = FastAPI(
     title="OpenSentry Command Center API",
     description="FastAPI backend with Clerk authentication for OpenSentry Command Center",
     version="2.1.0",
-    lifespan=mcp_app.lifespan,  # Required for MCP session manager
+    lifespan=lifespan,
     # Move FastAPI's auto docs off /docs so the React DocsPage can own that path.
     docs_url="/api-docs",
     redoc_url="/api-redoc",
@@ -174,18 +187,6 @@ async def _log_cleanup_loop():
                 db.close()
         except Exception:
             logger.exception("[Cleanup] Inactive camera cleanup failed")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application."""
-    asyncio.create_task(_log_cleanup_loop())
-    print(f"[App] OpenSentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    print("[System] Shutdown complete")
 
 
 # Serve static files from the React build

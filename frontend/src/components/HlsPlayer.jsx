@@ -9,6 +9,7 @@ const LOCAL_TEST_MODE = import.meta.env.VITE_LOCAL_HLS === "true"
 function HlsPlayer({ cameraId, cameraName }) {
     const videoRef = useRef(null)
     const hlsRef = useRef(null)
+    const stallRef = useRef(null)
     const { getCurrentToken, refreshNow } = useSharedToken()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
@@ -130,7 +131,7 @@ function HlsPlayer({ cameraId, cameraName }) {
                         }
                         lastTime = video.currentTime
                     }, 1000)
-                    hls._stallCheck = stallCheck
+                    stallRef.current = stallCheck
 
                     hls.on(Hls.Events.ERROR, (event, data) => {
                         if (data.fatal) {
@@ -150,7 +151,12 @@ function HlsPlayer({ cameraId, cameraName }) {
                                     break
                                 default:
                                     setError(`Fatal error: ${data.type}`)
+                                    if (stallRef.current) {
+                                        clearInterval(stallRef.current)
+                                        stallRef.current = null
+                                    }
                                     hls.destroy()
+                                    hlsRef.current = null
                                     break
                             }
                         }
@@ -168,10 +174,11 @@ function HlsPlayer({ cameraId, cameraName }) {
         setupHls()
 
         return () => {
+            if (stallRef.current) {
+                clearInterval(stallRef.current)
+                stallRef.current = null
+            }
             if (hlsRef.current) {
-                if (hlsRef.current._stallCheck) {
-                    clearInterval(hlsRef.current._stallCheck)
-                }
                 hlsRef.current.destroy()
                 hlsRef.current = null
             }

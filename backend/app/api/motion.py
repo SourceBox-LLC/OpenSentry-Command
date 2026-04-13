@@ -6,7 +6,6 @@ plus SSE streaming for real-time motion alerts in the dashboard.
 import asyncio
 import json
 import logging
-import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -33,7 +32,6 @@ class MotionBroadcaster:
     def __init__(self):
         # {org_id: [asyncio.Queue, ...]}
         self._subscribers: dict[str, list[asyncio.Queue]] = {}
-        self._lock = threading.Lock()
 
     def notify(self, org_id: str, event_data: dict):
         """Broadcast a motion event to all SSE subscribers for an org."""
@@ -45,30 +43,27 @@ class MotionBroadcaster:
             except asyncio.QueueFull:
                 dead.append(q)
         if dead:
-            with self._lock:
-                for q in dead:
-                    try:
-                        self._subscribers[org_id].remove(q)
-                    except (ValueError, KeyError):
-                        pass
+            for q in dead:
+                try:
+                    self._subscribers[org_id].remove(q)
+                except (ValueError, KeyError):
+                    pass
 
     def subscribe(self, org_id: str) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=100)
-        with self._lock:
-            if org_id not in self._subscribers:
-                self._subscribers[org_id] = []
-            self._subscribers[org_id].append(q)
+        if org_id not in self._subscribers:
+            self._subscribers[org_id] = []
+        self._subscribers[org_id].append(q)
         logger.info("[Motion] SSE subscriber added for org %s (total: %d)",
                     org_id, len(self._subscribers[org_id]))
         return q
 
     def unsubscribe(self, org_id: str, q: asyncio.Queue):
-        with self._lock:
-            if org_id in self._subscribers:
-                try:
-                    self._subscribers[org_id].remove(q)
-                except ValueError:
-                    pass
+        if org_id in self._subscribers:
+            try:
+                self._subscribers[org_id].remove(q)
+            except ValueError:
+                pass
 
 
 # Singleton — imported by ws.py to broadcast events.

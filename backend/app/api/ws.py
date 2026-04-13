@@ -45,8 +45,8 @@ class ConnectionManager:
     def __init__(self):
         # {node_id: WebSocket}
         self._connections: dict[str, WebSocket] = {}
-        # Pending command futures: {correlation_id: asyncio.Future}
-        self._pending_commands: dict[str, asyncio.Future] = {}
+        # Pending command futures: {correlation_id: (node_id, asyncio.Future)}
+        self._pending_commands: dict[str, tuple[str, asyncio.Future]] = {}
 
     @property
     def connected_nodes(self) -> list[str]:
@@ -69,6 +69,13 @@ class ConnectionManager:
 
     def disconnect(self, node_id: str):
         self._connections.pop(node_id, None)
+        # Cancel pending command futures so callers don't wait until
+        # timeout for a node that's already gone.
+        stale = [cid for cid, (nid, _) in self._pending_commands.items() if nid == node_id]
+        for cid in stale:
+            _, future = self._pending_commands.pop(cid)
+            if not future.done():
+                future.cancel()
         print(f"[WS] Node {node_id} disconnected from WebSocket")
 
     async def send_command(
@@ -86,9 +93,9 @@ class ConnectionManager:
         if not ws:
             raise ValueError(f"Node {node_id} is not connected")
 
-        correlation_id = str(uuid.uuid4())[:8]
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
-        self._pending_commands[correlation_id] = future
+        correlation_id = str(uuid.uuid4())
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._pending_commands[correlation_id] = (node_id, future)
 
         try:
             await ws.send_json({
@@ -100,14 +107,18 @@ class ConnectionManager:
             return await asyncio.wait_for(future, timeout=timeout)
         except asyncio.TimeoutError:
             raise TimeoutError(f"Command {command} to node {node_id} timed out")
+        except asyncio.CancelledError:
+            raise ValueError(f"Node {node_id} disconnected while awaiting {command}")
         finally:
             self._pending_commands.pop(correlation_id, None)
 
     def resolve_command(self, correlation_id: str, result: dict):
         """Called when a command_result message arrives from a node."""
-        future = self._pending_commands.get(correlation_id)
-        if future and not future.done():
-            future.set_result(result)
+        entry = self._pending_commands.get(correlation_id)
+        if entry:
+            _, future = entry
+            if not future.done():
+                future.set_result(result)
 
 
 # Singleton — imported by other modules to send commands to nodes.

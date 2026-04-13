@@ -321,6 +321,13 @@ async def report_camera_codec(
     if not video_codec:
         raise HTTPException(status_code=400, detail="video_codec is required")
 
+    # Codec strings are injected into HLS #EXT-X-CODECS headers —
+    # reject newlines or absurd lengths to prevent playlist corruption.
+    if len(video_codec) > 64 or '\n' in video_codec or '\r' in video_codec:
+        raise HTTPException(status_code=400, detail="Invalid video_codec format")
+    if audio_codec and (len(audio_codec) > 64 or '\n' in audio_codec or '\r' in audio_codec):
+        raise HTTPException(status_code=400, detail="Invalid audio_codec format")
+
     # Update camera codec fields
     camera.video_codec = video_codec
     camera.audio_codec = audio_codec or "mp4a.40.2"  # Default to AAC-LC
