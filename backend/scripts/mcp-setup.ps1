@@ -264,9 +264,15 @@ function Configure-Client {
 
     # Write back. Use -Depth 100 -- Claude Code configs contain deeply nested
     # project state that truncates silently at the default depth of 2.
+    #
+    # Write UTF-8 *without* a BOM: PowerShell 5.1's `Set-Content -Encoding UTF8`
+    # prepends a byte-order mark, and Claude Desktop's JSON parser rejects it
+    # with "Unexpected token ''... is not valid JSON". Using .NET directly
+    # behaves the same on PS 5.1 and 7+.
     try {
         $json = $config | ConvertTo-Json -Depth 100
-        Set-Content -Path $ConfigPath -Value $json -Encoding UTF8 -ErrorAction Stop
+        $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+        [System.IO.File]::WriteAllText($ConfigPath, $json, $utf8NoBom)
         Write-Host "    Done -> $ConfigPath" -ForegroundColor Green
     } catch {
         Write-Host "    Failed to configure $Name : $_" -ForegroundColor Red
