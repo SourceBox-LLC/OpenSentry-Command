@@ -298,6 +298,19 @@ def test_transition_different_cameras_not_debounced(db):
     assert db.query(Notification).count() == 2
 
 
+def test_transition_emits_on_fresh_boot_low_monotonic(db, monkeypatch):
+    # Regression: GitHub Actions runners can have a very small ``time.monotonic()``
+    # value (freshly-booted VM), which would collide with the 60s debounce window
+    # if the "never-emitted" sentinel was 0.0.  Simulate that here and make sure
+    # the first emit still fires.
+    monkeypatch.setattr("app.api.notifications._time.monotonic", lambda: 5.0)
+    emit_camera_transition(
+        db, camera_id="cam_fresh_boot", org_id="org_test123",
+        display_name="Fresh Boot", new_status="offline",
+    )
+    assert db.query(Notification).count() == 1
+
+
 # ── Offline sweep ─────────────────────────────────────────────────
 
 def _make_node(db, *, node_id, org_id, status, last_seen_minutes_ago, name=None):

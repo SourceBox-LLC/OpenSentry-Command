@@ -174,10 +174,16 @@ _transition_debounce: dict[tuple[str, str, str], float] = {}
 def _should_emit_transition(kind: str, entity_id: str, direction: str) -> bool:
     """Return True if we haven't emitted this (kind,entity,direction)
     recently.  Updates the timestamp on a positive return so subsequent
-    calls within the debounce window are suppressed."""
+    calls within the debounce window are suppressed.
+
+    The sentinel for "never emitted before" is ``-inf``, not ``0.0`` —
+    otherwise on a freshly-booted host (e.g. GitHub Actions runners,
+    where ``time.monotonic()`` starts near zero) the very first emit
+    can fall inside the debounce window and get silently dropped.
+    """
     key = (kind, entity_id, direction)
     now = _time.monotonic()
-    last = _transition_debounce.get(key, 0.0)
+    last = _transition_debounce.get(key, float("-inf"))
     if now - last < _TRANSITION_DEBOUNCE_SECONDS:
         return False
     _transition_debounce[key] = now
