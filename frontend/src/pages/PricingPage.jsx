@@ -42,8 +42,8 @@ function PricingPage() {
           </div>
           <div className="pricing-feature-item">
             <div className="pricing-feature-icon">🔐</div>
-            <h3>End-to-End Encryption</h3>
-            <p>All streams encrypted in transit with TLS and authenticated access</p>
+            <h3>Encrypted in Transit</h3>
+            <p>All streams protected with TLS and JWT-authenticated access — no third-party object store in the live path</p>
           </div>
           <div className="pricing-feature-item">
             <div className="pricing-feature-icon">☁️</div>

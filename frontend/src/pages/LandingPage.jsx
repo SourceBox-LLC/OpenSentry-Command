@@ -119,7 +119,7 @@ function LandingPage() {
               <div className="landing-feature-icon">👥</div>
               <h3>Multi-Tenant</h3>
               <p>
-                Organizations with role-based permissions. Admin and viewer roles. 
+                Organizations with role-based permissions. Admin and member roles.
                 Invite team members to monitor cameras together.
               </p>
             </div>
@@ -199,8 +199,8 @@ function LandingPage() {
                 </li>
               </ul>
               <a 
-                href="https://github.com/SourceBox-LLC/opensentry-cloud-node" 
-                target="_blank" 
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="landing-arch-cta landing-arch-cta-primary"
               >
@@ -500,8 +500,8 @@ function LandingPage() {
                 Get Command Center
               </Link>
               <a 
-                href="https://github.com/SourceBox-LLC/opensentry-cloud-node" 
-                target="_blank" 
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="landing-btn landing-btn-outline landing-btn-lg"
               >

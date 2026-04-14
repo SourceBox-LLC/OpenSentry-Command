@@ -179,7 +179,7 @@ function DocsPage() {
             <h3>What CloudNode Does</h3>
             <ul>
               <li>Discovers USB cameras and registers them with Command Center</li>
-              <li>Captures video and encodes HLS segments (2-second chunks) via FFmpeg</li>
+              <li>Captures video and encodes HLS segments (1-second chunks by default) via FFmpeg</li>
               <li>Pushes segments directly to the Command Center backend over authenticated HTTPS</li>
               <li>Sends heartbeats every 30 seconds to report camera status</li>
               <li>Auto-detects video/audio codecs and reports them to Command Center</li>
@@ -545,7 +545,7 @@ function DocsPage() {
             <h3>How It Works</h3>
             <ol>
               <li><strong>CloudNode</strong> captures video from USB cameras using FFmpeg</li>
-              <li>Video is encoded as HLS segments (2-second chunks) and pushed directly to the Command Center over authenticated HTTPS</li>
+              <li>Video is encoded as HLS segments (1-second chunks by default) and pushed directly to the Command Center over authenticated HTTPS</li>
               <li>The <strong>Command Center</strong> caches the most recent segments in RAM and serves them to authorized viewers same-origin</li>
               <li>Viewers watch via HLS through the Command Center backend — no third-party storage in the live video path, no direct connection to your network</li>
             </ol>

@@ -14,7 +14,8 @@ class Config:
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
     # Segments kept in memory per camera for the live proxy cache.
-    # With 2-second segments, 15 = ~30 seconds — enough for HLS playback buffer.
+    # CloudNode ships with 1-second segments by default, so 15 = ~15s of buffer —
+    # enough for HLS to start at the live edge and recover from one short stall.
     SEGMENT_CACHE_MAX_PER_CAMERA: int = int(os.getenv("SEGMENT_CACHE_MAX_PER_CAMERA", "15"))
     # Max size of a single pushed segment (safety valve).
     SEGMENT_PUSH_MAX_BYTES: int = int(os.getenv("SEGMENT_PUSH_MAX_BYTES", str(2 * 1024 * 1024)))
