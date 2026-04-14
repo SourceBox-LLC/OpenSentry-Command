@@ -51,6 +51,36 @@ fi
 
 # ── Detect MCP Clients ────────────────────────────────
 
+# Tracks clients we refused to touch because they were running.
+SKIPPED_CLIENTS=()
+
+# Echoes the PID of a running matching process for the named client, or
+# nothing if none. Refusing to write when the client is up avoids its own
+# file-watcher stomping our write with stale in-memory state -- that's the
+# bug the PS version of this script hit in the field.
+# Tests can bypass by setting OPENSENTRY_MCP_ALLOW_RUNNING=1.
+client_running_pid() {
+    local name="$1"
+    if [[ "${OPENSENTRY_MCP_ALLOW_RUNNING:-0}" == "1" ]]; then
+        return 0
+    fi
+    local procs=""
+    case "$name" in
+        "Claude Code"|"Claude Desktop") procs="Claude claude" ;;
+        "Cursor") procs="Cursor cursor" ;;
+        "Windsurf") procs="Windsurf windsurf" ;;
+        *) return 0 ;;
+    esac
+    for p in $procs; do
+        local pid
+        pid=$(pgrep -x "$p" 2>/dev/null | head -1 || true)
+        if [[ -n "$pid" ]]; then
+            echo "$pid"
+            return 0
+        fi
+    done
+}
+
 # Client name, config path, detected (0=yes 1=no)
 CLIENT_NAMES=()
 CLIENT_CONFIGS=()
@@ -179,6 +209,19 @@ configure_client() {
 
     echo -e "  ${BLUE}Configuring ${BOLD}$name${NC}${BLUE}...${NC}"
 
+    # Refuse to touch the config if the target client is currently running --
+    # its own file-watcher will clobber our write with stale in-memory state.
+    local running_pid
+    running_pid=$(client_running_pid "$name")
+    if [[ -n "$running_pid" ]]; then
+        echo -e "    ${YELLOW}$name is currently running (pid $running_pid).${NC}"
+        echo -e "    ${YELLOW}Skipping -- quit $name completely and re-run this script.${NC}"
+        echo -e "    ${DIM}Your config was NOT modified.${NC}"
+        echo ""
+        SKIPPED_CLIENTS+=("$name")
+        return
+    fi
+
     # Create parent directory if needed
     local dir
     dir="$(dirname "$config_path")"
@@ -281,6 +324,16 @@ for idx in "${SELECTED[@]}"; do
 done
 
 # ── Summary ───────────────────────────────────────────
+
+if [[ ${#SKIPPED_CLIENTS[@]} -gt 0 ]]; then
+    echo -e "  ${YELLOW}${BOLD}Skipped (still running):${NC}"
+    for s in "${SKIPPED_CLIENTS[@]}"; do
+        echo -e "    ${YELLOW}* $s${NC}"
+    done
+    echo ""
+    echo -e "  ${DIM}Quit the above and re-run this script to configure them.${NC}"
+    echo ""
+fi
 
 echo -e "  ${GREEN}${BOLD}Setup Complete${NC}"
 echo ""

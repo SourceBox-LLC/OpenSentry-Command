@@ -33,6 +33,37 @@ Write-Host ""
 
 # -- Helpers -------------------------------------------
 
+# Tracks clients we refused to touch because they were running. Listed at the
+# end so the user knows exactly which ones to quit and re-run for.
+$script:SkippedClients = @()
+
+# Process names to check per client. Claude Desktop ships a bundled Claude Code
+# experience so the same `Claude.exe` process touches `.claude.json` too --
+# detecting Claude.exe covers both client rows. A separate `claude` CLI (npm
+# install) runs as a node process and we can't reliably fingerprint it, so the
+# "Quit Claude Code before continuing" warning still has to carry that case.
+$script:ClientProcesses = @{
+    'Claude Code'    = @('Claude')
+    'Claude Desktop' = @('Claude')
+    'Cursor'         = @('Cursor')
+    'Windsurf'       = @('Windsurf')
+}
+
+# Returns the PID of a running matching process, or $null. Returns $null when
+# the env var OPENSENTRY_MCP_ALLOW_RUNNING=1 is set -- tests set that so they
+# can run even while a real Claude Desktop is up on the dev machine.
+function Test-ClientRunning {
+    param([string]$ClientName)
+    if ($env:OPENSENTRY_MCP_ALLOW_RUNNING -eq "1") { return $null }
+    $names = $script:ClientProcesses[$ClientName]
+    if (-not $names) { return $null }
+    foreach ($n in $names) {
+        $proc = Get-Process -Name $n -ErrorAction SilentlyContinue
+        if ($proc) { return $proc[0].Id }
+    }
+    return $null
+}
+
 # Recursively convert ConvertFrom-Json output (PSCustomObject / arrays /
 # primitives) into hashtables/arrays we can mutate. Works on PowerShell 5.1+ --
 # we deliberately DON'T use ConvertFrom-Json -AsHashtable because that flag was
@@ -195,6 +226,21 @@ function Configure-Client {
 
     Write-Host "  Configuring $Name..." -ForegroundColor Blue
 
+    # Refuse to touch the config if the target client is currently running --
+    # its own file-watcher will clobber our write with stale in-memory state.
+    # That's exactly what happened in the original bug: a correctly-written
+    # config got stomped back to defaults (and our mcpServers entry erased)
+    # within a second of the write.
+    $runningPid = Test-ClientRunning -ClientName $Name
+    if ($runningPid) {
+        Write-Host "    $Name is currently running (pid $runningPid)." -ForegroundColor Yellow
+        Write-Host "    Skipping -- quit $Name completely and re-run this script." -ForegroundColor Yellow
+        Write-Host "    Your config was NOT modified." -ForegroundColor DarkGray
+        Write-Host ""
+        $script:SkippedClients += $Name
+        return
+    }
+
     # Create parent directory if needed
     $dir = Split-Path $ConfigPath -Parent
     if (-not (Test-Path $dir)) {
@@ -288,6 +334,16 @@ foreach ($idx in $selected) {
 }
 
 # -- Summary -------------------------------------------
+
+if ($script:SkippedClients.Count -gt 0) {
+    Write-Host "  Skipped (still running):" -ForegroundColor Yellow
+    foreach ($s in $script:SkippedClients) {
+        Write-Host "    * $s" -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "  Quit the above and re-run this script to configure them." -ForegroundColor DarkGray
+    Write-Host ""
+}
 
 Write-Host "  Setup Complete" -ForegroundColor Green
 Write-Host ""
