@@ -15,12 +15,18 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
+from app.core.migrations import sync_schema
 from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
 from app.mcp.server import mcp
+# Import models so every table registers on Base.metadata before create_all/sync_schema.
+from app.models import models  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
+# Patch in any columns that were added to existing models after the table was first
+# created. See app/core/migrations.py for the "why" — this is our stand-in for Alembic.
+sync_schema(engine, Base.metadata)
 
 # Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
 mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
