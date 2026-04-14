@@ -246,6 +246,13 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
                         new_cam_status = cam_data.get("status", "online")
                         cam.status = new_cam_status
                         cam.last_seen = now
+                        # Record (or clear) the pipeline failure reason.
+                        # Healthy states wipe the field so stale errors
+                        # don't linger once the supervisor recovers.
+                        if new_cam_status in ("restarting", "failed", "error"):
+                            cam.last_error = cam_data.get("last_error")
+                        else:
+                            cam.last_error = None
                         if (
                             prev_cam_status != new_cam_status
                             and new_cam_status in ("online", "offline")

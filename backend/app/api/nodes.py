@@ -225,6 +225,13 @@ async def node_heartbeat(
             if cam:
                 cam.status = cam_status.status
                 cam.last_seen = now
+                # Record (or clear) the pipeline failure reason. Healthy
+                # states wipe the field so stale errors don't linger in
+                # the API response after the supervisor recovers.
+                if cam_status.status in ("restarting", "failed", "error"):
+                    cam.last_error = cam_status.last_error
+                else:
+                    cam.last_error = None
 
     db.commit()
 

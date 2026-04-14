@@ -26,7 +26,15 @@ class Camera(Base):
     capabilities = Column(String(500), default="streaming")
     group_id = Column(Integer, ForeignKey("camera_groups.id"), nullable=True)
     last_seen = Column(DateTime)
+    # Pipeline state. In addition to the legacy "online" / "offline", the
+    # CloudNode's FFmpeg supervisor now reports "starting", "streaming",
+    # "restarting", "failed", and "error" so the UI can tell the user
+    # why a camera they expect to be live isn't showing video.
     status = Column(String(20), default="offline")
+    # Human-readable failure reason that goes alongside `status` when the
+    # pipeline is `restarting` / `failed` / `error`. Cleared whenever the
+    # node reports a healthy status.
+    last_error = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
 
     # Codec detection fields
@@ -49,13 +57,19 @@ class Camera(Base):
         return self.status
 
     def to_dict(self):
+        eff = self.effective_status
+        # Only surface last_error when the camera is actually in a
+        # broken state — once it flips back to streaming, the stale
+        # reason would just confuse anyone reading the API response.
+        err = self.last_error if eff in ("restarting", "failed", "error") else None
         return {
             "camera_id": self.camera_id,
             "name": self.name,
             "node_type": self.node_type,
             "capabilities": self.capabilities.split(",") if self.capabilities else [],
             "group": self.group.name if self.group else None,
-            "status": self.effective_status,
+            "status": eff,
+            "last_error": err,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
         }
 

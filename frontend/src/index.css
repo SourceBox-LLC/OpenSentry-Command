@@ -395,6 +395,39 @@ body {
     animation: pulse-fast 1s ease-in-out infinite;
 }
 
+/* Supervisor pipeline states — added alongside the FFmpeg auto-restart
+   work so operators can tell apart "camera unplugged" (offline) from
+   "pipeline respawning" (restarting) from "pipeline gave up" (failed). */
+.status-badge.starting {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--accent-amber);
+}
+.status-badge.starting .dot {
+    background: var(--accent-amber);
+    box-shadow: 0 0 8px var(--accent-amber-glow);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.status-badge.restarting {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--accent-amber);
+}
+.status-badge.restarting .dot {
+    background: var(--accent-amber);
+    box-shadow: 0 0 8px var(--accent-amber-glow);
+    animation: pulse-fast 1s ease-in-out infinite;
+}
+
+.status-badge.failed, .status-badge.error {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--accent-red);
+}
+.status-badge.failed .dot, .status-badge.error .dot {
+    background: var(--accent-red);
+    box-shadow: 0 0 8px var(--accent-red-glow);
+    animation: pulse-fast 1s ease-in-out infinite;
+}
+
 /* Video Feed */
 .camera-feed-container {
     position: relative;
@@ -444,6 +477,39 @@ body {
     font-size: 0.7rem;
     color: var(--text-muted);
     margin-top: 4px;
+}
+
+/* Error detail shown under "Pipeline Failed" / "Pipeline Error" — gives
+   the operator the supervisor's last_error so they don't have to go
+   hunting through the CloudNode TUI to figure out what's wrong. */
+.feed-loading .feed-detail {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    max-width: 80%;
+    text-align: center;
+    word-break: break-word;
+    opacity: 0.85;
+}
+
+/* Small banner overlaid on the HLS player when the pipeline is
+   transient (starting / restarting). Keeps video visible if segments
+   are still trickling in, but flags that the state isn't steady. */
+.camera-feed-overlay-banner {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    padding: 6px 10px;
+    background: rgba(245, 158, 11, 0.85);
+    color: #000;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 4px;
+    text-align: center;
+    pointer-events: none;
+    z-index: 2;
+    text-shadow: none;
 }
 
 .loading-spinner {

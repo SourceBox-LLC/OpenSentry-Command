@@ -45,16 +45,44 @@ function CameraCard({
     }
   }, [cameraId, getToken, recording, showToast])
 
-  const isOffline = camera.status === "offline"
+  // "failed" (supervisor gave up) and "error" mean the pipeline is
+  // producing nothing — treat them as offline for playback purposes.
+  // "restarting" and "starting" are transient; the HLS player will just
+  // show its buffering state until segments arrive.
+  const status = camera.status
+  const isDown = status === "offline" || status === "failed" || status === "error"
+  const isTransient = status === "starting" || status === "restarting"
 
   const nodeTypeLabel = camera.node_type || "Camera"
   const nodeTypeIcon = "📹"
 
-  const statusClass = camera.status === "online" ? "online" :
-                      camera.status === "streaming" ? "streaming" :
-                      camera.status === "recording" ? "recording" : "offline"
+  const statusClass =
+    status === "online"     ? "online" :
+    status === "streaming"  ? "streaming" :
+    status === "recording"  ? "recording" :
+    status === "starting"   ? "starting" :
+    status === "restarting" ? "restarting" :
+    status === "failed"     ? "failed" :
+    status === "error"      ? "error" : "offline"
 
-  const cardClasses = `camera-card ${isOffline ? "offline" : ""}`
+  // Down-state messages used inside the feed placeholder. "failed" and
+  // "error" render the supervisor's last_error if we have it so the user
+  // isn't left guessing why the camera went dark.
+  const downLabel =
+    status === "failed" ? "Pipeline Failed" :
+    status === "error"  ? "Pipeline Error"  : "Camera Offline"
+  const downDetail =
+    (status === "failed" || status === "error") && camera.last_error
+      ? camera.last_error
+      : null
+
+  // Tooltip content for the status badge. Shows the reason inline so the
+  // user doesn't have to hover into the feed to see what's wrong.
+  const badgeTitle = camera.last_error
+    ? `${status}: ${camera.last_error}`
+    : status || "unknown"
+
+  const cardClasses = `camera-card ${isDown ? "offline" : ""}`
 
   return (
     <div className={cardClasses}>
@@ -67,24 +95,32 @@ function CameraCard({
             <span className="node-type">{nodeTypeLabel}</span>
           </div>
         </div>
-        <div className={`status-badge ${statusClass}`}>
+        <div className={`status-badge ${statusClass}`} title={badgeTitle}>
           <span className="dot"></span>
-          <span className="status-text">{camera.status || "unknown"}</span>
+          <span className="status-text">{status || "unknown"}</span>
         </div>
       </div>
 
       <div className="camera-feed-container">
-        {isOffline ? (
+        {isDown ? (
           <div className="feed-loading error">
             <span className="status-icon">⚠️</span>
-            <span>Camera Offline</span>
+            <span>{downLabel}</span>
+            {downDetail && <span className="feed-detail">{downDetail}</span>}
           </div>
         ) : (
           <HlsPlayer
             cameraId={cameraId}
             cameraName={camera.name || `Camera ${cameraId.slice(-4)}`}
-            status={camera.status}
+            status={status}
           />
+        )}
+        {isTransient && (
+          <div className="camera-feed-overlay-banner">
+            {status === "restarting"
+              ? `Reconnecting${camera.last_error ? ` — ${camera.last_error}` : "…"}`
+              : "Starting up…"}
+          </div>
         )}
       </div>
 
@@ -120,6 +156,7 @@ export default memo(CameraCard, (prevProps, nextProps) => {
   return (
     prevProps.cameraId === nextProps.cameraId &&
     prevProps.camera.status === nextProps.camera.status &&
-    prevProps.camera.name === nextProps.camera.name
+    prevProps.camera.name === nextProps.camera.name &&
+    prevProps.camera.last_error === nextProps.camera.last_error
   )
 })

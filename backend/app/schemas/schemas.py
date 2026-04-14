@@ -39,6 +39,10 @@ class NodeRegister(BaseModel):
 class CameraStatus(BaseModel):
     camera_id: str = Field(..., max_length=150)
     status: str = Field(..., max_length=20)
+    # Optional failure reason — sent by the CloudNode supervisor when
+    # the pipeline is restarting, failed, or errored. Old nodes that
+    # predate the supervisor simply omit it (the field is Optional).
+    last_error: Optional[str] = Field(None, max_length=500)
 
 
 class NodeHeartbeat(BaseModel):
