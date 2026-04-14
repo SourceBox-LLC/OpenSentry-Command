@@ -16,12 +16,21 @@ from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
 from app.core.migrations import sync_schema
+from app.core.sentry import init_sentry
 from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
 from app.mcp.server import mcp
 # Import models so every table registers on Base.metadata before create_all/sync_schema.
 from app.models import models  # noqa: F401
 
 logger = logging.getLogger(__name__)
+
+# Initialise Sentry as early as possible — before we register routes — so
+# any exception raised during app construction is still captured. No-ops
+# cleanly when SENTRY_DSN is unset (local dev, tests).
+init_sentry(
+    dsn=settings.SENTRY_DSN or None,
+    traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+)
 
 Base.metadata.create_all(bind=engine)
 # Patch in any columns that were added to existing models after the table was first

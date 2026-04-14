@@ -21,6 +21,15 @@ class Config:
     # in-memory storage and logs a one-shot warning at startup.
     REDIS_URL: str = os.getenv("REDIS_URL", "")
 
+    # Sentry error tracking.  Leave blank for local dev/tests — the init
+    # module no-ops gracefully and never phones home.  In production set
+    # this to your project DSN from sentry.io; environment/release are
+    # inferred from Fly env vars (FLY_APP_NAME, FLY_MACHINE_VERSION).
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    # Trace sample rate — 0.1 keeps us inside Sentry's free-tier event
+    # budget at expected volumes.  Bump when you need finer perf insight.
+    SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+
     # Segments kept in memory per camera for the live proxy cache.
     # CloudNode ships with 1-second segments by default, so 15 = ~15s of buffer —
     # enough for HLS to start at the live edge and recover from one short stall.

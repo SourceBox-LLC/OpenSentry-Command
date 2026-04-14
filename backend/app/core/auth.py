@@ -162,7 +162,7 @@ async def get_current_user(request: Request) -> AuthUser:
                 detail="No organization selected. Please create or join an organization.",
             )
 
-        return AuthUser(
+        auth_user = AuthUser(
             user_id=user_id,
             org_id=org_id,
             org_role=org_role,
@@ -172,6 +172,20 @@ async def get_current_user(request: Request) -> AuthUser:
             plan=active_plan,
             features=active_features,
         )
+
+        # Tag the Sentry scope for this request.  Safe no-op if Sentry
+        # isn't initialised (local dev, tests).  We deliberately skip
+        # email/username — they fall under PII and we don't need them
+        # for triage.
+        try:
+            from app.core.sentry import set_user_context
+
+            set_user_context(user_id=user_id, org_id=org_id, plan=active_plan)
+        except Exception:
+            # Monitoring should never fail auth.
+            pass
+
+        return auth_user
     except HTTPException:
         raise
     except Exception:
