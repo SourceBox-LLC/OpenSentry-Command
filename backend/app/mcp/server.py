@@ -550,10 +550,7 @@ async def view_camera(
     except ValueError as e:
         raise ToolError(str(e))
 
-    image_b64 = result.get("data", {}).get("image_b64") or result.get("image_b64")
-    if not image_b64:
-        raise ToolError("Camera node did not return image data — update CloudNode to latest version")
-
+    image_b64 = _extract_snapshot_image_b64(result, camera_id)
     return Image(data=base64.b64decode(image_b64), format="jpeg")
 
 
@@ -888,6 +885,59 @@ def _agent_label() -> str:
     return f"mcp:{key_name}"
 
 
+def _extract_snapshot_image_b64(result: dict, camera_id: str) -> str:
+    """Pull `image_b64` out of a CloudNode `take_snapshot` response, or raise
+    ToolError with a message the *user* can act on.
+
+    CloudNode (>= the release that added the snapshot API) wraps its WS
+    `command_result` payload as:
+        success -> {"status": "success", "data": {"image_b64": "...", ...}}
+        failure -> {"status": "error",   "error": "<human-readable reason>"}
+
+    Older CloudNodes (pre-snapshot) send neither field and we fall back to
+    the "update CloudNode" hint.
+
+    Prior behaviour was to check only for `image_b64` and, if absent, blame
+    the CloudNode version — even when the real cause was an FFmpeg crash,
+    a dead HLS pipeline, or disk-full. That's the bug this helper fixes:
+    any `status == "error"` is surfaced verbatim, and the couple of
+    common cases get a friendlier hint."""
+    if result.get("status") == "error":
+        err = (result.get("error") or "").strip()
+        err_lower = err.lower()
+        # Pipeline-is-dead patterns the CloudNode actually sends today
+        # (see cmd_take_snapshot in CloudNode's websocket.rs).
+        if "no segments" in err_lower or "error opening input" in err_lower:
+            raise ToolError(
+                f"Camera '{camera_id}' has no active video stream. The CloudNode "
+                f"is online but isn't producing HLS segments right now — common "
+                f"causes are a dead FFmpeg worker, a full disk on the node, or "
+                f"the camera being unplugged. Check the CloudNode dashboard for "
+                f"the underlying error, then restart the node if needed."
+            )
+        if "ffmpeg" in err_lower:
+            raise ToolError(
+                f"Camera '{camera_id}' snapshot failed inside FFmpeg on the "
+                f"CloudNode: {err or 'no detail provided'}. The video pipeline "
+                f"may need to be restarted on the node."
+            )
+        # Fallback: just pass the node's message through.
+        raise ToolError(
+            f"Snapshot failed on the CloudNode: {err or 'unspecified failure'}"
+        )
+
+    image_b64 = (
+        result.get("data", {}).get("image_b64") or result.get("image_b64")
+    )
+    if not image_b64:
+        # Truly unknown response shape — most likely an old CloudNode
+        # that pre-dates both the `{status, data}` envelope and image_b64.
+        raise ToolError(
+            "Camera node did not return image data — update CloudNode to latest version"
+        )
+    return image_b64
+
+
 async def _capture_snapshot_bytes(
     org_id: str, camera_id: str
 ) -> tuple[bytes, str]:
@@ -923,10 +973,7 @@ async def _capture_snapshot_bytes(
     except ValueError as e:
         raise ToolError(str(e))
 
-    image_b64 = result.get("data", {}).get("image_b64") or result.get("image_b64")
-    if not image_b64:
-        raise ToolError("Camera node did not return image data")
-
+    image_b64 = _extract_snapshot_image_b64(result, camera_id)
     return base64.b64decode(image_b64), node_id
 
 
