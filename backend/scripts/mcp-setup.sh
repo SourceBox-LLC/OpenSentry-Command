@@ -114,6 +114,13 @@ if [[ "$DETECTED_COUNT" -eq 0 ]]; then
     echo ""
 fi
 
+# ── Warning: quit target apps ────────────────────────
+
+echo -e "  ${YELLOW}${BOLD}Important:${NC}"
+echo -e "  ${DIM}Quit Claude Code / Claude Desktop / Cursor / Windsurf before continuing.${NC}"
+echo -e "  ${DIM}Running clients may overwrite config changes while the setup is writing.${NC}"
+echo ""
+
 # ── Prompt for Selection ──────────────────────────────
 
 echo -e "  ${BOLD}Which clients would you like to configure?${NC}"
@@ -180,9 +187,13 @@ configure_client() {
         echo -e "    ${DIM}Created directory: $dir${NC}"
     fi
 
-    # Use Python to safely merge JSON
+    # Use Python to safely merge JSON. Exit codes:
+    #   0 = wrote config successfully
+    #   2 = existing file unparseable — we refused to overwrite
+    #   other = I/O or unexpected failure
     $PYTHON - "$config_path" "$SERVER_URL" "$API_KEY" << 'PYEOF'
 import json
+import shutil
 import sys
 import os
 
@@ -190,29 +201,40 @@ config_path = sys.argv[1]
 server_url = sys.argv[2]
 api_key = sys.argv[3]
 
-# Read existing config
+# Read existing config. If the file exists and is non-empty but unparseable,
+# ABORT instead of starting fresh — losing an existing .claude.json full of
+# session state is catastrophic.
 config = {}
 if os.path.isfile(config_path):
     try:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             content = f.read().strip()
-            if content:
-                config = json.loads(content)
-    except (json.JSONDecodeError, IOError):
-        # Back up corrupted file
-        backup = config_path + ".bak"
-        try:
-            os.rename(config_path, backup)
-            print(f"    Backed up existing config to {backup}")
-        except IOError:
-            pass
-        config = {}
+        if content:
+            config = json.loads(content)
+    except json.JSONDecodeError as e:
+        print(f"    Could not parse {config_path} as JSON.", file=sys.stderr)
+        print(f"    Error: {e}", file=sys.stderr)
+        print("    Skipping this client to avoid overwriting your existing data.", file=sys.stderr)
+        print("    Fix the file manually (or delete it) and re-run.", file=sys.stderr)
+        sys.exit(2)
+    except OSError as e:
+        print(f"    Failed to read {config_path}: {e}", file=sys.stderr)
+        sys.exit(3)
 
-# Ensure mcpServers exists
-if "mcpServers" not in config:
+# Always back up the pre-existing config before we write anything.
+if os.path.isfile(config_path):
+    backup = config_path + ".bak"
+    try:
+        shutil.copy(config_path, backup)
+        print(f"    Backed up existing config to {backup}")
+    except OSError as e:
+        print(f"    Warning: could not create backup at {backup}: {e}", file=sys.stderr)
+
+# Ensure mcpServers exists (preserving any other entries already there).
+if not isinstance(config.get("mcpServers"), dict):
     config["mcpServers"] = {}
 
-# Add/update OpenSentry entry
+# Add/update OpenSentry entry.
 config["mcpServers"]["opensentry"] = {
     "type": "http",
     "url": server_url,
@@ -221,18 +243,35 @@ config["mcpServers"]["opensentry"] = {
     }
 }
 
-# Write back
-with open(config_path, "w") as f:
-    json.dump(config, f, indent=2)
-    f.write("\n")
+# Write back atomically — write to a tempfile in the same dir, then rename.
+# Avoids the "half-written config on crash" failure mode.
+import tempfile
+dir_ = os.path.dirname(config_path) or "."
+fd, tmp = tempfile.mkstemp(prefix=".mcp-setup-", suffix=".json", dir=dir_)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, config_path)
+except Exception as e:
+    try:
+        os.unlink(tmp)
+    except OSError:
+        pass
+    print(f"    Failed to write {config_path}: {e}", file=sys.stderr)
+    sys.exit(4)
 
 print("    OK")
 PYEOF
+    rc=$?
 
-    if [[ $? -eq 0 ]]; then
+    if [[ $rc -eq 0 ]]; then
         echo -e "    ${GREEN}Done${NC} ${DIM}→ $config_path${NC}"
+    elif [[ $rc -eq 2 ]]; then
+        # Parse-failure abort message is already on stderr above — just note the skip.
+        echo -e "    ${YELLOW}Skipped $name (existing config not valid JSON).${NC}"
     else
-        echo -e "    ${RED}Failed to configure $name${NC}"
+        echo -e "    ${RED}Failed to configure $name (exit $rc)${NC}"
     fi
     echo ""
 }
@@ -246,6 +285,7 @@ done
 echo -e "  ${GREEN}${BOLD}Setup Complete${NC}"
 echo ""
 echo -e "  ${DIM}Your AI tools can now access your OpenSentry cameras.${NC}"
+echo -e "  ${DIM}Restart the clients you configured so they pick up the new MCP server.${NC}"
 echo -e "  ${DIM}Try asking: \"List my cameras\" or \"Show me what the front door sees\"${NC}"
 echo ""
 echo -e "  ${DIM}Manage your MCP keys at:${NC}"

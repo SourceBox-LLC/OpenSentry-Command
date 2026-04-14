@@ -1,8 +1,8 @@
-# ─────────────────────────────────────────────────────
+# -----------------------------------------------------
 # OpenSentry MCP Client Setup (Windows)
 # Automatically configure AI tools to connect to your
 # OpenSentry cameras via the Model Context Protocol.
-# ─────────────────────────────────────────────────────
+# -----------------------------------------------------
 
 param(
     [Parameter(Position=0)]
@@ -24,14 +24,41 @@ if (-not $ApiKey -or -not $ServerUrl) {
     exit 1
 }
 
-# ── Header ────────────────────────────────────────────
+# -- Header --------------------------------------------
 
 Write-Host ""
 Write-Host "  OpenSentry MCP Setup" -ForegroundColor Green
 Write-Host "  Configure AI tools to connect to your cameras" -ForegroundColor DarkGray
 Write-Host ""
 
-# ── Detect MCP Clients ────────────────────────────────
+# -- Helpers -------------------------------------------
+
+# Recursively convert ConvertFrom-Json output (PSCustomObject / arrays /
+# primitives) into hashtables/arrays we can mutate. Works on PowerShell 5.1+ --
+# we deliberately DON'T use ConvertFrom-Json -AsHashtable because that flag was
+# only added in PowerShell 6.0 and silently throws on 5.1.
+function ConvertTo-OscHashtable($obj) {
+    if ($null -eq $obj) { return $null }
+    if ($obj -is [System.Collections.IDictionary]) {
+        $h = [ordered]@{}
+        foreach ($k in $obj.Keys) { $h[$k] = ConvertTo-OscHashtable $obj[$k] }
+        return $h
+    }
+    if ($obj -is [pscustomobject]) {
+        $h = [ordered]@{}
+        foreach ($p in $obj.PSObject.Properties) {
+            $h[$p.Name] = ConvertTo-OscHashtable $p.Value
+        }
+        return $h
+    }
+    # Arrays -- but NOT strings, which PS treats as char-iterable.
+    if ($obj -is [System.Collections.IEnumerable] -and -not ($obj -is [string])) {
+        return @($obj | ForEach-Object { ConvertTo-OscHashtable $_ })
+    }
+    return $obj
+}
+
+# -- Detect MCP Clients --------------------------------
 
 $clients = @()
 
@@ -71,7 +98,7 @@ $clients += @{
     Detected = $windsurfDetected
 }
 
-# ── Display Detected Clients ─────────────────────────
+# -- Display Detected Clients -------------------------
 
 Write-Host "  MCP Clients:" -ForegroundColor White
 Write-Host ""
@@ -102,7 +129,14 @@ if ($detectedCount -eq 0) {
     Write-Host ""
 }
 
-# ── Prompt for Selection ──────────────────────────────
+# -- Warning: quit target apps ------------------------
+
+Write-Host "  Important:" -ForegroundColor Yellow
+Write-Host "  Quit Claude Code / Claude Desktop / Cursor / Windsurf before continuing." -ForegroundColor DarkGray
+Write-Host "  Running clients may overwrite config changes while the setup is writing." -ForegroundColor DarkGray
+Write-Host ""
+
+# -- Prompt for Selection ------------------------------
 
 Write-Host "  Which clients would you like to configure?" -ForegroundColor White
 Write-Host "  Enter numbers separated by commas (e.g. 1,3), 'all' for all detected, or 'q' to quit" -ForegroundColor DarkGray
@@ -151,7 +185,7 @@ if ($selected.Count -eq 0) {
 
 Write-Host ""
 
-# ── Configure Selected Clients ────────────────────────
+# -- Configure Selected Clients ------------------------
 
 function Configure-Client {
     param(
@@ -168,46 +202,75 @@ function Configure-Client {
         Write-Host "    Created directory: $dir" -ForegroundColor DarkGray
     }
 
-    # Read existing config
-    $config = @{}
+    # Read + parse existing config. If the file exists and is non-empty but
+    # unparseable, we ABORT rather than clobber -- losing an existing
+    # .claude.json full of session state is catastrophic.
+    $config = $null
     if (Test-Path $ConfigPath) {
+        $content = $null
         try {
             $content = Get-Content $ConfigPath -Raw -ErrorAction Stop
-            if ($content.Trim()) {
-                $config = $content | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-            }
         } catch {
-            # Back up corrupted file
-            $backup = "$ConfigPath.bak"
-            try {
-                Copy-Item $ConfigPath $backup -Force
-                Write-Host "    Backed up existing config to $backup" -ForegroundColor DarkGray
-            } catch {}
-            $config = @{}
+            Write-Host "    Failed to read $ConfigPath : $_" -ForegroundColor Red
+            Write-Host "    Skipping $Name -- your file was not modified." -ForegroundColor Yellow
+            Write-Host ""
+            return
         }
+
+        if ($content -and $content.Trim()) {
+            try {
+                $parsed = $content | ConvertFrom-Json -ErrorAction Stop
+                $config = ConvertTo-OscHashtable $parsed
+            } catch {
+                Write-Host "    Could not parse $ConfigPath as JSON." -ForegroundColor Red
+                Write-Host "    Error: $($_.Exception.Message)" -ForegroundColor DarkGray
+                Write-Host "    Skipping $Name to avoid overwriting your existing data." -ForegroundColor Yellow
+                Write-Host "    Fix the file manually (or delete it) and re-run." -ForegroundColor DarkGray
+                Write-Host ""
+                return
+            }
+        } else {
+            $config = [ordered]@{}
+        }
+    } else {
+        $config = [ordered]@{}
     }
 
-    # Ensure mcpServers exists
-    if (-not $config.ContainsKey("mcpServers")) {
-        $config["mcpServers"] = @{}
+    # Ensure mcpServers exists (preserving any other entries already there).
+    if (-not $config.Contains("mcpServers") -or $null -eq $config["mcpServers"]) {
+        $config["mcpServers"] = [ordered]@{}
     }
 
-    # Add/update OpenSentry entry
-    $config["mcpServers"]["opensentry"] = @{
+    # Add/update OpenSentry entry.
+    $config["mcpServers"]["opensentry"] = [ordered]@{
         type = "http"
         url = $ServerUrl
-        headers = @{
+        headers = [ordered]@{
             Authorization = "Bearer $ApiKey"
         }
     }
 
-    # Write back
+    # ALWAYS back up the file before we overwrite it -- even when parsing
+    # succeeded, because a disk write can fail halfway through.
+    if (Test-Path $ConfigPath) {
+        $backup = "$ConfigPath.bak"
+        try {
+            Copy-Item $ConfigPath $backup -Force
+            Write-Host "    Backed up existing config to $backup" -ForegroundColor DarkGray
+        } catch {
+            Write-Host "    Warning: could not create backup at $backup : $_" -ForegroundColor Yellow
+        }
+    }
+
+    # Write back. Use -Depth 100 -- Claude Code configs contain deeply nested
+    # project state that truncates silently at the default depth of 2.
     try {
-        $json = $config | ConvertTo-Json -Depth 10
-        Set-Content -Path $ConfigPath -Value $json -Encoding UTF8
+        $json = $config | ConvertTo-Json -Depth 100
+        Set-Content -Path $ConfigPath -Value $json -Encoding UTF8 -ErrorAction Stop
         Write-Host "    Done -> $ConfigPath" -ForegroundColor Green
     } catch {
         Write-Host "    Failed to configure $Name : $_" -ForegroundColor Red
+        Write-Host "    Your backup is at $ConfigPath.bak" -ForegroundColor DarkGray
     }
 
     Write-Host ""
@@ -218,11 +281,12 @@ foreach ($idx in $selected) {
     Configure-Client -Name $c.Name -ConfigPath $c.Path
 }
 
-# ── Summary ───────────────────────────────────────────
+# -- Summary -------------------------------------------
 
 Write-Host "  Setup Complete" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Your AI tools can now access your OpenSentry cameras." -ForegroundColor DarkGray
+Write-Host "  Restart the clients you configured so they pick up the new MCP server." -ForegroundColor DarkGray
 Write-Host "  Try asking: `"List my cameras`" or `"Show me what the front door sees`"" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Manage your MCP keys at:" -ForegroundColor DarkGray
