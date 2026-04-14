@@ -119,7 +119,13 @@ fi
 echo -e "  ${BOLD}Which clients would you like to configure?${NC}"
 echo -e "  ${DIM}Enter numbers separated by commas (e.g. 1,3), 'all' for all detected, or 'q' to quit${NC}"
 echo ""
-read -rp "  > " SELECTION
+# Read from the terminal, not stdin — stdin is the piped script when run via
+# `curl ... | bash -s --`, so a plain `read` would immediately hit EOF.
+if [[ -t 0 ]]; then
+    read -rp "  > " SELECTION
+else
+    read -rp "  > " SELECTION </dev/tty
+fi
 
 if [[ "$SELECTION" == "q" || "$SELECTION" == "Q" ]]; then
     echo -e "\n  ${DIM}Setup cancelled.${NC}\n"

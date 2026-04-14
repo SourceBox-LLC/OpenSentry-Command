@@ -16,6 +16,7 @@ const AdminPage = lazy(() => import("./pages/AdminPage.jsx"))
 const TestHlsPage = lazy(() => import("./pages/TestHlsPage.jsx"))
 const PricingPage = lazy(() => import("./pages/PricingPage.jsx"))
 const McpPage = lazy(() => import("./pages/McpPage.jsx"))
+const SentinelPage = lazy(() => import("./pages/SentinelPage.jsx"))
 const LegalPage = lazy(() => import("./pages/LegalPage.jsx"))
 
 function RequireOrg({ children }) {
@@ -95,6 +96,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/sentinel" element={<SentinelPage />} />
           <Route path="/legal/:page" element={<LegalPage />} />
         </Route>
 

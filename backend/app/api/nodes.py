@@ -1,38 +1,20 @@
 import hashlib
 import logging
-import time
 import uuid as uuid_mod
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core.audit import audit_label, write_audit
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_display_name
-from app.mcp.activity import McpEvent, tracker
 from app.models.models import CameraNode, Camera
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
-
-
-def _log_key_event(
-    org_id: str, tool_name: str, key_name: str, user: AuthUser,
-):
-    """Log a key management event to the MCP activity tracker."""
-    admin_label = user.email or user.username or user.user_id[:12]
-    tracker.log_event(McpEvent(
-        id=str(uuid_mod.uuid4()),
-        timestamp=time.time(),
-        tool_name=tool_name,
-        org_id=org_id,
-        key_name=key_name,
-        status="completed",
-        duration_ms=None,
-        args_summary=f"by {admin_label}",
-    ))
 
 
 @router.post("/validate")
@@ -46,7 +28,7 @@ async def validate_node(
     Called by the CloudNode setup wizard before saving configuration.
     Returns the node name on success so the wizard can confirm the right node.
     """
-    api_key = request.headers.get("X-API-Key")
+    api_key = request.headers.get("X-Node-API-Key")
     if not api_key:
         raise HTTPException(status_code=401, detail="API key required")
 
@@ -78,9 +60,7 @@ async def register_node(
     db: Session = Depends(get_db),
 ):
     logger.info("Registration attempt from node_id=%s", data.node_id)
-    api_key = request.headers.get("X-API-Key") or request.headers.get(
-        "Authorization", ""
-    ).replace("Bearer ", "")
+    api_key = request.headers.get("X-Node-API-Key")
 
     logger.debug("API key present: %s", bool(api_key))
 
@@ -205,15 +185,14 @@ async def register_node(
 
 
 @router.post("/heartbeat")
+@limiter.limit("60/minute")
 async def node_heartbeat(
     request: Request,
     data: NodeHeartbeat,
     db: Session = Depends(get_db),
 ):
     logger.debug("Heartbeat received from node_id=%s", data.node_id)
-    api_key = request.headers.get("X-API-Key") or request.headers.get(
-        "Authorization", ""
-    ).replace("Bearer ", "")
+    api_key = request.headers.get("X-Node-API-Key")
 
     if not api_key:
         logger.warning("Heartbeat rejected: no API key provided for node %s", data.node_id)
@@ -288,6 +267,7 @@ async def get_plan_info(
 
 @router.post("")
 async def create_node(
+    request: Request,
     data: NodeCreate,
     user: AuthUser = Depends(require_active_billing),
     db: Session = Depends(get_db),
@@ -318,7 +298,15 @@ async def create_node(
 
     logger.info("Node created: node_id=%s, name=%s, org=%s", node_id, node.name, user.org_id)
 
-    _log_key_event(user.org_id, "node_key_created", node.name, user)
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="node_created",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"node_id": node_id, "name": node.name},
+        request=request,
+    )
 
     return {
         "success": True,
@@ -360,6 +348,7 @@ async def get_node(
 @router.delete("/{node_id}")
 async def delete_node(
     node_id: str,
+    request: Request,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -390,7 +379,15 @@ async def delete_node(
     db.delete(node)
     db.commit()
 
-    _log_key_event(user.org_id, "node_deleted", node_name, user)
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="node_deleted",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"node_id": node_id, "name": node_name, "node_wiped": node_wiped},
+        request=request,
+    )
 
     return {"success": True, "deleted": node_id, "node_wiped": node_wiped}
 
@@ -417,7 +414,15 @@ async def rotate_api_key(
     node.key_rotated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
     db.commit()
 
-    _log_key_event(user.org_id, "node_key_rotated", node.name, user)
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="node_key_rotated",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"node_id": node_id, "name": node.name},
+        request=request,
+    )
 
     return {
         "success": True,

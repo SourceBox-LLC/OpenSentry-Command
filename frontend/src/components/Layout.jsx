@@ -2,6 +2,7 @@ import { Outlet, Link, useLocation } from "react-router-dom"
 import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization } from "@clerk/clerk-react"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import ToastContainer from "./ToastContainer.jsx"
+import NotificationBell from "./NotificationBell.jsx"
 
 function Layout() {
   const { organization, isLoaded: orgLoaded, membership } = useOrganization()
@@ -70,10 +71,15 @@ function Layout() {
                     <Link to="/mcp" className={isActive("/mcp")}>
                       MCP
                     </Link>
+                    <Link to="/sentinel" className={isActive("/sentinel")}>
+                      Sentinel
+                      <span className="nav-soon-badge">SOON</span>
+                    </Link>
                     <Link to="/pricing" className={isActive("/pricing")}>
                       Pricing
                     </Link>
                   </nav>
+                  <NotificationBell />
                 </>
               )}
               <UserButton />

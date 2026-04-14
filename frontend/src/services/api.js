@@ -150,9 +150,14 @@ export async function getMcpKeys(getToken) {
   return fetchWithAuth("/api/mcp/keys", getToken)
 }
 
-export async function createMcpKey(getToken, name) {
-  return fetchWithAuth(`/api/mcp/keys?name=${encodeURIComponent(name)}`, getToken, {
-    method: "POST"
+export async function createMcpKey(getToken, { name, scopeMode = "all", scopeTools = null } = {}) {
+  const body = { name, scope_mode: scopeMode }
+  if (scopeMode === "custom") {
+    body.scope_tools = Array.isArray(scopeTools) ? scopeTools : []
+  }
+  return fetchWithAuth(`/api/mcp/keys`, getToken, {
+    method: "POST",
+    body: JSON.stringify(body)
   })
 }
 
@@ -160,6 +165,10 @@ export async function revokeMcpKey(getToken, keyId) {
   return fetchWithAuth(`/api/mcp/keys/${keyId}`, getToken, {
     method: "DELETE"
   })
+}
+
+export async function getMcpToolCatalog(getToken) {
+  return fetchWithAuth(`/api/mcp/tools`, getToken)
 }
 
 // MCP Activity
@@ -239,4 +248,24 @@ export async function fetchIncidentEvidenceBlobUrl(getToken, incidentId, evidenc
 // live HlsPlayer.
 export function incidentEvidencePlaylistUrl(incidentId, evidenceId) {
   return `${API_URL}/api/incidents/${incidentId}/evidence/${evidenceId}/playlist.m3u8`
+}
+
+// ── Notifications (bell inbox) ─────────────────────────────────────
+
+export async function getNotifications(getToken, params = {}) {
+  const queryString = new URLSearchParams(
+    Object.entries(params).filter(([_, v]) => v != null && v !== "")
+  ).toString()
+  const suffix = queryString ? `?${queryString}` : ""
+  return fetchWithAuth(`/api/notifications${suffix}`, getToken)
+}
+
+export async function getUnreadNotificationCount(getToken) {
+  return fetchWithAuth("/api/notifications/unread-count", getToken)
+}
+
+export async function markNotificationsViewed(getToken) {
+  return fetchWithAuth("/api/notifications/mark-viewed", getToken, {
+    method: "POST",
+  })
 }

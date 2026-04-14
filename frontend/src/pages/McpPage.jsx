@@ -3,7 +3,7 @@ import { useAuth, useOrganization } from "@clerk/clerk-react"
 import {
   getMcpKeys, createMcpKey, revokeMcpKey,
   getMcpActivity, getMcpSessions, getMcpStats,
-  getIncidents, getIncidentCounts,
+  getIncidents, getIncidentCounts, getMcpToolCatalog,
 } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
@@ -95,6 +95,12 @@ function McpPage() {
   const [revoking, setRevoking] = useState(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
 
+  // Per-key tool scoping — "all" | "readonly" | "custom"
+  const [scopeMode, setScopeMode] = useState("all")
+  const [scopeTools, setScopeTools] = useState([])
+  const [toolCatalog, setToolCatalog] = useState(null)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+
   // Connection config
   const [setupOs, setSetupOs] = useState(() => {
     const ua = navigator.userAgent.toLowerCase()
@@ -103,6 +109,9 @@ function McpPage() {
     return "linux"
   })
   const [configTab, setConfigTab] = useState("auto")
+  // Lets returning users paste a saved key so commands/configs render with
+  // real credentials instead of the `osc_your_key_here` placeholder.
+  const [pastedKey, setPastedKey] = useState("")
 
   // Load initial activity data + start polling
   useEffect(() => {
@@ -269,14 +278,60 @@ function McpPage() {
     }
   }
 
+  const loadToolCatalog = async () => {
+    if (toolCatalog || catalogLoading) return
+    setCatalogLoading(true)
+    try {
+      const token = await getToken()
+      const data = await getMcpToolCatalog(() => Promise.resolve(token))
+      setToolCatalog(data)
+    } catch (err) {
+      console.error("Failed to load tool catalog:", err)
+      showToast("Failed to load tool list", "error")
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
+  const handleScopeModeChange = (mode) => {
+    setScopeMode(mode)
+    if (mode === "custom") {
+      loadToolCatalog()
+      // Seed custom selection with read tools when switching in with an empty set —
+      // gives users a sensible starting point without forcing click-everything.
+      if (scopeTools.length === 0 && toolCatalog) {
+        setScopeTools(toolCatalog.read.map((t) => t.name))
+      }
+    }
+  }
+
+  const toggleScopeTool = (name) => {
+    setScopeTools((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    )
+  }
+
   const handleCreate = async () => {
     if (!newKeyName.trim()) return
+    if (scopeMode === "custom" && scopeTools.length === 0) {
+      showToast("Select at least one tool for custom scope", "error")
+      return
+    }
     setCreating(true)
     try {
       const token = await getToken()
-      const data = await createMcpKey(() => Promise.resolve(token), newKeyName.trim())
+      const data = await createMcpKey(
+        () => Promise.resolve(token),
+        {
+          name: newKeyName.trim(),
+          scopeMode,
+          scopeTools: scopeMode === "custom" ? scopeTools : null,
+        }
+      )
       setCreatedKey(data.key)
       setNewKeyName("")
+      setScopeMode("all")
+      setScopeTools([])
       await loadKeys()
       showToast("MCP API key created", "success")
     } catch (err) {
@@ -311,7 +366,12 @@ function McpPage() {
     }
   }
 
-  const activeKey = createdKey || "osc_your_key_here"
+  // Priority: just-created key → user-pasted key → placeholder. The placeholder
+  // only renders when the user hasn't offered anything — we warn them about it
+  // in the UI so they don't copy a dead command.
+  const trimmedPasted = pastedKey.trim()
+  const activeKey = createdKey || trimmedPasted || "osc_your_key_here"
+  const hasRealKey = Boolean(createdKey || trimmedPasted)
   const base = window.location.origin
 
   // Per-client config generators
@@ -339,8 +399,11 @@ function McpPage() {
     },
   }
 
+  // Windows: `iex -Args` is invalid (Invoke-Expression has no -Args parameter).
+  // The scriptblock::Create pattern is the correct way to pipe-and-parameterize
+  // a remote PowerShell script, and it matches what the script's param() expects.
   const autoSetupCmd = setupOs === "windows"
-    ? `irm ${base}/mcp-setup.ps1 | iex -Args '${activeKey}','${MCP_URL}'`
+    ? `& ([scriptblock]::Create((irm ${base}/mcp-setup.ps1))) '${activeKey}' '${MCP_URL}'`
     : `curl -fsSL ${base}/mcp-setup.sh | bash -s -- ${activeKey} ${MCP_URL}`
 
   const isPro = planInfo?.features?.includes("admin")
@@ -648,31 +711,155 @@ function McpPage() {
                   placeholder="Key name (e.g. 'Claude Code')"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  onKeyDown={(e) => e.key === "Enter" && scopeMode !== "custom" && handleCreate()}
                   className="mcp-key-input"
                 />
-                <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !newKeyName.trim()}>
+                <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !newKeyName.trim() || (scopeMode === "custom" && scopeTools.length === 0)}>
                   {creating ? "Creating..." : "Generate Key"}
                 </button>
+              </div>
+              <div className="mcp-scope-picker">
+                <div className="mcp-scope-picker-header">
+                  <span className="mcp-scope-picker-label">Tool access</span>
+                  <span className="mcp-scope-picker-help">Limit which MCP tools this key can call.</span>
+                </div>
+                <div className="mcp-scope-options">
+                  <label className={`mcp-scope-option ${scopeMode === "all" ? "active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="scope-mode"
+                      value="all"
+                      checked={scopeMode === "all"}
+                      onChange={() => handleScopeModeChange("all")}
+                    />
+                    <div className="mcp-scope-option-content">
+                      <span className="mcp-scope-option-title">All tools</span>
+                      <span className="mcp-scope-option-desc">Full access — reads and writes.</span>
+                    </div>
+                  </label>
+                  <label className={`mcp-scope-option ${scopeMode === "readonly" ? "active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="scope-mode"
+                      value="readonly"
+                      checked={scopeMode === "readonly"}
+                      onChange={() => handleScopeModeChange("readonly")}
+                    />
+                    <div className="mcp-scope-option-content">
+                      <span className="mcp-scope-option-title">Read-only</span>
+                      <span className="mcp-scope-option-desc">Agent can look but can't modify incidents.</span>
+                    </div>
+                  </label>
+                  <label className={`mcp-scope-option ${scopeMode === "custom" ? "active" : ""}`}>
+                    <input
+                      type="radio"
+                      name="scope-mode"
+                      value="custom"
+                      checked={scopeMode === "custom"}
+                      onChange={() => handleScopeModeChange("custom")}
+                    />
+                    <div className="mcp-scope-option-content">
+                      <span className="mcp-scope-option-title">Custom</span>
+                      <span className="mcp-scope-option-desc">Pick exactly which tools this key may use.</span>
+                    </div>
+                  </label>
+                </div>
+                {scopeMode === "custom" && (
+                  <div className="mcp-scope-custom">
+                    {catalogLoading && <div className="loading-spinner" />}
+                    {!catalogLoading && toolCatalog && (
+                      <>
+                        {[
+                          { key: "read", label: "Read tools", group: toolCatalog.read },
+                          { key: "write", label: "Write tools", group: toolCatalog.write },
+                        ].map(({ key, label, group }) => {
+                          const allNames = group.map((t) => t.name)
+                          const allChecked = allNames.every((n) => scopeTools.includes(n))
+                          const someChecked = allNames.some((n) => scopeTools.includes(n))
+                          const toggleGroup = () => {
+                            setScopeTools((prev) => {
+                              if (allChecked) return prev.filter((n) => !allNames.includes(n))
+                              return [...new Set([...prev, ...allNames])]
+                            })
+                          }
+                          return (
+                            <div key={key} className="mcp-scope-group">
+                              <div className="mcp-scope-group-header">
+                                <label className="mcp-scope-group-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={allChecked}
+                                    ref={(el) => { if (el) el.indeterminate = !allChecked && someChecked }}
+                                    onChange={toggleGroup}
+                                  />
+                                  <span className="mcp-scope-group-label">{label}</span>
+                                  <span className="mcp-scope-group-count">
+                                    {group.filter((t) => scopeTools.includes(t.name)).length} / {group.length}
+                                  </span>
+                                </label>
+                              </div>
+                              <div className="mcp-scope-tool-grid">
+                                {group.map((tool) => (
+                                  <label key={tool.name} className={`mcp-scope-tool ${scopeTools.includes(tool.name) ? "active" : ""}`}>
+                                    <input
+                                      type="checkbox"
+                                      checked={scopeTools.includes(tool.name)}
+                                      onChange={() => toggleScopeTool(tool.name)}
+                                    />
+                                    <div className="mcp-scope-tool-body">
+                                      <code className="mcp-scope-tool-name">{tool.name}</code>
+                                      {tool.description && (
+                                        <span className="mcp-scope-tool-desc">
+                                          {tool.description.split("\n")[0].slice(0, 100)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          )
+                        })}
+                        <div className="mcp-scope-summary">
+                          <strong>{scopeTools.length}</strong> of {toolCatalog.total} tools selected
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
               {keysLoading ? (
                 <div className="loading-spinner" />
               ) : keys.length > 0 ? (
                 <div className="mcp-keys-list">
-                  {keys.map((k) => (
-                    <div key={k.id} className="mcp-key-item">
-                      <div className="mcp-key-info">
-                        <span className="mcp-key-name">{k.name}</span>
-                        <span className="mcp-key-meta">
-                          Created {new Date(k.created_at).toLocaleDateString()}
-                          {k.last_used_at && <> — Last used {new Date(k.last_used_at).toLocaleDateString()}</>}
-                        </span>
+                  {keys.map((k) => {
+                    const mode = k.scope_mode || "all"
+                    const toolCount = Array.isArray(k.scope_tools) ? k.scope_tools.length : 0
+                    const badgeText = mode === "all"
+                      ? "All tools"
+                      : mode === "readonly"
+                        ? "Read-only"
+                        : `${toolCount} tool${toolCount === 1 ? "" : "s"}`
+                    return (
+                      <div key={k.id} className="mcp-key-item">
+                        <div className="mcp-key-info">
+                          <div className="mcp-key-name-row">
+                            <span className="mcp-key-name">{k.name}</span>
+                            <span className={`mcp-scope-badge mcp-scope-badge-${mode}`} title={mode === "custom" ? k.scope_tools?.join(", ") : undefined}>
+                              {badgeText}
+                            </span>
+                          </div>
+                          <span className="mcp-key-meta">
+                            Created {new Date(k.created_at).toLocaleDateString()}
+                            {k.last_used_at && <> — Last used {new Date(k.last_used_at).toLocaleDateString()}</>}
+                          </span>
+                        </div>
+                        <button className="btn btn-small btn-danger" onClick={() => handleRevoke(k.id)} disabled={revoking === k.id}>
+                          {revoking === k.id ? "Revoking..." : "Revoke"}
+                        </button>
                       </div>
-                      <button className="btn btn-small btn-danger" onClick={() => handleRevoke(k.id)} disabled={revoking === k.id}>
-                        {revoking === k.id ? "Revoking..." : "Revoke"}
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="text-muted mcp-no-keys">No API keys yet. Generate one above to get started.</p>
@@ -710,6 +897,36 @@ function McpPage() {
                   </button>
                 ))}
               </div>
+
+              {/* Active key banner — lets returning users paste their saved
+                  key so every command and config below renders with real
+                  credentials instead of the osc_your_key_here placeholder. */}
+              {!createdKey && (
+                <div className={`mcp-active-key ${hasRealKey ? "mcp-active-key-filled" : "mcp-active-key-empty"}`}>
+                  <div className="mcp-active-key-header">
+                    <span className="mcp-active-key-icon">{hasRealKey ? "✓" : "⚠"}</span>
+                    <div>
+                      <strong>
+                        {hasRealKey ? "Using the key below in all commands" : "Paste a saved API key"}
+                      </strong>
+                      <p className="mcp-active-key-hint">
+                        {hasRealKey
+                          ? "Clear the field to revert to the placeholder. Keys are used locally only — never sent anywhere."
+                          : "The commands below show a placeholder. Generate a key above, or paste an existing one to bake it into the copyable commands."}
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    className="mcp-active-key-input"
+                    placeholder="osc_..."
+                    value={pastedKey}
+                    onChange={(e) => setPastedKey(e.target.value)}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </div>
+              )}
 
               {/* Auto Setup */}
               {configTab === "auto" && (

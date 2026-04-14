@@ -19,7 +19,6 @@ from sqlalchemy.orm import sessionmaker
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ.setdefault("CLERK_SECRET_KEY", "sk_test_fake")
 os.environ.setdefault("CLERK_PUBLISHABLE_KEY", "pk_test_fake")
-os.environ.setdefault("CLERK_JWKS_URL", "https://fake.clerk.accounts.dev/.well-known/jwks.json")
 
 from app.core.auth import AuthUser
 from app.core.database import Base, engine, get_db

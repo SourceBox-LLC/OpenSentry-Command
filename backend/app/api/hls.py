@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.config import settings
 from app.core.auth import get_current_user
+from app.core.limiter import limiter
 from app.models import Camera, CameraNode, StreamAccessLog
 
 router = APIRouter(prefix="/api/cameras/{camera_id}", tags=["streaming"])
@@ -246,6 +247,7 @@ async def get_hls_segment(
 
 
 @router.post("/push-segment")
+@limiter.limit("1200/minute")
 async def push_segment(
     request: Request,
     camera_id: str,
@@ -265,7 +267,13 @@ async def push_segment(
     if not node:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
+    # Enforce both node ownership AND org match — defense-in-depth so a
+    # future schema drift can't let a node in org A touch a camera in org B.
+    camera = (
+        db.query(Camera)
+        .filter_by(camera_id=camera_id, node_id=node.id, org_id=node.org_id)
+        .first()
+    )
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
@@ -286,6 +294,7 @@ async def push_segment(
 
 
 @router.post("/playlist")
+@limiter.limit("600/minute")
 async def update_hls_playlist(
     request: Request,
     camera_id: str,
@@ -308,7 +317,13 @@ async def update_hls_playlist(
     if not node:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
+    # Enforce both node ownership AND org match — defense-in-depth so a
+    # future schema drift can't let a node in org A touch a camera in org B.
+    camera = (
+        db.query(Camera)
+        .filter_by(camera_id=camera_id, node_id=node.id, org_id=node.org_id)
+        .first()
+    )
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
@@ -337,6 +352,7 @@ async def update_hls_playlist(
 
 
 @router.post("/motion")
+@limiter.limit("120/minute")
 async def push_motion_event(
     request: Request,
     camera_id: str,
@@ -355,7 +371,13 @@ async def push_motion_event(
     if not node:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
+    # Enforce both node ownership AND org match — defense-in-depth so a
+    # future schema drift can't let a node in org A touch a camera in org B.
+    camera = (
+        db.query(Camera)
+        .filter_by(camera_id=camera_id, node_id=node.id, org_id=node.org_id)
+        .first()
+    )
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 

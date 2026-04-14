@@ -22,6 +22,7 @@ from typing import Annotated
 
 from fastmcp import FastMCP
 from fastmcp.server.dependencies import get_http_headers
+from fastmcp.server.middleware.middleware import Middleware
 from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 from pydantic import Field
@@ -48,6 +49,67 @@ logger = logging.getLogger(__name__)
 # Context variables — set by _auth(), read by the tracking decorator
 _ctx_org_id = contextvars.ContextVar("mcp_org_id", default="")
 _ctx_key_name = contextvars.ContextVar("mcp_key_name", default="")
+
+# ---------------------------------------------------------------------------
+# Per-key tool scoping — canonical classification of every MCP tool.
+# A key's scope_mode + scope_tools (on McpApiKey) is evaluated against these
+# sets by ScopeMiddleware below to gate discovery and invocation.
+# Keep in sync with the @mcp.tool() registrations further down.
+# ---------------------------------------------------------------------------
+
+MCP_READ_TOOLS: frozenset[str] = frozenset({
+    # Cameras
+    "list_cameras",
+    "get_camera",
+    "get_stream_url",
+    "view_camera",
+    "watch_camera",
+    "list_camera_groups",
+    # Nodes
+    "list_nodes",
+    "get_node",
+    # System / recording
+    "get_recording_settings",
+    "get_stream_logs",
+    "get_stream_stats",
+    "get_system_status",
+    # Incidents (read side)
+    "list_incidents",
+    "get_incident",
+    "get_incident_snapshot",
+    "get_incident_clip",
+})
+
+MCP_WRITE_TOOLS: frozenset[str] = frozenset({
+    "create_incident",
+    "add_observation",
+    "attach_snapshot",
+    "attach_clip",
+    "update_incident",
+    "finalize_incident",
+})
+
+MCP_ALL_TOOLS: frozenset[str] = MCP_READ_TOOLS | MCP_WRITE_TOOLS
+
+
+def compute_allowed_tools(scope_mode: str | None, scope_tools: list[str] | None) -> frozenset[str]:
+    """Resolve a key's scope config into the concrete allowed-tool set.
+
+    - ``"all"`` (or ``None``) → every tool.
+    - ``"readonly"`` → only tools in ``MCP_READ_TOOLS``.
+    - ``"custom"``  → intersection of ``scope_tools`` with all known tools
+      (unknown names are silently dropped so a disallowed tool can't be
+      enabled by typo or by adding a new WRITE tool server-side).
+    """
+    mode = (scope_mode or "all").lower()
+    if mode == "readonly":
+        return MCP_READ_TOOLS
+    if mode == "custom":
+        if not scope_tools:
+            return frozenset()
+        return frozenset(scope_tools) & MCP_ALL_TOOLS
+    # "all" or unknown → full access
+    return MCP_ALL_TOOLS
 
 # ---------------------------------------------------------------------------
 # Per-key rate limiter — sliding window (calls per minute)
@@ -111,6 +173,79 @@ mcp = FastMCP(
         "to the authenticated organization."
     ),
 )
+
+# ---------------------------------------------------------------------------
+# ScopeMiddleware — per-key tool scoping
+#
+# Resolves the Bearer token to its McpApiKey row and uses compute_allowed_tools
+# to determine which tools the key may see/invoke. Applied to the FastMCP
+# instance via add_middleware below so it runs before tools/list and tools/call.
+#
+# We re-do the lookup on every middleware event (no caching) so scope edits in
+# the dashboard propagate immediately. The extra DB round-trip is cheap; the
+# tool itself will call _auth() again and share the same key_hash, which also
+# bumps last_used_at and enforces the rate limit.
+# ---------------------------------------------------------------------------
+
+class ScopeMiddleware(Middleware):
+    """Filter tools/list and gate tools/call by the caller's key scope."""
+
+    def _lookup_allowed(self) -> frozenset[str] | None:
+        """Return the allowed-tool set for the bearer-token caller.
+
+        Returns ``None`` when there's no usable token or the key doesn't exist —
+        in those cases we defer to the tool's own ``_auth()`` to produce the
+        right error. Never raising from the middleware avoids double-errors.
+        """
+        try:
+            headers = get_http_headers(include={"authorization"})
+        except Exception:
+            return None
+        auth = (headers or {}).get("authorization", "")
+        if not auth.lower().startswith("bearer "):
+            return None
+        raw_key = auth.split(" ", 1)[1].strip()
+        if not raw_key:
+            return None
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+
+        db = SessionLocal()
+        try:
+            mcp_key = (
+                db.query(McpApiKey)
+                .filter_by(key_hash=key_hash, revoked=False)
+                .first()
+            )
+            if not mcp_key:
+                return None
+            return compute_allowed_tools(mcp_key.scope_mode, mcp_key.get_scope_tools())
+        except Exception:
+            logger.exception("ScopeMiddleware: key lookup failed")
+            return None
+        finally:
+            db.close()
+
+    async def on_list_tools(self, context, call_next):
+        tools = await call_next(context)
+        allowed = self._lookup_allowed()
+        if allowed is None:
+            return tools
+        return [t for t in tools if t.name in allowed]
+
+    async def on_call_tool(self, context, call_next):
+        name = getattr(context.message, "name", None)
+        if name:
+            allowed = self._lookup_allowed()
+            if allowed is not None and name not in allowed:
+                raise ToolError(
+                    f"Tool '{name}' is not enabled for this API key. "
+                    "Update the key's scope in the OpenSentry dashboard or use a different key."
+                )
+        return await call_next(context)
+
+
+mcp.add_middleware(ScopeMiddleware())
+
 
 # ---------------------------------------------------------------------------
 # Auth helper — resolve Bearer token to org_id

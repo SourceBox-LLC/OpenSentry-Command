@@ -15,7 +15,8 @@ if (-not $ApiKey -or -not $ServerUrl) {
     Write-Host ""
     Write-Host "  Error: Missing arguments" -ForegroundColor Red
     Write-Host ""
-    Write-Host "  Usage: .\mcp-setup.ps1 <api_key> <server_url>"
+    Write-Host "  Usage (local):  .\mcp-setup.ps1 <api_key> <server_url>"
+    Write-Host "  Usage (remote): & ([scriptblock]::Create((irm <url>/mcp-setup.ps1))) <api_key> <server_url>"
     Write-Host ""
     Write-Host "  Get your command from the OpenSentry MCP dashboard:"
     Write-Host "  https://opensentry-command.fly.dev/mcp" -ForegroundColor Cyan

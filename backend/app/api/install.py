@@ -7,7 +7,11 @@ Serves platform-specific install scripts so users can install with:
 
 MCP client auto-setup:
   Linux/macOS:  curl -fsSL <origin>/mcp-setup.sh | bash -s -- <key> <url>
-  Windows:      irm <origin>/mcp-setup.ps1 | iex -Args <key>,<url>
+  Windows:      & ([scriptblock]::Create((irm <origin>/mcp-setup.ps1))) <key> <url>
+
+  NOTE: ``irm ... | iex -Args ...`` does NOT work — Invoke-Expression has no
+  ``-Args`` parameter, so the arguments never reach the script's param block.
+  Use the scriptblock pattern above instead.
 """
 
 from pathlib import Path

@@ -1,5 +1,5 @@
-from typing import Optional, List
-from pydantic import BaseModel, Field
+from typing import Literal, Optional, List
+from pydantic import BaseModel, Field, field_validator
 
 
 class CameraGroupCreate(BaseModel):
@@ -49,3 +49,33 @@ class NodeHeartbeat(BaseModel):
 
 class NodeCreate(BaseModel):
     name: Optional[str] = Field(None, max_length=100)
+
+
+class McpKeyCreate(BaseModel):
+    """Create an MCP API key with per-key tool scoping.
+
+    scope_mode:
+      - "all"      — key may invoke every MCP tool (default)
+      - "readonly" — key is limited to read-only tools
+      - "custom"   — key is limited to the explicit list in ``scope_tools``
+                     (unknown tool names are rejected by the endpoint)
+    """
+    name: str = Field("Default", max_length=100)
+    scope_mode: Literal["all", "readonly", "custom"] = "all"
+    scope_tools: Optional[List[str]] = None
+
+    @field_validator("scope_tools")
+    @classmethod
+    def _normalize_scope_tools(cls, v):
+        if v is None:
+            return v
+        # Deduplicate + drop empty strings without reordering user intent.
+        seen = set()
+        out: list[str] = []
+        for name in v:
+            name = (name or "").strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            out.append(name)
+        return out

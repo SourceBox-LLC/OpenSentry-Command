@@ -200,15 +200,30 @@ async def node_websocket(
 # ── Heartbeat Handler ─────────────────────────────────────────────────
 
 async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload: dict):
-    """Process a heartbeat message — same logic as the HTTP endpoint."""
+    """Process a heartbeat message — same logic as the HTTP endpoint.
+
+    Also detects node/camera online↔offline transitions by comparing the
+    previous ``status`` column against the incoming value; any change is
+    emitted as a notification AFTER the DB commit so the inbox never
+    shows a transition that later got rolled back.
+    """
     db: Session = SessionLocal()
+
+    # Accumulate transitions during the update pass so we can emit them
+    # post-commit.  Tuple shape: (kind, entity_id, display_name, new_status, node_id|None)
+    transitions: list[tuple[str, str, str, str, Optional[str]]] = []
+
     try:
         node = db.query(CameraNode).filter_by(node_id=node_id).first()
         if not node:
             return
 
+        prev_node_status = node.status
         node.status = "online"
         node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+
+        if prev_node_status != "online":
+            transitions.append(("node", node.node_id, node.name or node.node_id, "online", None))
 
         local_ip = payload.get("local_ip")
         if local_ip:
@@ -227,15 +242,59 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
                 for cam_data in cameras:
                     cam = cam_map.get(cam_data.get("camera_id"))
                     if cam:
-                        cam.status = cam_data.get("status", "online")
+                        prev_cam_status = cam.status
+                        new_cam_status = cam_data.get("status", "online")
+                        cam.status = new_cam_status
                         cam.last_seen = now
+                        if (
+                            prev_cam_status != new_cam_status
+                            and new_cam_status in ("online", "offline")
+                        ):
+                            display = cam.name or cam.camera_id
+                            transitions.append(
+                                ("camera", cam.camera_id, display, new_cam_status, node_id)
+                            )
 
         db.commit()
     except Exception as e:
         logger.error("Heartbeat DB error for node %s: %s", node_id, e)
         db.rollback()
+        return
     finally:
-        db.close()
+        # We leave db open briefly below to reuse for notification writes,
+        # then close in the emit block's finally.
+        pass
+
+    # Emit transitions post-commit — any failure here must not fail the
+    # heartbeat loop.  Reuse the same session for efficiency.
+    if transitions:
+        try:
+            from app.api.notifications import (
+                emit_camera_transition,
+                emit_node_transition,
+            )
+            for kind, eid, name, new_status, cam_node_id in transitions:
+                if kind == "node":
+                    emit_node_transition(
+                        db,
+                        node_id=eid,
+                        org_id=org_id,
+                        display_name=name,
+                        new_status=new_status,
+                    )
+                elif kind == "camera":
+                    emit_camera_transition(
+                        db,
+                        camera_id=eid,
+                        org_id=org_id,
+                        display_name=name,
+                        new_status=new_status,
+                        node_id=cam_node_id,
+                    )
+        except Exception:
+            logger.exception("[Heartbeat] Failed to emit transition notifications")
+
+    db.close()
 
 
 # ── Motion Event Handler ─────────────────────────────────────────────
@@ -274,6 +333,37 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
 
     db: Session = SessionLocal()
     try:
+        # Verify the camera_id in the payload actually belongs to the
+        # authenticated node in the authenticated org.  Without this
+        # check a compromised node could spam its own org's inbox with
+        # motion events referencing camera IDs it doesn't own (or that
+        # don't exist).  Cross-tenant is still blocked because org_id
+        # comes from the auth'd session, not the payload.
+        from app.models.models import Camera as _Camera
+        from app.models.models import CameraNode as _CameraNode
+
+        owning_node = (
+            db.query(_CameraNode)
+            .filter_by(node_id=node_id, org_id=org_id)
+            .first()
+        )
+        if not owning_node:
+            logger.warning(
+                "Motion event rejected: node %s not found in org %s", node_id, org_id,
+            )
+            return
+        cam_row = (
+            db.query(_Camera)
+            .filter_by(camera_id=camera_id, node_id=owning_node.id, org_id=org_id)
+            .first()
+        )
+        if not cam_row:
+            logger.warning(
+                "Motion event rejected: camera %s not owned by node %s (org %s)",
+                camera_id, node_id, org_id,
+            )
+            return
+
         event = MotionEvent(
             org_id=org_id,
             camera_id=camera_id,
@@ -289,7 +379,9 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
             camera_id, score_int, node_id,
         )
 
-        # Broadcast to SSE subscribers (dashboard notifications)
+        # Broadcast to the motion SSE stream so live dashboards show
+        # toasts immediately; the inbox notification below handles the
+        # durable history.
         from app.api.motion import motion_broadcaster
         motion_broadcaster.notify(org_id, {
             "type": "motion",
@@ -298,6 +390,41 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
             "score": score_int,
             "timestamp": ts.isoformat(),
         })
+
+        # Also emit an inbox notification so the user can see motion
+        # history in the bell panel.  Resolve the camera name for a
+        # friendlier title — fall back to the camera_id if not found.
+        try:
+            from app.models.models import Camera
+            from app.api.notifications import create_notification
+
+            cam = (
+                db.query(Camera)
+                .filter_by(camera_id=camera_id, org_id=org_id)
+                .first()
+            )
+            display_name = cam.name if cam and cam.name else camera_id
+
+            create_notification(
+                org_id=org_id,
+                kind="motion",
+                title=f"Motion on {display_name}",
+                body=f"Scene change detected at {score_int}% intensity.",
+                severity="info",
+                audience="all",
+                link=f"/dashboard?camera={camera_id}",
+                camera_id=camera_id,
+                node_id=node_id,
+                meta={
+                    "score": score_int,
+                    "segment_seq": seq,
+                    "event_timestamp": ts.isoformat(),
+                },
+                db=db,
+            )
+        except Exception:
+            # Notification creation must never fail the motion event path.
+            logger.exception("[Motion] Failed to create inbox notification")
     except Exception as e:
         logger.error("Failed to save motion event: %s", e)
         db.rollback()

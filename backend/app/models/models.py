@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     LargeBinary,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -159,7 +160,6 @@ class CameraNode(Base):
     last_seen = Column(DateTime)
     key_rotated_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None))
-    upload_count = Column(Integer, default=0)
     video_codec = Column(String(50), nullable=True)
     audio_codec = Column(String(50), nullable=True)
     codec_detected_at = Column(DateTime, nullable=True)
@@ -235,6 +235,27 @@ class McpApiKey(Base):
     last_used_at = Column(DateTime, nullable=True)
     revoked = Column(Boolean, default=False)
 
+    # Scope configuration — controls which MCP tools this key can invoke.
+    #   scope_mode = "all"       → every tool is allowed (default for existing keys)
+    #   scope_mode = "readonly"  → only read-classified tools (no mutations)
+    #   scope_mode = "custom"    → scope_tools holds a JSON list of allowed tool names
+    # A NULL scope_mode behaves like "all" so legacy rows keep working.
+    scope_mode = Column(String(20), nullable=True, default="all")
+    scope_tools = Column(Text, nullable=True)
+
+    def get_scope_tools(self) -> list[str]:
+        """Return the parsed scope_tools list, or [] if unset/invalid."""
+        if not self.scope_tools:
+            return []
+        import json
+        try:
+            val = json.loads(self.scope_tools)
+            if isinstance(val, list):
+                return [str(v) for v in val]
+        except (ValueError, TypeError):
+            pass
+        return []
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -242,6 +263,8 @@ class McpApiKey(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
             "revoked": self.revoked,
+            "scope_mode": self.scope_mode or "all",
+            "scope_tools": self.get_scope_tools(),
         }
 
 
@@ -390,5 +413,101 @@ class MotionEvent(Base):
             "segment_seq": self.segment_seq,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
         }
+
+
+class Notification(Base):
+    """A user-facing notification in the org inbox.
+
+    Unified feed for motion detection, camera/node status transitions,
+    and (future) system errors.  Read state is tracked per-user via
+    ``UserNotificationState.last_viewed_at``.
+    """
+
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+
+    # Event type discriminator, e.g.
+    #   "motion", "camera_offline", "camera_online",
+    #   "node_offline", "node_online", "error"
+    kind = Column(String(40), nullable=False, index=True)
+
+    # Who should see this.  "all" = every member of the org,
+    # "admin" = only users with admin role.  The inbox endpoint
+    # filters based on the caller's role.
+    audience = Column(String(20), nullable=False, default="all")
+
+    # Display copy
+    title = Column(String(200), nullable=False)
+    body = Column(Text, nullable=False, default="")
+
+    # "info" | "warning" | "error" | "critical"
+    severity = Column(String(20), nullable=False, default="info", index=True)
+
+    # Optional deep-link (relative path) so clicking the notification
+    # jumps to a camera / incident / settings page.
+    link = Column(String(500), nullable=True)
+
+    # Optional subject references (kept as strings, not FKs, so a notification
+    # still renders even if the camera or node is later deleted).
+    camera_id = Column(String(100), nullable=True, index=True)
+    node_id = Column(String(100), nullable=True, index=True)
+
+    # Free-form extra data as a JSON string (e.g. motion score, segment_seq).
+    # Kept small — not meant to be queried, just rendered.
+    meta_json = Column(Text, nullable=True)
+
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+        index=True,
+    )
+
+    def to_dict(self) -> dict:
+        import json as _json
+        meta = None
+        if self.meta_json:
+            try:
+                meta = _json.loads(self.meta_json)
+            except (ValueError, TypeError):
+                meta = None
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "audience": self.audience,
+            "title": self.title,
+            "body": self.body,
+            "severity": self.severity,
+            "link": self.link,
+            "camera_id": self.camera_id,
+            "node_id": self.node_id,
+            "meta": meta,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class UserNotificationState(Base):
+    """Per-user read-state for the notification inbox.
+
+    One row per (Clerk user, org) combination.  ``last_viewed_at`` is
+    bumped when the user opens the notification panel; the unread
+    count is computed as ``COUNT(*) WHERE created_at > last_viewed_at``.
+    """
+
+    __tablename__ = "user_notification_state"
+
+    id = Column(Integer, primary_key=True)
+    clerk_user_id = Column(String(100), nullable=False, index=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    last_viewed_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+    )
+
+    __table_args__ = (
+        # One read-state row per user per org.
+        UniqueConstraint("clerk_user_id", "org_id", name="uq_user_notif_state_user_org"),
+    )
 
 

@@ -3,8 +3,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core.audit import audit_label, write_audit
 from app.core.database import get_db
-from app.core.auth import AuthUser, require_view, require_admin, get_current_user
+from app.core.auth import AuthUser, require_view, require_admin
+from app.core.limiter import limiter
 from app.models.models import Camera, CameraGroup, Setting, AuditLog
 from app.schemas.schemas import (
     CameraGroupCreate,
@@ -93,10 +95,11 @@ async def take_snapshot(
 async def toggle_recording(
     camera_id: str,
     request: Request,
-    user: AuthUser = Depends(require_view),
+    user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Start or stop recording on the camera node."""
+    """Start or stop recording on the camera node.  Admin-only —
+    recording state changes are operational decisions, not view-only."""
     from app.models.models import CameraNode
     from app.api.ws import manager
 
@@ -119,6 +122,15 @@ async def toggle_recording(
     try:
         result = await manager.send_command(
             node.node_id, command, {"camera_id": camera_id}, timeout=10.0,
+        )
+        write_audit(
+            db,
+            org_id=user.org_id,
+            event="recording_toggled",
+            user_id=user.user_id,
+            username=audit_label(user),
+            details={"camera_id": camera_id, "recording": bool(recording)},
+            request=request,
         )
         return result
     except TimeoutError:
@@ -247,6 +259,7 @@ async def get_recording_settings(
 @router.post("/settings/recording")
 async def update_recording_settings(
     data: RecordingSettings,
+    request: Request,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -257,6 +270,20 @@ async def update_recording_settings(
     Setting.set(db, user.org_id, "scheduled_start", str(data.scheduled_start))
     Setting.set(db, user.org_id, "scheduled_end", str(data.scheduled_end))
     Setting.set(db, user.org_id, "continuous_24_7", str(data.continuous_24_7).lower())
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="recording_settings_updated",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={
+            "scheduled_recording": bool(data.scheduled_recording),
+            "scheduled_start": str(data.scheduled_start),
+            "scheduled_end": str(data.scheduled_end),
+            "continuous_24_7": bool(data.continuous_24_7),
+        },
+        request=request,
+    )
     return {"success": True}
 
 
@@ -280,6 +307,7 @@ async def list_audit_logs(
 
 # Health Check (for API endpoint health)
 @router.post("/cameras/{camera_id}/codec")
+@limiter.limit("30/minute")
 async def report_camera_codec(
     camera_id: str,
     request: Request,
@@ -302,8 +330,15 @@ async def report_camera_codec(
     if not node:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
-    # Verify camera belongs to this node
-    camera = db.query(Camera).filter_by(camera_id=camera_id, node_id=node.id).first()
+    # Verify camera belongs to this node AND node's org — defense-in-depth
+    # against any future schema drift where camera.org_id and node.org_id
+    # could diverge.  The camera_id column has a unique constraint, so
+    # today this check is redundant; tomorrow it might not be.
+    camera = (
+        db.query(Camera)
+        .filter_by(camera_id=camera_id, node_id=node.id, org_id=node.org_id)
+        .first()
+    )
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
@@ -353,6 +388,7 @@ async def report_camera_codec(
 
 @router.post("/settings/danger/wipe-logs")
 async def wipe_stream_logs(
+    request: Request,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -368,12 +404,22 @@ async def wipe_stream_logs(
     from app.models.models import McpActivityLog
     mcp_count = db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
     db.commit()
-    logger.warning("Admin %s wiped %d stream + %d MCP logs for org %s", user.user_id, count, mcp_count, user.org_id)
+    logger.warning("Admin wiped %d stream + %d MCP logs (org redacted)", count, mcp_count)
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="logs_wiped",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"stream_logs_deleted": count, "mcp_logs_deleted": mcp_count},
+        request=request,
+    )
     return {"success": True, "deleted_logs": count, "deleted_mcp_logs": mcp_count}
 
 
 @router.post("/settings/danger/full-reset")
 async def full_reset(
+    request: Request,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -430,5 +476,14 @@ async def full_reset(
     db.query(AuditLog).filter_by(org_id=user.org_id).delete()
 
     db.commit()
-    logger.warning("Admin %s performed FULL RESET for org %s: %s", user.user_id, user.org_id, results)
+    logger.warning("Admin performed FULL RESET (org redacted): %s", results)
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="full_reset",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details=results,
+        request=request,
+    )
     return {"success": True, **results}
