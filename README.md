@@ -80,7 +80,7 @@ curl -fsSL https://opensentry-command.fly.dev/mcp-setup.sh | bash -s -- <api_key
 & ([scriptblock]::Create((irm https://opensentry-command.fly.dev/mcp-setup.ps1))) '<api_key>' '<mcp_url>'
 ```
 
-The scripts detect which clients you already have and merge an `opensentry` entry into each one's MCP config.
+The scripts detect which clients you already have and merge an `opensentry` entry into each one's MCP config. Any client that is **currently running** is skipped (to avoid overwriting a config the client has open); close it and re-run to finish the install.
 
 ---
 
@@ -102,6 +102,8 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 **Video pipeline:** CloudNode transcodes USB camera video into HLS segments and pushes each `.ts` file directly to the backend via `POST /api/cameras/{id}/push-segment`. The backend caches segments in memory (15 per camera by default, ~30s buffer) and serves them through the same-origin proxy at `GET /api/cameras/{id}/segment/{file}`. The rewritten playlist contains relative segment URLs, so the browser's Clerk JWT auth header is automatically attached. No S3, no presigned URLs, no third-party storage in the live path.
 
 **Authentication:** Clerk handles user sign-up, login, and organization management. The backend validates JWT tokens (V1 and V2 permission formats) and extracts organization-scoped permissions. CloudNodes authenticate with API keys (SHA-256 hashed in the database) passed via `X-Node-API-Key`. MCP clients authenticate with `Authorization: Bearer osc_...` keys (also hashed).
+
+**Pipeline state:** CloudNodes report real FFmpeg pipeline state on every heartbeat, not a hardcoded "online". Each camera's `status` can be `starting`, `streaming`, `restarting`, `failed`, `error`, or `offline`; when it isn't healthy the node also sends a human-readable `last_error` that the dashboard surfaces so users can tell *why* a camera isn't live (disk full, V4L2 disconnect, FFmpeg crash-looping, etc.). `last_error` is cleared automatically as soon as the pipeline recovers.
 
 **Storage:** Live segments live in the backend's in-memory cache; they expire automatically once `SEGMENT_CACHE_MAX_PER_CAMERA` is exceeded. Recordings and snapshots live on the CloudNode itself. SQLite is used for development (`opensentry.db`); PostgreSQL for production. Incident snapshots and clips are stored inline on `IncidentEvidence.data` (LargeBinary) — evidence travels with the incident.
 
@@ -264,7 +266,7 @@ See [AGENTS.md](AGENTS.md) for the full per-tool list.
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/health` | None | Health check |
-| POST | `/api/webhooks/clerk` | Webhook | Clerk subscription events (Svix-signed) |
+| POST | `/api/webhooks/clerk` | Webhook | Clerk subscription + org-lifecycle events — requires `CLERK_WEBHOOK_SECRET` (Svix-verified; unsigned requests are rejected) |
 | WS | `/ws/node` | Node (query) | CloudNode real-time channel (heartbeat, commands, motion) |
 
 **Auth types:** `User` = Clerk JWT, `Admin` = Clerk JWT with admin permission, `Node` = `X-Node-API-Key` header, `MCP Key` = `Authorization: Bearer osc_...`.
@@ -291,7 +293,7 @@ All 13 ORM models live in `backend/app/models/models.py`; every row is scoped by
 
 | Model | Purpose |
 |-------|---------|
-| `Camera` | Camera device registered by a CloudNode; tracks codec, status, group |
+| `Camera` | Camera device registered by a CloudNode; tracks codec, pipeline `status` (`starting` / `streaming` / `restarting` / `failed` / `error` / `offline`), `last_error`, group |
 | `CameraNode` | Physical CloudNode device; holds `api_key_hash` + codec info |
 | `CameraGroup` | User-defined grouping (name, color, icon) |
 | `Setting` | Per-org key/value store (e.g. recording config) |
