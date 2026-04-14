@@ -177,6 +177,12 @@ class CameraNode(Base):
     video_codec = Column(String(50), nullable=True)
     audio_codec = Column(String(50), nullable=True)
     codec_detected_at = Column(DateTime, nullable=True)
+    # Surfaces the most recent registration / auth failure to the UI so
+    # a node stuck in ``pending`` can show *why* it's stuck (bad API key,
+    # plan limit hit, etc.) instead of the user staring at an opaque
+    # status badge.  Cleared on successful re-registration.
+    last_register_error = Column(String(500), nullable=True)
+    last_register_error_at = Column(DateTime, nullable=True)
 
     cameras = relationship(
         "Camera", back_populates="node", cascade="all, delete-orphan"
@@ -209,6 +215,10 @@ class CameraNode(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "video_codec": self.video_codec,
             "audio_codec": self.audio_codec,
+            "last_register_error": self.last_register_error,
+            "last_register_error_at": self.last_register_error_at.isoformat()
+            if self.last_register_error_at
+            else None,
         }
 
 

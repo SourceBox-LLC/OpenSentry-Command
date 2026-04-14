@@ -59,8 +59,10 @@ async def get_camera(
 
 
 @router.post("/cameras/{camera_id}/snapshot")
+@limiter.limit("30/minute")
 async def take_snapshot(
     camera_id: str,
+    request: Request,
     user: AuthUser = Depends(require_view),
     db: Session = Depends(get_db),
 ):
@@ -92,6 +94,7 @@ async def take_snapshot(
 
 
 @router.post("/cameras/{camera_id}/recording")
+@limiter.limit("30/minute")
 async def toggle_recording(
     camera_id: str,
     request: Request,
@@ -150,8 +153,10 @@ async def list_camera_groups(
 
 
 @router.post("/camera-groups")
+@limiter.limit("20/minute")
 async def create_camera_group(
     data: CameraGroupCreate,
+    request: Request,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -192,8 +197,10 @@ async def delete_camera_group(
 
 
 @router.put("/cameras/{camera_id}/group")
+@limiter.limit("60/minute")
 async def assign_camera_group(
     camera_id: str,
+    request: Request,
     group_id: int = None,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -257,6 +264,7 @@ async def get_recording_settings(
 
 
 @router.post("/settings/recording")
+@limiter.limit("30/minute")
 async def update_recording_settings(
     data: RecordingSettings,
     request: Request,
@@ -387,6 +395,7 @@ async def report_camera_codec(
 # ── Danger Zone ──────────────────────────────────────────────────────
 
 @router.post("/settings/danger/wipe-logs")
+@limiter.limit("5/hour")
 async def wipe_stream_logs(
     request: Request,
     user: AuthUser = Depends(require_admin),
@@ -418,6 +427,7 @@ async def wipe_stream_logs(
 
 
 @router.post("/settings/danger/full-reset")
+@limiter.limit("3/hour")
 async def full_reset(
     request: Request,
     user: AuthUser = Depends(require_admin),

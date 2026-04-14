@@ -241,7 +241,26 @@ function DashboardPage() {
         <div className="empty-state">
           <div className="empty-icon">📹</div>
           <h3>No Camera Nodes Found</h3>
-          <p>Go to Settings to add and configure your OpenSentry camera nodes.</p>
+          <p>
+            {isAdmin
+              ? "Install a CloudNode on any computer with a webcam to start streaming in under 5 minutes."
+              : "An admin needs to add a camera node before cameras will appear here."}
+          </p>
+          {isAdmin && (
+            <div className="empty-state-actions">
+              <Link to="/settings" className="btn btn-primary">
+                Add Your First Node
+              </Link>
+              <a
+                href="https://github.com/sbussiso/opensentry-cloudnode"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary"
+              >
+                Installation Guide
+              </a>
+            </div>
+          )}
         </div>
       ) : (
         <div className="camera-grid">

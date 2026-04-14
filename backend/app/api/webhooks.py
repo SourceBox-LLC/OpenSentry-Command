@@ -6,6 +6,7 @@ from svix.webhooks import Webhook, WebhookVerificationError
 from app.core.config import settings
 from app.core.clerk import clerk
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models.models import Setting, CameraNode, Camera, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ def get_active_plan_slug(items: list) -> str:
 
 
 @router.post("/clerk")
+@limiter.limit("120/minute")
 async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
     headers = dict(request.headers)

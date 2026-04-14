@@ -1,5 +1,10 @@
 """Node management endpoint tests."""
 
+import hashlib
+
+from app.models.models import CameraNode
+from tests.conftest import TestSession
+
 
 def test_create_node(admin_client):
     """Admin can create a new node."""
@@ -64,3 +69,109 @@ def test_get_plan_info(admin_client):
     assert "payment_past_due" in data
     assert data["usage"]["nodes"] == 0
     assert data["usage"]["cameras"] == 0
+
+
+def test_register_with_bad_api_key_records_error_on_node(admin_client):
+    """A registration attempt with a wrong key must write
+    ``last_register_error`` on the node row so the UI can surface the
+    reason instead of making the user SSH into the CloudNode to read logs.
+    """
+    create_resp = admin_client.post("/api/nodes", json={"name": "Error Node"})
+    node_id = create_resp.json()["node_id"]
+
+    # Use an obviously-wrong API key — the real one only exists in memory.
+    resp = admin_client.post(
+        "/api/nodes/register",
+        headers={"X-Node-API-Key": "definitely-not-the-real-key"},
+        json={
+            "node_id": node_id,
+            "hostname": "test-host",
+            "local_ip": "127.0.0.1",
+            "http_port": 8765,
+            "cameras": [],
+        },
+    )
+    assert resp.status_code == 403
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        assert node is not None
+        assert node.last_register_error is not None
+        assert "Invalid API key" in node.last_register_error
+        assert node.last_register_error_at is not None
+    finally:
+        session.close()
+
+
+def test_to_dict_exposes_register_error(admin_client):
+    """The /api/nodes listing must surface ``last_register_error`` so the
+    SettingsPage can render the warning banner without a second fetch."""
+    create_resp = admin_client.post("/api/nodes", json={"name": "Failing Node"})
+    node_id = create_resp.json()["node_id"]
+
+    # Force a failure via the public endpoint rather than poking the DB,
+    # so the round-trip matches what users actually hit.
+    admin_client.post(
+        "/api/nodes/register",
+        headers={"X-Node-API-Key": "bad-key"},
+        json={
+            "node_id": node_id,
+            "hostname": "h",
+            "local_ip": "127.0.0.1",
+            "http_port": 8765,
+            "cameras": [],
+        },
+    )
+
+    list_resp = admin_client.get("/api/nodes")
+    assert list_resp.status_code == 200
+    entry = next(n for n in list_resp.json() if n["node_id"] == node_id)
+    assert entry["last_register_error"], entry
+    assert entry["last_register_error_at"], entry
+
+
+def test_register_clears_error_on_success(admin_client):
+    """A successful re-registration must wipe a prior
+    ``last_register_error`` so the UI stops flagging a node that's now
+    fine."""
+    create_resp = admin_client.post("/api/nodes", json={"name": "Recovering Node"})
+    body = create_resp.json()
+    node_id = body["node_id"]
+    real_key = body["api_key"]
+
+    # Bad attempt first — writes the error row.
+    admin_client.post(
+        "/api/nodes/register",
+        headers={"X-Node-API-Key": "bad"},
+        json={
+            "node_id": node_id,
+            "hostname": "h",
+            "local_ip": "127.0.0.1",
+            "http_port": 8765,
+            "cameras": [],
+        },
+    )
+
+    # Now a correct attempt.
+    ok = admin_client.post(
+        "/api/nodes/register",
+        headers={"X-Node-API-Key": real_key},
+        json={
+            "node_id": node_id,
+            "hostname": "h",
+            "local_ip": "127.0.0.1",
+            "http_port": 8765,
+            "cameras": [],
+        },
+    )
+    assert ok.status_code == 200
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        assert node.last_register_error is None
+        assert node.last_register_error_at is None
+        assert node.api_key_hash == hashlib.sha256(real_key.encode()).hexdigest()
+    finally:
+        session.close()

@@ -562,6 +562,18 @@ body {
     height: 24px;
 }
 
+.empty-state-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 0.5rem;
+}
+
+.empty-state-actions .btn {
+    min-width: 160px;
+}
+
 .feed-overlay {
     position: absolute;
     top: 12px;
@@ -4479,6 +4491,52 @@ body {
 .node-key-rotated::before {
     content: "🔑";
     font-size: 0.65rem;
+}
+
+.node-register-error {
+    margin-top: 0.6rem;
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.7rem 0.85rem;
+    background: rgba(220, 38, 38, 0.08);
+    border: 1px solid rgba(220, 38, 38, 0.35);
+    border-radius: 8px;
+    color: #fca5a5;
+}
+
+.node-register-error-icon {
+    font-size: 1.1rem;
+    line-height: 1.2;
+}
+
+.node-register-error-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    flex: 1;
+    font-size: 0.8rem;
+}
+
+.node-register-error-body strong {
+    color: #fecaca;
+    font-size: 0.85rem;
+}
+
+.node-register-error-body p {
+    margin: 0;
+    color: #fecaca;
+    opacity: 0.9;
+}
+
+.node-register-error-time {
+    font-size: 0.7rem;
+    color: #fecaca;
+    opacity: 0.65;
+}
+
+.node-register-error-body .btn {
+    align-self: flex-start;
+    margin-top: 0.2rem;
 }
 
 .node-actions {

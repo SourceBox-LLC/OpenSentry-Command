@@ -13,6 +13,14 @@ class Config:
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./opensentry.db")
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+    # Rate-limiter shared storage.  In production set REDIS_URL to a
+    # managed instance (Upstash on Fly, etc.) so limits hold across VMs —
+    # without it, each VM keeps its own in-memory counters and an
+    # attacker round-robining across instances gets N× the stated rate.
+    # In dev / tests the empty default is fine; slowapi falls back to
+    # in-memory storage and logs a one-shot warning at startup.
+    REDIS_URL: str = os.getenv("REDIS_URL", "")
+
     # Segments kept in memory per camera for the live proxy cache.
     # CloudNode ships with 1-second segments by default, so 15 = ~15s of buffer —
     # enough for HLS to start at the live edge and recover from one short stall.

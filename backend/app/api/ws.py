@@ -22,6 +22,7 @@ import hashlib
 import logging
 import time
 import uuid
+from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -34,6 +35,43 @@ from app.models import CameraNode, Camera, MotionEvent
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ── Per-node message rate limiter ────────────────────────────────────
+# WebSocket messages bypass slowapi entirely, so we need our own
+# in-process throttle to keep a compromised (or buggy) node from
+# hammering the backend.  Heartbeats fire ~every 30s and command
+# results are sporadic, so 180 msg/minute leaves ~6× legitimate headroom.
+# Dropped messages just return an error response; we don't kill the
+# connection, because a transient burst shouldn't cost the node its
+# status updates for the next reconnect-backoff window.
+WS_MAX_MSGS_PER_MINUTE = 180
+WS_RATE_WINDOW_SECONDS = 60.0
+
+
+class NodeRateLimiter:
+    """Sliding-window rate limiter keyed by node_id."""
+
+    def __init__(self):
+        self._windows: dict[str, deque[float]] = {}
+
+    def allow(self, node_id: str) -> bool:
+        now = time.monotonic()
+        window = self._windows.setdefault(node_id, deque())
+        # Evict entries older than the window.
+        cutoff = now - WS_RATE_WINDOW_SECONDS
+        while window and window[0] < cutoff:
+            window.popleft()
+        if len(window) >= WS_MAX_MSGS_PER_MINUTE:
+            return False
+        window.append(now)
+        return True
+
+    def forget(self, node_id: str):
+        self._windows.pop(node_id, None)
+
+
+_ws_rate_limiter = NodeRateLimiter()
 
 
 # ── Connection Manager ────────────────────────────────────────────────
@@ -158,6 +196,26 @@ async def node_websocket(
     try:
         while True:
             data = await ws.receive_json()
+
+            # Per-node message rate limit — see NodeRateLimiter above.
+            # Over-limit messages get an error response but we keep the
+            # socket open; disconnecting would reset the node's status
+            # tracking and cascade into bigger UX problems than a
+            # temporarily misbehaving node.
+            if not _ws_rate_limiter.allow(node_id):
+                logger.warning(
+                    "[WS] Rate limit exceeded for node %s — dropping message", node_id,
+                )
+                try:
+                    await ws.send_json({
+                        "type": "error",
+                        "id": data.get("id"),
+                        "payload": {"detail": "Rate limit exceeded"},
+                    })
+                except Exception:
+                    pass
+                continue
+
             msg_type = data.get("type")
 
             if msg_type == "heartbeat":
@@ -195,6 +253,7 @@ async def node_websocket(
         logger.error("WebSocket error for node %s: %s", node_id, e)
     finally:
         manager.disconnect(node_id)
+        _ws_rate_limiter.forget(node_id)
 
 
 # ── Heartbeat Handler ─────────────────────────────────────────────────

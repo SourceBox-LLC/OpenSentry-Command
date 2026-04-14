@@ -301,6 +301,27 @@ function SettingsPage() {
                         Key rotated {formatRelativeTime(node.key_rotated_at)}
                       </span>
                     )}
+                    {node.last_register_error && (
+                      <div className="node-register-error" role="alert">
+                        <span className="node-register-error-icon">⚠️</span>
+                        <div className="node-register-error-body">
+                          <strong>Registration failing</strong>
+                          <p>{node.last_register_error}</p>
+                          {node.last_register_error_at && (
+                            <span className="node-register-error-time">
+                              {formatRelativeTime(node.last_register_error_at)}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-small btn-primary"
+                            onClick={() => openRotateModal(node)}
+                          >
+                            Rotate Key
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="node-actions">
                     <button

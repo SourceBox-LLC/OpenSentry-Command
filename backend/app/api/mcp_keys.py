@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import audit_label, write_audit
 from app.core.auth import AuthUser, require_admin, require_active_billing
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.mcp.server import MCP_ALL_TOOLS, MCP_READ_TOOLS, MCP_WRITE_TOOLS, mcp
 from app.models.models import McpApiKey
 from app.schemas.schemas import McpKeyCreate
@@ -28,6 +29,7 @@ def _generate_key() -> str:
 
 
 @router.post("/keys")
+@limiter.limit("10/hour")
 async def create_mcp_key(
     request: Request,
     payload: McpKeyCreate,
@@ -149,6 +151,7 @@ async def list_mcp_keys(
 
 
 @router.delete("/keys/{key_id}")
+@limiter.limit("30/hour")
 async def revoke_mcp_key(
     key_id: int,
     request: Request,

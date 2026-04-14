@@ -12,11 +12,19 @@ MCP client auto-setup:
   NOTE: ``irm ... | iex -Args ...`` does NOT work — Invoke-Expression has no
   ``-Args`` parameter, so the arguments never reach the script's param block.
   Use the scriptblock pattern above instead.
+
+Rate limiting: every endpoint here is public and unauthenticated, so
+they're bucketed by client IP (see ``tenant_aware_key``).  The limits
+are generous enough for a human running the one-liner a few times
+while troubleshooting but tight enough that a bot can't hammer the
+disk.  A legitimate install hits each script exactly once.
 """
 
 from pathlib import Path
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
+
+from app.core.limiter import limiter
 
 router = APIRouter(tags=["installation"])
 
@@ -30,7 +38,8 @@ def _read_script(filename: str) -> str:
 
 
 @router.get("/install.sh", response_class=PlainTextResponse)
-async def install_sh():
+@limiter.limit("30/minute")
+async def install_sh(request: Request):
     """Serve the bash install script for Linux/macOS."""
     content = _read_script("install.sh")
     return PlainTextResponse(
@@ -41,7 +50,8 @@ async def install_sh():
 
 
 @router.get("/install.ps1", response_class=PlainTextResponse)
-async def install_ps1():
+@limiter.limit("30/minute")
+async def install_ps1(request: Request):
     """Serve the PowerShell install script for Windows."""
     content = _read_script("install.ps1")
     return PlainTextResponse(
@@ -54,7 +64,8 @@ async def install_ps1():
 # ── MCP Client Setup Scripts ─────────────────────────
 
 @router.get("/mcp-setup.sh", response_class=PlainTextResponse)
-async def mcp_setup_sh():
+@limiter.limit("30/minute")
+async def mcp_setup_sh(request: Request):
     """Serve the MCP client setup script for Linux/macOS."""
     content = _read_script("mcp-setup.sh")
     return PlainTextResponse(
@@ -65,7 +76,8 @@ async def mcp_setup_sh():
 
 
 @router.get("/mcp-setup.ps1", response_class=PlainTextResponse)
-async def mcp_setup_ps1():
+@limiter.limit("30/minute")
+async def mcp_setup_ps1(request: Request):
     """Serve the MCP client setup script for Windows."""
     content = _read_script("mcp-setup.ps1")
     return PlainTextResponse(

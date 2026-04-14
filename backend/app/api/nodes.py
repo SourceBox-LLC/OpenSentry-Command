@@ -10,11 +10,82 @@ from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_display_name
-from app.models.models import CameraNode, Camera
+from app.models.models import CameraNode, Camera, Setting
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
+
+
+_PLAN_LIMIT_NOTIF_THROTTLE_SECONDS = 3600  # 1 hour between plan-limit notifications
+
+
+def _emit_plan_limit_notification(
+    db: Session,
+    org_id: str,
+    limits: dict,
+    *,
+    skipped: list[str],
+) -> None:
+    """Emit a one-per-hour inbox notification when plan cap rejects cameras.
+
+    Debounced via a Setting row so a node re-heartbeating every 30s with
+    an over-cap camera list doesn't spam admins.  Best-effort: any
+    failure is swallowed because the caller's happy path (node
+    registration) must not depend on the notification layer.
+    """
+    try:
+        now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        last_at_str = Setting.get(db, org_id, "plan_limit_notif_last_at")
+        if last_at_str:
+            try:
+                last_at = datetime.fromisoformat(last_at_str)
+                if (now - last_at).total_seconds() < _PLAN_LIMIT_NOTIF_THROTTLE_SECONDS:
+                    return
+            except ValueError:
+                pass  # malformed timestamp — treat as never emitted
+
+        plan_name = get_plan_display_name(limits.get("_plan", "free_org"))
+        # Local import to avoid a circular dep at module load time.
+        from app.api.notifications import create_notification
+
+        create_notification(
+            org_id=org_id,
+            kind="plan_limit_reached",
+            title=f"Camera limit reached on {plan_name}",
+            body=(
+                f"Your node reported cameras beyond the {limits['max_cameras']}-camera "
+                f"limit. Skipped: {', '.join(skipped[:5])}"
+                + (f" (+{len(skipped) - 5} more)" if len(skipped) > 5 else "")
+                + ". Upgrade to add them."
+            ),
+            severity="warning",
+            audience="admin",
+            link="/settings",
+            meta={
+                "plan": plan_name,
+                "max_cameras": limits["max_cameras"],
+                "skipped": skipped,
+            },
+            db=db,
+        )
+        Setting.set(db, org_id, "plan_limit_notif_last_at", now.isoformat())
+    except Exception:
+        logger.exception("Failed to emit plan-limit notification for org %s", org_id)
+
+
+def _record_node_register_error(db: Session, node: CameraNode, reason: str) -> None:
+    """Persist a registration/auth failure on the node row so the UI can
+    show *why* a node is stuck in ``pending`` instead of making the user
+    SSH in to read CloudNode logs.  Best-effort: any DB error is swallowed
+    because the caller is already about to raise a 4xx to the node."""
+    try:
+        node.last_register_error = reason[:500]
+        node.last_register_error_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        db.commit()
+    except Exception:
+        logger.exception("Failed to persist last_register_error for node %s", node.node_id)
+        db.rollback()
 
 
 @router.post("/validate")
@@ -47,6 +118,10 @@ async def validate_node(
 
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
     if node.api_key_hash != api_key_hash:
+        _record_node_register_error(
+            db, node,
+            "Invalid API key — rotate the key in Settings and re-run the installer.",
+        )
         raise HTTPException(status_code=403, detail="Invalid API key for this node")
 
     return {"success": True, "node_id": node.node_id, "name": node.name}
@@ -76,6 +151,10 @@ async def register_node(
         logger.info("Found existing node id=%s, org=%s", existing_node.id, existing_node.org_id)
         if existing_node.api_key_hash != api_key_hash:
             logger.warning("Registration rejected: API key mismatch for node %s", data.node_id)
+            _record_node_register_error(
+                db, existing_node,
+                "Invalid API key during registration — rotate the key in Settings and re-run the installer.",
+            )
             raise HTTPException(status_code=403, detail="Invalid API key for this node")
 
         existing_node.hostname = data.hostname or existing_node.hostname
@@ -83,6 +162,10 @@ async def register_node(
         existing_node.http_port = data.http_port or existing_node.http_port
         existing_node.status = "online"
         existing_node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        # Successful re-registration: clear any stale error from an
+        # earlier bad-key attempt so the UI stops flagging it.
+        existing_node.last_register_error = None
+        existing_node.last_register_error_at = None
 
         if data.video_codec:
             existing_node.video_codec = data.video_codec
@@ -97,6 +180,7 @@ async def register_node(
         # Map device_path to camera_id for response
         camera_mapping = {}
         new_camera_count = 0
+        skipped_cameras: list[str] = []  # surfaces plan-limit hits in the response
 
         for cam_data in data.cameras or []:
             # Generate camera_id from node_id and device_path
@@ -132,6 +216,7 @@ async def register_node(
                         "Camera limit reached for org %s (%d/%d on %s plan), skipping camera %s",
                         org_id, current_cameras + new_camera_count, limits["max_cameras"], plan_name, camera_id,
                     )
+                    skipped_cameras.append(cam_data.name or sanitized_device)
                     continue
 
                 logger.debug("Creating new camera %s", camera_id)
@@ -168,7 +253,16 @@ async def register_node(
         db.commit()
         logger.info("Node %s re-registered successfully with %d cameras", data.node_id, len(camera_mapping))
 
-        return {
+        # If the plan cap rejected any cameras, emit an admin notification
+        # and tell the CloudNode so it can surface the hit to the installer.
+        # Debounce at 1 hour so a node that keeps re-heartbeating with an
+        # over-cap camera list doesn't flood the inbox.
+        if skipped_cameras:
+            _emit_plan_limit_notification(
+                db, org_id, limits, skipped=skipped_cameras,
+            )
+
+        response = {
             "success": True,
             "node_id": existing_node.node_id,
             "node_secret": api_key,
@@ -176,6 +270,18 @@ async def register_node(
             "message": "Node re-registered successfully",
             "cameras": camera_mapping,
         }
+        if skipped_cameras:
+            plan_name = get_plan_display_name(limits.get("_plan", "free_org"))
+            response["plan_limit_hit"] = {
+                "plan": plan_name,
+                "max_cameras": limits["max_cameras"],
+                "skipped": skipped_cameras,
+                "detail": (
+                    f"Plan limit reached ({limits['max_cameras']} on {plan_name}). "
+                    f"Upgrade to add: {', '.join(skipped_cameras)}."
+                ),
+            }
+        return response
 
     logger.warning("Registration failed: node_id=%s not found in database", data.node_id)
     raise HTTPException(
@@ -273,6 +379,7 @@ async def get_plan_info(
 
 
 @router.post("")
+@limiter.limit("20/hour")
 async def create_node(
     request: Request,
     data: NodeCreate,
@@ -353,6 +460,7 @@ async def get_node(
 
 
 @router.delete("/{node_id}")
+@limiter.limit("20/hour")
 async def delete_node(
     node_id: str,
     request: Request,
