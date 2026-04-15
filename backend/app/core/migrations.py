@@ -10,6 +10,10 @@ additions, this module does one thing: on startup it walks every SQLAlchemy
 model, compares the model's columns to the live table, and `ALTER TABLE ADD
 COLUMN` for anything missing. Idempotent, safe to run on every boot.
 
+It also hosts targeted one-time **data** migrations — specifically, the codec
+sanitization sweep that rescues existing rows from the h264_v4l2m2m
+malformed-SPS bug.  See `sanitize_existing_codecs()`.
+
 Caveats:
 - SQLite can't add a NOT NULL column without a DEFAULT. If you add such a
   column and have existing rows, the ALTER will fail loudly — write a real
@@ -118,3 +122,63 @@ def sync_schema(engine: Engine, metadata) -> list[str]:
         logger.debug("migrations: schema already in sync")
 
     return changes
+
+
+def sanitize_existing_codecs(engine: Engine) -> int:
+    """One-time sweep: rewrite any H.264 codec string below level 2.0.
+
+    Matches the same threshold as `app.core.codec.sanitize_video_codec`.
+    Existing rows with `avc1.*e00*`, `avc1.*e010`, …, `avc1.*e013` (level
+    1.0 through 1.3) get upgraded in-place to `*e01e` (level 3.0) so the
+    next HLS playlist fetch has a valid codec declaration.  Without this
+    sweep, the fix only takes effect after each camera's first fresh
+    codec report — which for an offline node could be never.
+
+    Idempotent: subsequent runs match zero rows and are cheap.
+    """
+    # Level hex < 14 is the broken range. We match by the
+    # LOWER(substr(video_codec, -2)) < '14' predicate in SQL, but
+    # string ordering on hex isn't safe ('2' < '14' is lexicographically
+    # true, numerically false). So we use SQLite's printf + hex parsing
+    # in an expression we know works: enumerate the handful of values
+    # that actually are <0x14 and would be produced by normalize_h264_level
+    # rounding garbage: 0a, 0b, 0c, 0d, 10, 11, 12, 13. 14 and above stay.
+    bad_suffixes = ("0a", "0b", "0c", "0d", "10", "11", "12", "13")
+    total_updated = 0
+    for table, col in (("cameras", "video_codec"), ("camera_nodes", "video_codec")):
+        for suffix in bad_suffixes:
+            # Only H.264 (`avc1.` prefix) — leave hvc1/vp9/etc alone.
+            # Case-insensitive on the suffix since ffprobe output varies.
+            like_pattern = f"avc1.____{suffix}"
+            with engine.begin() as conn:
+                try:
+                    result = conn.execute(
+                        text(
+                            f'UPDATE "{table}" '
+                            f'SET {col} = substr({col}, 1, length({col}) - 2) || \'1e\' '
+                            f'WHERE lower({col}) LIKE :pat'
+                        ),
+                        {"pat": like_pattern},
+                    )
+                    n = result.rowcount or 0
+                    total_updated += n
+                    if n:
+                        logger.warning(
+                            "migrations: upgraded %d %s.%s rows matching avc1.*%s → *1e",
+                            n,
+                            table,
+                            col,
+                            suffix,
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "migrations: codec sanitize sweep failed on %s.%s / %s: %s",
+                        table, col, suffix, exc,
+                    )
+    if total_updated:
+        logger.warning(
+            "migrations: codec sanitize sweep rewrote %d rows total", total_updated,
+        )
+    else:
+        logger.debug("migrations: no codec rows needed sanitization")
+    return total_updated

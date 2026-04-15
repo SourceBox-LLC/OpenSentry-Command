@@ -15,7 +15,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
-from app.core.migrations import sync_schema
+from app.core.migrations import sync_schema, sanitize_existing_codecs
 from app.core.sentry import init_sentry
 from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
 from app.mcp.server import mcp
@@ -36,6 +36,10 @@ Base.metadata.create_all(bind=engine)
 # Patch in any columns that were added to existing models after the table was first
 # created. See app/core/migrations.py for the "why" — this is our stand-in for Alembic.
 sync_schema(engine, Base.metadata)
+# One-time data sweep — rescue any rows still holding the garbage
+# `avc1.*e00a`-class codec string from the pre-v0.1.6 CloudNode bug.
+# Idempotent; post-fix boots match zero rows.
+sanitize_existing_codecs(engine)
 
 # Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
 mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
@@ -46,7 +50,7 @@ async def lifespan(app):
     """Application lifespan: startup and shutdown hooks."""
     cleanup_task = asyncio.create_task(_log_cleanup_loop())
     offline_sweep_task = asyncio.create_task(_offline_sweep_loop())
-    print(f"[App] OpenSentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
+    print(f"[App] SourceBox Sentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
     async with mcp_app.lifespan(app):
         yield
     cleanup_task.cancel()
@@ -55,8 +59,8 @@ async def lifespan(app):
 
 
 app = FastAPI(
-    title="OpenSentry Command Center API",
-    description="FastAPI backend with Clerk authentication for OpenSentry Command Center",
+    title="SourceBox Sentry Command Center API",
+    description="FastAPI backend with Clerk authentication for SourceBox Sentry Command Center",
     version="2.1.0",
     lifespan=lifespan,
     # Move FastAPI's auto docs off /docs so the React DocsPage can own that path.
