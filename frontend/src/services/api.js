@@ -88,6 +88,10 @@ export async function getNodes(getToken) {
   return fetchWithAuth("/api/nodes", getToken)
 }
 
+export async function getNode(getToken, nodeId) {
+  return fetchWithAuth(`/api/nodes/${nodeId}`, getToken)
+}
+
 export async function createNode(getToken, name) {
   return fetchWithAuth("/api/nodes", getToken, {
     method: "POST",

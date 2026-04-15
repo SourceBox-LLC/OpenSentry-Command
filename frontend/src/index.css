@@ -574,6 +574,312 @@ body {
     min-width: 160px;
 }
 
+/* Welcome hero (first-time dashboard empty state) */
+.welcome-hero {
+    max-width: 720px;
+    margin: 40px auto;
+    padding: 36px 32px 32px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+}
+
+.welcome-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 0% 0%, var(--accent-green-glow) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, var(--accent-blue-glow) 0%, transparent 50%);
+    opacity: 0.08;
+    pointer-events: none;
+}
+
+.welcome-hero-header {
+    text-align: center;
+    margin-bottom: 28px;
+    position: relative;
+}
+
+.welcome-hero-icon {
+    font-size: 2.75rem;
+    margin-bottom: 12px;
+    line-height: 1;
+}
+
+.welcome-hero-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+}
+
+.welcome-hero-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    max-width: 520px;
+    margin: 0 auto;
+}
+
+.welcome-checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+}
+
+.welcome-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px 18px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    transition: background 150ms ease, border-color 150ms ease;
+}
+
+.welcome-step-active {
+    background: rgba(59, 130, 246, 0.06);
+    border-color: rgba(59, 130, 246, 0.25);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.08);
+}
+
+.welcome-step-marker {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.welcome-step-done .welcome-step-marker {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+    color: #0a0a0f;
+}
+
+.welcome-step-active .welcome-step-marker {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #ffffff;
+}
+
+.welcome-step-pending .welcome-step-marker,
+.welcome-step-disabled .welcome-step-marker {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--border-color);
+    color: var(--text-muted);
+}
+
+.welcome-step-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.welcome-step-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.welcome-step-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.welcome-step-done .welcome-step-title,
+.welcome-step-disabled .welcome-step-title {
+    color: var(--text-secondary);
+}
+
+.welcome-step-disabled .welcome-step-desc,
+.welcome-step-pending .welcome-step-desc {
+    color: var(--text-muted);
+}
+
+.welcome-step-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.welcome-step-actions .btn {
+    min-width: 0;
+}
+
+@media (max-width: 600px) {
+    .welcome-hero {
+        padding: 28px 20px 24px;
+        margin: 24px auto;
+    }
+
+    .welcome-hero-title {
+        font-size: 1.25rem;
+    }
+
+    .welcome-step {
+        padding: 14px;
+    }
+}
+
+/* Heartbeat banner — shown right after a new node is created, polls for
+   the first heartbeat, celebrates, auto-dismisses after 30s. */
+.heartbeat-banner {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    margin: 0 0 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    position: relative;
+    animation: heartbeat-slide-in 280ms ease-out;
+}
+
+@keyframes heartbeat-slide-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.heartbeat-banner-waiting {
+    background: rgba(59, 130, 246, 0.06);
+    border-color: rgba(59, 130, 246, 0.25);
+}
+
+.heartbeat-banner-stalled {
+    background: rgba(245, 158, 11, 0.06);
+    border-color: rgba(245, 158, 11, 0.3);
+}
+
+.heartbeat-banner-success {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.35);
+    box-shadow: 0 0 24px -8px var(--accent-green-glow);
+    animation: heartbeat-slide-in 280ms ease-out, heartbeat-pulse 1.8s ease-out 1;
+}
+
+@keyframes heartbeat-pulse {
+    0%   { box-shadow: 0 0 0   0 rgba(34, 197, 94, 0.5); }
+    50%  { box-shadow: 0 0 24px 8px rgba(34, 197, 94, 0.2); }
+    100% { box-shadow: 0 0 24px -8px var(--accent-green-glow); }
+}
+
+.heartbeat-banner-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.heartbeat-banner-spinner {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-shrink: 0;
+    width: 28px;
+    justify-content: center;
+}
+
+.heartbeat-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    animation: heartbeat-bounce 1s infinite ease-in-out both;
+}
+
+.heartbeat-banner-stalled .heartbeat-dot {
+    background: var(--accent-amber);
+}
+
+.heartbeat-dot:nth-child(1) { animation-delay: -0.32s; }
+.heartbeat-dot:nth-child(2) { animation-delay: -0.16s; }
+.heartbeat-dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes heartbeat-bounce {
+    0%, 80%, 100% { transform: scale(0.5); opacity: 0.5; }
+    40%           { transform: scale(1);   opacity: 1; }
+}
+
+.heartbeat-banner-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.heartbeat-banner-body strong {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.heartbeat-banner-subtext {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.45;
+}
+
+.heartbeat-banner-link {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.heartbeat-banner-link:hover {
+    text-decoration: underline;
+}
+
+.heartbeat-banner-close {
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 120ms ease, color 120ms ease;
+}
+
+.heartbeat-banner-close:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+}
+
+@media (max-width: 600px) {
+    .heartbeat-banner {
+        padding: 12px 14px;
+    }
+
+    .heartbeat-banner-body strong {
+        font-size: 0.88rem;
+    }
+
+    .heartbeat-banner-subtext {
+        font-size: 0.78rem;
+    }
+}
+
 .feed-overlay {
     position: absolute;
     top: 12px;

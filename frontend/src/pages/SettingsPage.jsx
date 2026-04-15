@@ -178,6 +178,21 @@ function SettingsPage() {
       await loadNodes()
       await refreshPlanInfo()
       showToast(`Node "${name}" created successfully`, "success")
+      // Stash a marker so the dashboard's HeartbeatBanner can pick it up
+      // and celebrate the first heartbeat. Scoped by org to avoid leaking
+      // across workspace switches.
+      try {
+        if (result?.node_id && organization?.id) {
+          localStorage.setItem(
+            `os.recentlyCreatedNode.${organization.id}`,
+            JSON.stringify({
+              node_id: result.node_id,
+              name,
+              created_at: Date.now(),
+            })
+          )
+        }
+      } catch (_) { /* localStorage unavailable — banner just won't show */ }
       return result
     } catch (err) {
       console.error("[SettingsPage] Failed to create node:", err)
