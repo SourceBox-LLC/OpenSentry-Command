@@ -73,11 +73,21 @@ DOWNLOAD_URL=""
 RELEASE_TAG=""
 
 if RELEASE_JSON=$(curl -fsSL "$LATEST_URL" 2>/dev/null); then
-    RELEASE_TAG=$(echo "$RELEASE_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//')
+    # NOTE: these pipelines end in `grep` which returns 1 if it finds nothing.
+    # Under `set -o pipefail`, that exit code propagates out of the $(...)
+    # and, because we're assigning to a variable, `set -e` would silently
+    # abort the entire script. The `|| true` keeps us alive so we can fall
+    # through to the source-build path when there's no matching binary
+    # (e.g. linux-aarch64 users hitting a release that only ships x86_64).
+    RELEASE_TAG=$(echo "$RELEASE_JSON" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"//;s/".*//' || true)
 
     # Look for matching binary in release assets
     ASSET_PATTERN="${PLATFORM}.*${ARCH}"
-    DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -o '"browser_download_url": "[^"]*'"${ASSET_PATTERN}"'[^"]*"' | head -1 | sed 's/"browser_download_url": "//;s/"$//')
+    DOWNLOAD_URL=$(echo "$RELEASE_JSON" | grep -o '"browser_download_url": "[^"]*'"${ASSET_PATTERN}"'[^"]*"' | head -1 | sed 's/"browser_download_url": "//;s/"$//' || true)
+
+    if [ -z "$DOWNLOAD_URL" ] && [ -n "$RELEASE_TAG" ]; then
+        echo -e "  Release ${CYAN}${RELEASE_TAG}${NC} found, but no ${CYAN}${PLATFORM}-${ARCH}${NC} binary in its assets."
+    fi
 fi
 
 if [ -n "$DOWNLOAD_URL" ]; then
