@@ -344,7 +344,9 @@ if static_dir.exists():
     async def spa_middleware(request: Request, call_next):
         # Let API, WebSocket, and install routes pass through. /docs is owned by
         # the React DocsPage; FastAPI's auto docs live at /api-docs (see ctor).
-        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.")):
+        # /downloads/ is the backend binary-redirect route (see install.py);
+        # without it, /downloads/linux/x86_64 would fall through to the SPA.
+        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.", "/downloads/")):
             return await call_next(request)
 
         # MCP endpoint: only pass POST requests (JSON-RPC) to the MCP server;
