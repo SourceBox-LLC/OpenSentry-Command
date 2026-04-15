@@ -341,12 +341,36 @@ function SettingsPage() {
                       {node.camera_count > 0 && (
                         <span className="node-cameras">{node.camera_count} camera{node.camera_count === 1 ? "" : "s"}</span>
                       )}
+                      {node.node_version && (
+                        <span
+                          className="node-version"
+                          title={`CloudNode v${node.node_version}`}
+                        >
+                          v{node.node_version}
+                        </span>
+                      )}
                       {node.last_seen && (
                         <span className="node-last-seen">
                           {formatRelativeTime(node.last_seen)}
                         </span>
                       )}
                     </div>
+                    {node.update_available && (
+                      <div className="node-update-available" role="status">
+                        <span className="node-update-icon" aria-hidden="true">⬆</span>
+                        <div className="node-update-body">
+                          <strong>Update available: v{node.update_available}</strong>
+                          {node.node_version && (
+                            <span className="node-update-current">
+                              {" "}(currently v{node.node_version})
+                            </span>
+                          )}
+                          <p className="node-update-hint">
+                            Re-run the installer on this node to upgrade.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     {node.key_rotated_at && (
                       <span className="node-key-rotated">
                         Key rotated {formatRelativeTime(node.key_rotated_at)}

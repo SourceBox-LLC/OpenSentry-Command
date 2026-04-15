@@ -420,8 +420,23 @@ async def list_nodes(
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    # Attach the live ``update_available`` hint computed from the
+    # currently-configured ``LATEST_NODE_VERSION`` so the dashboard can
+    # render an "update available" badge without a second round-trip.
+    # Computing at read time (rather than storing on the row) means a
+    # bump to LATEST_NODE_VERSION takes effect for every existing node
+    # on the next refresh — no migration, no background job.
     nodes = db.query(CameraNode).filter_by(org_id=user.org_id).all()
-    return [n.to_dict() for n in nodes]
+    result = []
+    for n in nodes:
+        d = n.to_dict()
+        version_info = check_node_version(n.node_version)
+        d["update_available"] = version_info["update_available"]
+        d["latest_node_version"] = version_info["latest"]
+        d["min_supported_node_version"] = version_info["min_supported"]
+        d["version_supported"] = version_info["supported"]
+        result.append(d)
+    return result
 
 
 @router.get("/plan")

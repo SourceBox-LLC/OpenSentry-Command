@@ -1,4 +1,4 @@
-/* OpenSentry Command Center - Styles */
+/* SourceBox Sentry Command Center - Styles */
 
 @import './styles/landing.css';
 
@@ -4852,6 +4852,61 @@ body {
 .node-register-error-body .btn {
     align-self: flex-start;
     margin-top: 0.2rem;
+}
+
+/* Node version chip — sits inline in the meta row. Small muted pill so
+   it doesn't steal attention from the status / last-seen / camera count. */
+.node-version {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    padding: 0.05rem 0.4rem;
+    border-radius: 0.25rem;
+    background: rgba(148, 163, 184, 0.1);
+}
+
+/* "Update available" banner — amber tone so operators notice but it
+   doesn't mimic the red of a registration failure. Mirrors the layout
+   of .node-register-error so the two stack cleanly when both fire. */
+.node-update-available {
+    margin-top: 0.6rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    padding: 0.55rem 0.75rem;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    border-radius: 0.4rem;
+}
+
+.node-update-icon {
+    font-size: 1rem;
+    line-height: 1.2;
+    color: #fbbf24;
+}
+
+.node-update-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    flex: 1;
+}
+
+.node-update-body strong {
+    color: #fde68a;
+    font-size: 0.85rem;
+}
+
+.node-update-current {
+    color: #fde68a;
+    font-size: 0.75rem;
+    font-weight: normal;
+}
+
+.node-update-hint {
+    margin: 0;
+    color: #fef3c7;
+    font-size: 0.75rem;
 }
 
 .node-actions {

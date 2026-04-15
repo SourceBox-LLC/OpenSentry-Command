@@ -53,7 +53,12 @@ class Config:
     # response includes an `update_available` hint so the dashboard can nudge
     # the operator.  Update this on every CloudNode release.
     MIN_SUPPORTED_NODE_VERSION: str = os.getenv("MIN_SUPPORTED_NODE_VERSION", "0.1.0")
-    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.0")
+    # Bumped to 0.1.6 on 2026-04-15 alongside the codec-string sanitizer fix.
+    # Older nodes stream fine but the Pi v4l2m2m pipeline emits malformed
+    # SPS that the browser MSE decoder can't play — operators should
+    # update.  Keep this in lockstep with the newest GitHub release of
+    # opensentry-cloud-node.
+    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.6")
 
     @classmethod
     def is_clerk_configured(cls) -> bool:
