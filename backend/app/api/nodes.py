@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_label, write_audit
+from app.core.codec import sanitize_video_codec
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
@@ -146,6 +147,12 @@ async def register_node(
 
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 
+    # Defensive sanitization — older CloudNode builds (v0.1.5 and earlier)
+    # shipped garbage `avc1.*e00a` H.264 strings for the Pi's
+    # h264_v4l2m2m encoder.  Upgrade before persisting so the next playlist
+    # fetch doesn't brick the browser MSE attach.  See core/codec.py.
+    sanitized_video_codec = sanitize_video_codec(data.video_codec) if data.video_codec else None
+
     existing_node = db.query(CameraNode).filter_by(node_id=data.node_id).first()
 
     if existing_node:
@@ -199,7 +206,7 @@ async def register_node(
         existing_node.last_register_error_at = None
 
         if data.video_codec:
-            existing_node.video_codec = data.video_codec
+            existing_node.video_codec = sanitized_video_codec
             existing_node.audio_codec = data.audio_codec
             existing_node.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
 
@@ -237,7 +244,7 @@ async def register_node(
                 existing_cam.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
                 existing_cam.status = "online"
                 if data.video_codec:
-                    existing_cam.video_codec = data.video_codec
+                    existing_cam.video_codec = sanitized_video_codec
                     existing_cam.audio_codec = data.audio_codec
             else:
                 # Check camera cap before creating
@@ -262,7 +269,7 @@ async def register_node(
                     else "streaming",
                     status="online",
                     last_seen=datetime.now(tz=timezone.utc).replace(tzinfo=None),
-                    video_codec=data.video_codec,
+                    video_codec=sanitized_video_codec,
                     audio_codec=data.audio_codec,
                     codec_detected_at=datetime.now(tz=timezone.utc).replace(tzinfo=None) if data.video_codec else None,
                 )

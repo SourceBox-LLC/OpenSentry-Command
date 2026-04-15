@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_label, write_audit
+from app.core.codec import sanitize_video_codec
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_view, require_admin
 from app.core.limiter import limiter
@@ -448,6 +449,12 @@ async def report_camera_codec(
         raise HTTPException(status_code=400, detail="Invalid video_codec format")
     if audio_codec and (len(audio_codec) > 64 or '\n' in audio_codec or '\r' in audio_codec):
         raise HTTPException(status_code=400, detail="Invalid audio_codec format")
+
+    # Defensive sanitization — older CloudNode builds shipped garbage
+    # H.264 codec strings (level 1.0) for the Pi's h264_v4l2m2m encoder.
+    # Catch them server-side so a stale binary in the field doesn't
+    # silently brick streaming again.
+    video_codec = sanitize_video_codec(video_codec)
 
     # Update camera codec fields
     camera.video_codec = video_codec
