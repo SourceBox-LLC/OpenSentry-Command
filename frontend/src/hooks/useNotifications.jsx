@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useAuth } from "@clerk/clerk-react"
 import {
+  clearAllNotifications,
   getNotifications,
   getUnreadNotificationCount,
   markNotificationsViewed,
@@ -75,6 +76,28 @@ export function useNotifications() {
       refresh()
     }
   }, [getToken, refresh])
+
+  // Soft-hide every currently-visible notification from this user.
+  // Per-user, not per-org — other members still see their inbox intact,
+  // and rows stay in the DB for audit/incidents.  Anything created after
+  // this call still shows up normally.
+  const clearAll = useCallback(async () => {
+    // Stash the current list so we can roll back if the server rejects.
+    const previous = notifications
+    // Optimistic — empty the panel and zero the badge right away.
+    setNotifications([])
+    setUnreadCount(0)
+    try {
+      const result = await clearAllNotifications(getToken)
+      if (result?.last_viewed_at) {
+        setLastViewedAt(result.last_viewed_at)
+      }
+    } catch (e) {
+      // Rollback + resync so the UI reflects reality.
+      setNotifications(previous)
+      refresh()
+    }
+  }, [getToken, notifications, refresh])
 
   // SSE subscription for live updates.
   useEffect(() => {
@@ -172,6 +195,7 @@ export function useNotifications() {
     loading,
     error,
     markAllViewed,
+    clearAll,
     refresh,
   }
 }

@@ -525,9 +525,18 @@ class Notification(Base):
 class UserNotificationState(Base):
     """Per-user read-state for the notification inbox.
 
-    One row per (Clerk user, org) combination.  ``last_viewed_at`` is
-    bumped when the user opens the notification panel; the unread
-    count is computed as ``COUNT(*) WHERE created_at > last_viewed_at``.
+    One row per (Clerk user, org) combination.
+
+    ``last_viewed_at`` is bumped when the user opens the notification
+    panel; the unread count is computed as
+    ``COUNT(*) WHERE created_at > last_viewed_at``.
+
+    ``cleared_at`` is bumped when the user clicks "Clear all" — the
+    inbox list then hides everything with ``created_at <= cleared_at``.
+    Soft-hide (per user) rather than hard-delete (org-wide) so one
+    user clearing their view doesn't erase history for teammates or
+    for incidents/audit queries.  Nullable so pre-existing rows don't
+    need a backfill; ``None`` means "never cleared".
     """
 
     __tablename__ = "user_notification_state"
@@ -539,6 +548,7 @@ class UserNotificationState(Base):
         DateTime,
         default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
     )
+    cleared_at = Column(DateTime, nullable=True)
 
     __table_args__ = (
         # One read-state row per user per org.

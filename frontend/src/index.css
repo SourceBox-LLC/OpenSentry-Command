@@ -5849,6 +5849,28 @@ body {
     background: var(--bg-card-hover);
 }
 
+.notif-panel-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.notif-clear-all-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.notif-clear-all-btn:hover {
+    color: var(--danger, #f87171);
+    background: var(--bg-card-hover);
+}
+
 .notif-panel-list {
     max-height: 420px;
     overflow-y: auto;

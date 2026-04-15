@@ -276,3 +276,9 @@ export async function markNotificationsViewed(getToken) {
     method: "POST",
   })
 }
+
+export async function clearAllNotifications(getToken) {
+  return fetchWithAuth("/api/notifications/clear-all", getToken, {
+    method: "POST",
+  })
+}

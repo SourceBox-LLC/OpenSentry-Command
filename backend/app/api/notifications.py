@@ -386,10 +386,20 @@ async def list_notifications(
     """
     since = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
 
+    # Initialise read-state first so we know the user's cleared_at
+    # threshold before building the query.  Cleared notifications are
+    # filtered out here (not hard-deleted) so other users in the same
+    # org still see them and audit queries still see every row.
+    state = _get_or_init_state(db, user.user_id, user.org_id)
+    last_viewed = state.last_viewed_at
+    cleared_at = state.cleared_at
+
     query = db.query(Notification).filter(
         Notification.org_id == user.org_id,
         Notification.created_at >= since,
     )
+    if cleared_at is not None:
+        query = query.filter(Notification.created_at > cleared_at)
 
     aud_clause = _audience_filter_clause(user)
     if aud_clause is not None:
@@ -402,9 +412,6 @@ async def list_notifications(
         .limit(limit)
         .all()
     )
-
-    state = _get_or_init_state(db, user.user_id, user.org_id)
-    last_viewed = state.last_viewed_at
 
     items = []
     for n in rows:
@@ -456,6 +463,32 @@ async def mark_viewed(
     db.commit()
     return {
         "success": True,
+        "last_viewed_at": state.last_viewed_at.isoformat(),
+    }
+
+
+@router.post("/clear-all")
+async def clear_all(
+    user: AuthUser = Depends(require_view),
+    db: Session = Depends(get_db),
+):
+    """Hide every currently-visible notification from this user's inbox.
+
+    Stamps both ``cleared_at`` (list filter) and ``last_viewed_at``
+    (unread count) to "now" so the panel becomes empty and the badge
+    drops to zero in a single round trip.  Nothing is deleted —
+    notifications remain in the DB for audit, incidents, and for
+    other users in the same org who haven't cleared.  Anything
+    created after this call reappears normally.
+    """
+    state = _get_or_init_state(db, user.user_id, user.org_id)
+    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    state.cleared_at = now
+    state.last_viewed_at = now
+    db.commit()
+    return {
+        "success": True,
+        "cleared_at": state.cleared_at.isoformat(),
         "last_viewed_at": state.last_viewed_at.isoformat(),
     }
 

@@ -163,6 +163,84 @@ def test_mark_viewed_clears_unread(admin_client, db):
     assert admin_client.get("/api/notifications/unread-count").json()["unread"] == 0
 
 
+# ── Clear all (per-user soft-hide) ─────────────────────────────────
+
+def test_clear_all_hides_existing_notifications_from_list(admin_client, db):
+    # Initialise the user's state, then create rows that would normally
+    # show up in their inbox.
+    admin_client.get("/api/notifications")
+    time.sleep(0.05)
+    create_notification(org_id="org_test123", kind="motion", title="a", db=db)
+    create_notification(org_id="org_test123", kind="motion", title="b", db=db)
+    assert admin_client.get("/api/notifications").json()["total"] == 2
+
+    resp = admin_client.post("/api/notifications/clear-all")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "cleared_at" in body
+
+    # List is empty for this user, but the rows are still in the DB
+    # (soft-hide, not hard-delete).
+    assert admin_client.get("/api/notifications").json()["total"] == 0
+    from app.models.models import Notification as _N
+    assert db.query(_N).count() == 2
+
+
+def test_clear_all_also_zeroes_unread_count(admin_client, db):
+    admin_client.get("/api/notifications/unread-count")
+    time.sleep(0.05)
+    create_notification(org_id="org_test123", kind="motion", title="x", db=db)
+    assert admin_client.get("/api/notifications/unread-count").json()["unread"] == 1
+
+    admin_client.post("/api/notifications/clear-all")
+    assert admin_client.get("/api/notifications/unread-count").json()["unread"] == 0
+
+
+def test_clear_all_does_not_hide_later_notifications(admin_client, db):
+    # After clearing, new notifications should still appear — the clear
+    # hides the snapshot at that point in time, it doesn't mute the
+    # user's inbox forever.
+    admin_client.get("/api/notifications")
+    time.sleep(0.05)
+    create_notification(org_id="org_test123", kind="motion", title="old", db=db)
+    admin_client.post("/api/notifications/clear-all")
+    assert admin_client.get("/api/notifications").json()["total"] == 0
+
+    time.sleep(0.05)
+    create_notification(org_id="org_test123", kind="motion", title="new", db=db)
+    body = admin_client.get("/api/notifications").json()
+    assert body["total"] == 1
+    assert body["notifications"][0]["title"] == "new"
+
+
+def test_clear_all_is_per_user_not_per_org(viewer_client, db):
+    # One user clearing their inbox must not affect other users in the
+    # same org — that's the whole point of per-user soft-hide vs.
+    # hard-delete.  We simulate the "other user cleared" by stamping a
+    # UserNotificationState row directly rather than juggling two
+    # TestClient fixtures (which would clobber each other's auth
+    # dependency overrides on the shared FastAPI app).
+    viewer_client.get("/api/notifications")  # init viewer's state
+    time.sleep(0.05)
+    create_notification(org_id="org_test123", kind="motion", title="visible-to-all",
+                       audience="all", db=db)
+
+    # Simulate a different user in the same org clearing their inbox.
+    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    other = UserNotificationState(
+        clerk_user_id="user_someone_else",
+        org_id="org_test123",
+        cleared_at=now,
+        last_viewed_at=now,
+    )
+    db.add(other)
+    db.commit()
+
+    # Viewer didn't clear → still sees the notification.
+    assert viewer_client.get("/api/notifications").json()["total"] == 1
+
+
 def test_unread_count_respects_audience(viewer_client, db):
     # Admin-only notifications never count toward a viewer's unread count.
     viewer_client.get("/api/notifications/unread-count")

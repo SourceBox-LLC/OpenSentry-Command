@@ -11,7 +11,7 @@ import { useNotifications } from "../hooks/useNotifications.jsx"
  * intended "there's something new right now" signal.
  */
 export default function NotificationBell() {
-  const { notifications, unreadCount, loading, markAllViewed } = useNotifications()
+  const { notifications, unreadCount, loading, markAllViewed, clearAll } = useNotifications()
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef(null)
   const navigate = useNavigate()
@@ -81,23 +81,39 @@ export default function NotificationBell() {
         <div className="notif-panel" role="dialog" aria-label="Notifications">
           <div className="notif-panel-header">
             <div className="notif-panel-title">Notifications</div>
-            {/*
-              Opening the panel already marks everything viewed (see
-              togglePanel), so the button is a no-op unless new items
-              arrive *while* the panel is open.  Gate on unreadCount so
-              users don't click a button that does nothing visible — the
-              button now appears only when there's actually unread content
-              to clear, matching the user's mental model.
-            */}
-            {unreadCount > 0 && (
-              <button
-                type="button"
-                className="notif-mark-all-btn"
-                onClick={markAllViewed}
-              >
-                Mark all read
-              </button>
-            )}
+            <div className="notif-panel-actions">
+              {/*
+                Opening the panel already marks everything viewed (see
+                togglePanel), so "Mark all read" is a no-op unless new
+                items arrive while the panel is open.  Gate on
+                unreadCount so users don't click a button that does
+                nothing visible.
+              */}
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  className="notif-mark-all-btn"
+                  onClick={markAllViewed}
+                >
+                  Mark all read
+                </button>
+              )}
+              {/*
+                "Clear all" soft-hides every visible row from *this*
+                user's inbox.  Notifications stay in the DB for audit
+                and for other users in the same org — see the backend
+                /clear-all endpoint for the per-user semantics.
+              */}
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  className="notif-clear-all-btn"
+                  onClick={clearAll}
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="notif-panel-list">
