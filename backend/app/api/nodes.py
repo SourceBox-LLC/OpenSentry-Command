@@ -511,6 +511,72 @@ async def ws_status(
     }
 
 
+@router.post("/self/decommission")
+@limiter.limit("10/hour")
+async def decommission_self(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Node-initiated decommission.
+
+    Called when the operator runs ``/wipe confirm`` on the CloudNode TUI.
+    The node asks us to delete its server-side record *before* it
+    erases local state, so "factory reset" is one user action instead
+    of "wipe locally, then remember to also delete it in the dashboard".
+
+    Unlike the admin ``DELETE /{node_id}`` path, we skip the reflexive
+    ``wipe_data`` WebSocket command — the node is the one asking, so
+    it's already committed to wiping itself regardless of whether this
+    response makes it back.
+
+    Auth: ``X-Node-API-Key`` header. The node identifies itself by key
+    rather than putting ``node_id`` in the URL — a stolen key can
+    already register/heartbeat as that node, so there's no new
+    exposure, and it keeps the endpoint independent of whether the
+    caller still knows its own node_id after a partial reset.
+    """
+    api_key = request.headers.get("X-Node-API-Key")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+
+    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
+    node = db.query(CameraNode).filter_by(api_key_hash=api_key_hash).first()
+    if not node:
+        raise HTTPException(status_code=404, detail="Node not found")
+
+    # Clean up in-memory caches for every camera on this node — same
+    # cleanup the admin DELETE path does, so we don't leak a camera's
+    # HLS segment cache after its owning node is gone.
+    from app.api.hls import cleanup_camera_cache
+    for camera in list(node.cameras):
+        cleanup_camera_cache(camera.camera_id)
+
+    node_id = node.node_id
+    node_name = node.name
+    org_id = node.org_id
+    db.delete(node)
+    db.commit()
+
+    # Node-initiated — no acting admin. We still want the audit row
+    # because a node disappearing is a security-relevant event, and
+    # the ``initiated_by`` flag lets the UI distinguish this from the
+    # admin-triggered delete above.
+    write_audit(
+        db,
+        org_id=org_id,
+        event="node_decommissioned",
+        username=f"node:{node_id}",
+        details={
+            "node_id": node_id,
+            "name": node_name,
+            "initiated_by": "node",
+        },
+        request=request,
+    )
+
+    return {"success": True, "deleted": node_id}
+
+
 @router.get("/{node_id}")
 async def get_node(
     node_id: str,

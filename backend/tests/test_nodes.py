@@ -58,6 +58,80 @@ def test_delete_nonexistent_node(admin_client):
     assert resp.status_code == 404
 
 
+def test_decommission_self_removes_node(admin_client):
+    """A node can decommission itself using its own API key — the
+    server-side record is deleted, mirroring the admin DELETE path
+    but authenticated by the node instead of a dashboard user."""
+    create_resp = admin_client.post("/api/nodes", json={"name": "Self Decom"})
+    body = create_resp.json()
+    node_id = body["node_id"]
+    api_key = body["api_key"]
+
+    resp = admin_client.post(
+        "/api/nodes/self/decommission",
+        headers={"X-Node-API-Key": api_key},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"success": True, "deleted": node_id}
+
+    # Node row should be gone.
+    list_resp = admin_client.get("/api/nodes")
+    assert len(list_resp.json()) == 0
+
+
+def test_decommission_self_requires_key(admin_client):
+    """Missing X-Node-API-Key → 401 (auth required, not "node not found")."""
+    resp = admin_client.post("/api/nodes/self/decommission")
+    assert resp.status_code == 401
+
+
+def test_decommission_self_rejects_unknown_key(admin_client):
+    """An API key that matches no node → 404.  Using 404 rather than 403
+    because we can't distinguish "wrong key for real node" from "key
+    for a node that never existed" without leaking existence info."""
+    resp = admin_client.post(
+        "/api/nodes/self/decommission",
+        headers={"X-Node-API-Key": "definitely-not-a-real-api-key"},
+    )
+    assert resp.status_code == 404
+
+
+def test_decommission_self_writes_audit_row(admin_client):
+    """Node-initiated decommission must still leave an audit trail —
+    tagged ``initiated_by: node`` so the UI can distinguish this from
+    the admin-triggered DELETE /{node_id} path."""
+    import json
+    from app.models.models import AuditLog
+    from tests.conftest import TestSession
+
+    create_resp = admin_client.post("/api/nodes", json={"name": "Audited Decom"})
+    body = create_resp.json()
+    node_id = body["node_id"]
+    api_key = body["api_key"]
+
+    resp = admin_client.post(
+        "/api/nodes/self/decommission",
+        headers={"X-Node-API-Key": api_key},
+    )
+    assert resp.status_code == 200
+
+    session = TestSession()
+    try:
+        rows = (
+            session.query(AuditLog)
+            .filter_by(event="node_decommissioned")
+            .all()
+        )
+        assert len(rows) == 1, "expected exactly one node_decommissioned audit row"
+        row = rows[0]
+        assert row.username == f"node:{node_id}"
+        details = json.loads(row.details)
+        assert details["node_id"] == node_id
+        assert details["initiated_by"] == "node"
+    finally:
+        session.close()
+
+
 def test_get_plan_info(admin_client):
     """Plan info endpoint returns plan details and usage."""
     resp = admin_client.get("/api/nodes/plan")
