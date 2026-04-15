@@ -238,6 +238,80 @@ def test_playlist_injects_codec_header_from_db(
     assert "mp4a.40.2" in body
 
 
+def test_playlist_rewrite_handles_path_prefixed_segment_uris(
+    admin_client, unauthenticated_client, db,
+):
+    """FFmpeg's HLS muxer sometimes writes the ``-hls_segment_filename``
+    verbatim into the playlist URIs — so on a node where the segment
+    filename is given with a relative path prefix (the production shape,
+    ``./data/hls/<cam>/segment_%05d.ts``), the playlist contains lines
+    like ``./data/hls/<cam>/segment_00042.ts`` instead of bare basenames.
+
+    The rewriter must still normalize these to ``segment/<basename>``;
+    otherwise the browser tries to fetch the stale relative path against
+    its own origin and 404s — segments-pushing-but-nothing-playing,
+    which is exactly the symptom we hit on a real Pi deploy.
+    """
+    raw_key, cam_id = _seed_node_with_camera(db)
+    prefixed_playlist = (
+        "#EXTM3U\n"
+        "#EXT-X-VERSION:3\n"
+        "#EXT-X-TARGETDURATION:2\n"
+        "#EXT-X-MEDIA-SEQUENCE:42\n"
+        "#EXTINF:2.0,\n"
+        "./data/hls/db2782d7_dev_video0/segment_00042.ts\n"
+        "#EXTINF:2.0,\n"
+        "./data/hls/db2782d7_dev_video0/segment_00043.ts\n"
+    )
+
+    push = unauthenticated_client.post(
+        f"/api/cameras/{cam_id}/playlist",
+        content=prefixed_playlist,
+        headers={"X-Node-API-Key": raw_key},
+    )
+    assert push.status_code == 200
+
+    body = admin_client.get(f"/api/cameras/{cam_id}/stream.m3u8").text
+    # The path prefix must be stripped — we want the relative proxy URI
+    # only, never the node-local filesystem path.
+    assert "segment/segment_00042.ts" in body
+    assert "segment/segment_00043.ts" in body
+    assert "./data/hls/" not in body
+
+
+def test_playlist_rewrite_handles_crlf_line_endings(
+    admin_client, unauthenticated_client, db,
+):
+    """A CloudNode running on Windows can write the playlist with CRLF
+    line endings.  The regex must treat ``\\r`` as trailing whitespace
+    so the emitted URI is still the clean ``segment/<name>`` — a stray
+    ``\\r`` in the middle of the URI would break the browser's fetch."""
+    raw_key, cam_id = _seed_node_with_camera(db)
+    crlf_playlist = (
+        "#EXTM3U\r\n"
+        "#EXT-X-VERSION:3\r\n"
+        "#EXT-X-TARGETDURATION:2\r\n"
+        "#EXT-X-MEDIA-SEQUENCE:10\r\n"
+        "#EXTINF:2.0,\r\n"
+        "segment_00010.ts\r\n"
+        "#EXTINF:2.0,\r\n"
+        "segment_00011.ts\r\n"
+    )
+
+    unauthenticated_client.post(
+        f"/api/cameras/{cam_id}/playlist",
+        content=crlf_playlist,
+        headers={"X-Node-API-Key": raw_key},
+    )
+
+    body = admin_client.get(f"/api/cameras/{cam_id}/stream.m3u8").text
+    # The URI line on its own — no stray \r glued onto the filename.
+    assert "segment/segment_00010.ts\r" in body or "segment/segment_00010.ts\n" in body
+    # The rewritten URI line should not contain ``\rsegment`` anywhere —
+    # that'd mean a CR survived into the middle of the URI.
+    assert "\rsegment" not in body.replace("\r\n", "\n")
+
+
 def test_playlist_rewrite_is_idempotent_across_pushes(
     admin_client, unauthenticated_client, db,
 ):

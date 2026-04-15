@@ -16,7 +16,22 @@ router = APIRouter(prefix="/api/cameras/{camera_id}", tags=["streaming"])
 logger = logging.getLogger(__name__)
 
 # Pre-compiled regex patterns — avoids recompilation on every request.
-_RE_SEGMENT = re.compile(r"^(segment_\d+\.ts)$", re.MULTILINE)
+#
+# _RE_SEGMENT_URI matches any non-comment playlist line whose URI ends in
+# ``segment_NNNNN.ts``, with or without a leading path.  FFmpeg's HLS
+# muxer sometimes writes bare basenames into the playlist (when the
+# ``-hls_segment_filename`` argument and the playlist are in the same
+# dir) and sometimes writes the path verbatim (when they aren't, or on
+# older FFmpeg versions).  Matching both forms and dropping the prefix
+# means the browser always gets a relative ``segment/<file>`` URI
+# regardless of how FFmpeg decided to format the line.  The negative
+# lookahead skips ``#EXTINF`` and similar tag lines.  Trailing
+# whitespace (``\r`` on CRLF playlists from Windows CloudNodes) is
+# tolerated so the URI is emitted cleanly.
+_RE_SEGMENT_URI = re.compile(
+    r"^(?!#)(?:.*[/\\])?(segment_\d+\.ts)[ \t\r]*$",
+    re.MULTILINE,
+)
 _RE_CODECS = re.compile(r"^#EXT-X-CODECS:.*$", re.MULTILINE)
 _RE_VERSION = re.compile(r"(#EXT-X-VERSION:\d+)")
 _RE_SEGMENT_FILENAME = re.compile(r"^segment_\d+\.ts$")
@@ -149,13 +164,19 @@ def _rewrite_playlist(
     audio_codec: str = "mp4a.40.2",
 ) -> str:
     """
-    Rewrite raw HLS playlist: replace bare segment filenames with
-    relative proxy URLs (segment/<filename>) and inject codec headers.
-    Pure string manipulation — no I/O.
+    Rewrite raw HLS playlist: replace segment URIs with relative proxy
+    URLs (``segment/<filename>``) and inject codec headers.  Pure
+    string manipulation — no I/O.
+
+    The incoming URI can be either a bare basename or a path-prefixed
+    name (see ``_RE_SEGMENT_URI``).  We strip any prefix and emit the
+    canonical ``segment/<basename>`` so the browser always resolves to
+    ``/api/cameras/{id}/segment/<basename>`` — the endpoint backed by
+    the in-memory cache.
     """
-    # Prefix segment filenames with "segment/" so the browser resolves
-    # them relative to the playlist URL → /api/cameras/{id}/segment/<file>
-    playlist_text = _RE_SEGMENT.sub(r"segment/\1", raw_playlist)
+    # Normalize segment URIs to relative proxy paths.  The capture
+    # group is the basename only — prefix is discarded.
+    playlist_text = _RE_SEGMENT_URI.sub(r"segment/\1", raw_playlist)
 
     # Remove any existing CODECS line then inject after VERSION.
     playlist_text = _RE_CODECS.sub("", playlist_text)
