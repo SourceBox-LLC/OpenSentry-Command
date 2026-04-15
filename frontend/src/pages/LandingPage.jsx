@@ -85,7 +85,7 @@ function LandingPage() {
       <section id="features" className="landing-section-alt">
         <div className="landing-container">
           <div className="landing-section-header">
-            <h2 className="landing-section-title">Why OpenSentry?</h2>
+            <h2 className="landing-section-title">Why SourceBox Sentry?</h2>
             <p className="landing-section-subtitle">
               Designed for modern security. Cloud-hosted, globally accessible, and secure by default.
             </p>
@@ -490,7 +490,7 @@ function LandingPage() {
           <div className="landing-cta-content">
             <h2>Ready to Get Started?</h2>
             <p>
-              Deploy OpenSentry today. Cloud-hosted, globally accessible, and free to start.
+              Deploy SourceBox Sentry today. Cloud-hosted, globally accessible, and free to start.
             </p>
             <div className="landing-cta-actions">
               <Link to="/sign-up" className="landing-btn landing-btn-primary landing-btn-lg">

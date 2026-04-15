@@ -27,7 +27,7 @@ function Layout() {
         <div className="header-content">
           <Link to="/" className="logo">
             <div className="logo-icon">🛡️</div>
-            <div className="logo-text">Open<span>Sentry</span></div>
+            <div className="logo-text">SourceBox <span>Sentry</span></div>
           </Link>
 
           <div className="system-status">

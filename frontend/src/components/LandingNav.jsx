@@ -49,7 +49,7 @@ function LandingNav() {
       <div className="landing-nav-container">
         <Link to="/" className="landing-logo">
           <span className="landing-logo-icon">🛡️</span>
-          <span>Open</span>
+          <span>SourceBox </span>
           <span className="landing-logo-text">Sentry</span>
         </Link>
 

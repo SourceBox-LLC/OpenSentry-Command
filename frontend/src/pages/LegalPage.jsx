@@ -11,7 +11,7 @@ function TermsContent() {
 
       <h2>1. Acceptance of Terms</h2>
       <p>
-        By accessing or using the OpenSentry Command Center service ("Service"),
+        By accessing or using the SourceBox Sentry Command Center service ("Service"),
         operated by SourceBox LLC ("Company," "we," "us," or "our"),
         you ("User," "you," or "your") agree to be bound by these Terms of
         Service ("Terms"). If you are using the Service on behalf of an
@@ -26,7 +26,7 @@ function TermsContent() {
 
       <h2>2. Description of Service</h2>
       <p>
-        OpenSentry provides a cloud-hosted security camera management platform
+        SourceBox Sentry provides a cloud-hosted security camera management platform
         that enables users to connect local camera nodes, view live video
         streams, and manage camera configurations. The Service includes web
         dashboard access, API access, and MCP (Model Context Protocol)
@@ -305,7 +305,7 @@ function PrivacyContent() {
       <p>
         This Privacy Policy describes how SourceBox LLC ("Company," "we,"
         "us," or "our") collects, uses, and protects your information when
-        you use the OpenSentry Command Center service ("Service").
+        you use the SourceBox Sentry Command Center service ("Service").
       </p>
 
       <h2>1. Information We Collect</h2>

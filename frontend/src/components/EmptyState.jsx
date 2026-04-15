@@ -16,7 +16,7 @@ function DiscoveringState() {
         <EmptyState 
             icon="📹"
             title="No Camera Nodes Found"
-            message="Go to Settings to add and configure your OpenSentry camera nodes."
+            message="Go to Settings to add and configure your SourceBox Sentry camera nodes."
         />
     )
 }
@@ -26,7 +26,7 @@ function NoCamerasState() {
         <EmptyState 
             icon="📹"
             title="No Cameras Found"
-            message="Connect OpenSentry camera nodes to your network to get started."
+            message="Connect SourceBox Sentry camera nodes to your network to get started."
         />
     )
 }

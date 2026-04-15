@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────
-# OpenSentry MCP Client Setup
+# SourceBox Sentry MCP Client Setup
 # Automatically configure AI tools to connect to your
-# OpenSentry cameras via the Model Context Protocol.
+# SourceBox Sentry cameras via the Model Context Protocol.
 # ─────────────────────────────────────────────────────
 
 GREEN='\033[0;32m'
@@ -24,7 +24,7 @@ if [[ -z "$API_KEY" || -z "$SERVER_URL" ]]; then
     echo ""
     echo "Usage: bash mcp-setup.sh <api_key> <server_url>"
     echo ""
-    echo "Get your command from the OpenSentry MCP dashboard:"
+    echo "Get your command from the SourceBox Sentry MCP dashboard:"
     echo "  https://opensentry-command.fly.dev/mcp"
     exit 1
 fi
@@ -32,7 +32,7 @@ fi
 # ── Header ────────────────────────────────────────────
 
 echo ""
-echo -e "  ${GREEN}${BOLD}OpenSentry MCP Setup${NC}"
+echo -e "  ${GREEN}${BOLD}SourceBox Sentry MCP Setup${NC}"
 echo -e "  ${DIM}Configure AI tools to connect to your cameras${NC}"
 echo ""
 
@@ -277,7 +277,7 @@ if os.path.isfile(config_path):
 if not isinstance(config.get("mcpServers"), dict):
     config["mcpServers"] = {}
 
-# Add/update OpenSentry entry.
+# Add/update SourceBox Sentry entry.
 config["mcpServers"]["opensentry"] = {
     "type": "http",
     "url": server_url,
@@ -337,7 +337,7 @@ fi
 
 echo -e "  ${GREEN}${BOLD}Setup Complete${NC}"
 echo ""
-echo -e "  ${DIM}Your AI tools can now access your OpenSentry cameras.${NC}"
+echo -e "  ${DIM}Your AI tools can now access your SourceBox Sentry cameras.${NC}"
 echo -e "  ${DIM}Restart the clients you configured so they pick up the new MCP server.${NC}"
 echo -e "  ${DIM}Try asking: \"List my cameras\" or \"Show me what the front door sees\"${NC}"
 echo ""

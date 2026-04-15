@@ -49,7 +49,7 @@ function DocsPage() {
     <div className="docs-layout">
       <aside className="docs-sidebar">
         <div className="docs-sidebar-header">
-          <h2>OpenSentry</h2>
+          <h2>SourceBox Sentry</h2>
           <p>Documentation</p>
         </div>
         <nav className="docs-sidebar-nav">
@@ -103,14 +103,14 @@ function DocsPage() {
         <div className="docs-content-inner">
           <div className="docs-header">
             <h1>Documentation</h1>
-            <p>Complete guides for deploying, using, and integrating with OpenSentry.</p>
+            <p>Complete guides for deploying, using, and integrating with SourceBox Sentry.</p>
           </div>
 
           {/* ── Getting Started ──────────────────────────────── */}
           <section className="docs-section" id="getting-started">
             <h2>Getting Started<a href="#getting-started" className="docs-anchor">#</a></h2>
             <p>
-              OpenSentry turns any USB webcam into a cloud-connected security camera without
+              SourceBox Sentry turns any USB webcam into a cloud-connected security camera without
               router changes, VPNs, or third-party cloud storage in the live video path.
               You bring the camera and a machine to plug it into; we handle streaming,
               storage, access control, and agentic review.
@@ -172,7 +172,7 @@ function DocsPage() {
             <h3>Prerequisites</h3>
             <ul>
               <li>A USB webcam (built-in laptop cameras work too)</li>
-              <li>An OpenSentry account (free tier covers 2 cameras on 1 node)</li>
+              <li>A SourceBox Sentry account (free tier covers 2 cameras on 1 node)</li>
               <li>A Linux, Windows, or macOS machine for CloudNode</li>
               <li>FFmpeg installed (or Docker) — the installer downloads it automatically on Windows</li>
               <li>Outbound HTTPS access from the CloudNode machine to the internet</li>
@@ -445,7 +445,7 @@ cargo build --release
             <p>To run CloudNode as a background service on boot, create <code>/etc/systemd/system/opensentry-cloudnode.service</code>:</p>
             <div className="docs-code-block">
               <code>{`[Unit]
-Description=OpenSentry CloudNode
+Description=SourceBox Sentry CloudNode
 After=network-online.target
 Wants=network-online.target
 
@@ -461,7 +461,7 @@ Environment=RUST_LOG=info
 [Install]
 WantedBy=multi-user.target`}</code>
               <button className="docs-copy-btn" onClick={() => copyToClipboard(`[Unit]
-Description=OpenSentry CloudNode
+Description=SourceBox Sentry CloudNode
 After=network-online.target
 Wants=network-online.target
 
@@ -693,7 +693,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
           <section className="docs-section" id="recording">
             <h2>Recording & Retention<a href="#recording" className="docs-anchor">#</a></h2>
             <p>
-              Recording in OpenSentry is <strong>node-local by design</strong>. Command Center
+              Recording in SourceBox Sentry is <strong>node-local by design</strong>. Command Center
               sends a policy down to every CloudNode; each node writes its own recordings into
               an encrypted SQLite database next to the binary. No video is uploaded for
               long-term storage — the cloud holds only the small in-memory segment buffer
@@ -780,7 +780,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
           <section className="docs-section" id="notifications">
             <h2>Notifications<a href="#notifications" className="docs-anchor">#</a></h2>
             <p>
-              OpenSentry raises events for operational changes (nodes going offline, cameras
+              SourceBox Sentry raises events for operational changes (nodes going offline, cameras
               dropping off) and motion activity. These show up as in-dashboard banners and
               feed into the MCP tool activity log.
             </p>
@@ -822,7 +822,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
               </p>
             </div>
             <p>
-              OpenSentry supports the <strong>Model Context Protocol (MCP)</strong>, letting AI tools like
+              SourceBox Sentry supports the <strong>Model Context Protocol (MCP)</strong>, letting AI tools like
               Claude Code, Cursor, or custom agents interact with your cameras, nodes, and settings
               through natural language.
             </p>
@@ -830,7 +830,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
             <h3>What is MCP?</h3>
             <p>
               MCP is an open protocol that lets AI assistants connect to external tools and data sources.
-              When you connect an AI tool to OpenSentry via MCP, it can list your cameras, check node
+              When you connect an AI tool to SourceBox Sentry via MCP, it can list your cameras, check node
               status, get stream URLs, manage recording settings, and more — all through conversation.
             </p>
 
@@ -1047,7 +1047,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
           {/* ── Plans & Limits ────────────────────────────────── */}
           <section className="docs-section" id="plans">
             <h2>Plans & Limits<a href="#plans" className="docs-anchor">#</a></h2>
-            <p>OpenSentry offers three plans to fit different needs.</p>
+            <p>SourceBox Sentry offers three plans to fit different needs.</p>
 
             <div className="docs-plans-table">
               <table>
@@ -1090,7 +1090,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
           {/* ── Architecture ──────────────────────────────────── */}
           <section className="docs-section" id="architecture">
             <h2>Architecture<a href="#architecture" className="docs-anchor">#</a></h2>
-            <p>OpenSentry uses a cloud-first architecture designed for simplicity and security.</p>
+            <p>SourceBox Sentry uses a cloud-first architecture designed for simplicity and security.</p>
 
             <h3>Data Flow</h3>
             <div className="docs-flow-diagram">
@@ -1280,7 +1280,7 @@ brew install ffmpeg            # macOS`}</code>
           <section className="docs-section" id="faq">
             <h2>FAQ<a href="#faq" className="docs-anchor">#</a></h2>
 
-            <h3>Does OpenSentry record audio?</h3>
+            <h3>Does SourceBox Sentry record audio?</h3>
             <p>
               If a camera's input has audio and its codec is supported (AAC, Opus, MP3),
               CloudNode passes it through the HLS pipeline and it's available during live
@@ -1328,7 +1328,7 @@ brew install ffmpeg            # macOS`}</code>
               organization for auth and a Postgres database.
             </p>
 
-            <h3>Which MCP clients does OpenSentry work with?</h3>
+            <h3>Which MCP clients does SourceBox Sentry work with?</h3>
             <p>
               Any MCP client that supports the streamable-HTTP transport. Tested with Claude
               Code, Cursor, and custom agents built on Anthropic's Agent SDK. ChatGPT and
@@ -1359,7 +1359,7 @@ brew install ffmpeg            # macOS`}</code>
               For enterprise agreements with an SLA, email us via the GitHub org page.
             </p>
 
-            <h3>What license is OpenSentry under?</h3>
+            <h3>What license is SourceBox Sentry under?</h3>
             <p>
               Command Center is AGPL-3.0. CloudNode is GPL-3.0. Both are open source — you
               can read, modify, and self-host the code. For commercial licensing that avoids

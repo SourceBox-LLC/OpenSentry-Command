@@ -1,4 +1,4 @@
-# OpenSentry CloudNode Installer for Windows
+# SourceBox Sentry CloudNode Installer for Windows
 # Usage: irm https://opensentry-command.fly.dev/install.ps1 | iex
 
 $ErrorActionPreference = "Stop"
@@ -7,7 +7,7 @@ $Repo = "SourceBox-LLC/opensentry-cloud-node"
 $InstallDir = if ($env:OPENSENTRY_INSTALL_DIR) { $env:OPENSENTRY_INSTALL_DIR } else { "$env:LOCALAPPDATA\OpenSentry" }
 
 Write-Host ""
-Write-Host "  OpenSentry CloudNode Installer" -ForegroundColor Green
+Write-Host "  SourceBox Sentry CloudNode Installer" -ForegroundColor Green
 Write-Host "  ================================" -ForegroundColor DarkGray
 Write-Host ""
 

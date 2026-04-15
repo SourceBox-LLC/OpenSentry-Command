@@ -17,7 +17,7 @@ function SentinelPage() {
         </h1>
         <p className="sentinel-subtitle">
           Sentinel is a purpose-built AI agent wired directly into your
-          OpenSentry MCP server. The moment motion is detected, Sentinel
+          SourceBox Sentry MCP server. The moment motion is detected, Sentinel
           investigates, reasons about what it sees, and writes a full
           incident report — no human required.
         </p>
