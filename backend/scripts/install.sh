@@ -377,14 +377,74 @@ if [ "$PLATFORM" = "linux" ] && { [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "armv7"
     fi
 fi
 
+# ── Detect whether the node is already registered ─────────────────
+# The setup wizard writes `node.db` (SQLite) into the CWD it was run
+# from — so $HOME/data/node.db is the wizard's default and the most
+# common place.  If either it or an older $INSTALL_DIR/data/node.db
+# exists, skip the wizard (re-running it would create a duplicate node
+# entry in Command Center).  The variable IS_REGISTERED is consumed
+# below by both the setup step and the systemd-unit template.
+IS_REGISTERED=false
+DATA_DIR=""
+if [ -f "$HOME/data/node.db" ]; then
+    IS_REGISTERED=true
+    DATA_DIR="$HOME"
+elif [ -f "$INSTALL_DIR/data/node.db" ]; then
+    IS_REGISTERED=true
+    DATA_DIR="$INSTALL_DIR"
+fi
+
+# ── Run setup wizard interactively ────────────────────────────────
+# A brand-new install is useless without a node_id + api_key, so we
+# chain setup straight onto the binary install.  The wizard walks the
+# operator through "paste the creds from Command Center" and writes
+# node.db.  We redirect stdin from /dev/tty because `curl | bash`
+# leaves stdin as the pipe from curl — without that redirect the
+# wizard's first `read` returns EOF and every prompt falls through to
+# an empty answer.
+SETUP_RAN=false
+if [ "$IS_REGISTERED" = false ] && [ -r /dev/tty ] && [ -t 1 ]; then
+    echo ""
+    echo -e "${BOLD}  Register this node with Command Center${NC}"
+    echo -e "  ${DIM}We'll run the setup wizard now.  You'll need a node ID and${NC}"
+    echo -e "  ${DIM}API key from ${CYAN}https://opensentry-command.fly.dev${NC}${DIM} → Nodes → Add node.${NC}"
+    echo ""
+    if prompt_yes "Run setup wizard now?"; then
+        # Run from $HOME so node.db lands at the canonical location that
+        # the systemd unit (below) uses as WorkingDirectory.  The wizard
+        # creates ./data/ relative to CWD.
+        if (cd "$HOME" && "$INSTALL_DIR/opensentry-cloudnode" setup </dev/tty); then
+            SETUP_RAN=true
+            # Re-detect registration — if setup succeeded we should now
+            # find node.db where we expect it.
+            if [ -f "$HOME/data/node.db" ]; then
+                IS_REGISTERED=true
+                DATA_DIR="$HOME"
+            fi
+        else
+            echo -e "  ${YELLOW}Setup wizard exited with an error.  You can re-run it later:${NC}"
+            echo -e "  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
+        fi
+    else
+        echo -e "  ${DIM}Skipped.  Run later:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
+    fi
+fi
+
 # ── Offer systemd auto-start on Linux ─────────────────────────────
 # Only fires on Linux + systemd + interactive TTY. Skips on WSL, Docker,
 # CI, and anywhere without /dev/tty so the one-liner stays safe to run
-# in automated contexts. Always opt-in — never flips anything on silently.
+# in automated contexts.  Defaults to yes when registration is in
+# place (we have everything we need) and to no otherwise (service
+# would immediately fail on "no credentials").
 install_systemd_service() {
     local svc_name="opensentry-cloudnode"
     local svc_file="/etc/systemd/system/${svc_name}.service"
     local run_user="${SUDO_USER:-$USER}"
+    # WorkingDirectory must contain (or create) ./data where node.db
+    # lives.  Prefer the dir where registration already sits so an
+    # existing install keeps working; fall back to $HOME (wizard's
+    # default) for fresh installs.
+    local work_dir="${DATA_DIR:-$HOME}"
 
     # Render the unit file to a temp location first so we can inspect it
     # if the install step fails, and so the sudo move is the only
@@ -408,8 +468,13 @@ SupplementaryGroups=video
 # Inherit a sane PATH so ffmpeg (installed via apt above) is found even
 # when systemd's default PATH is missing /usr/local/bin.
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-WorkingDirectory=${INSTALL_DIR}
-ExecStart=${INSTALL_DIR}/opensentry-cloudnode
+# NO_COLOR + TERM=dumb suppress the TUI's ANSI cursor escapes so
+# journalctl entries stay line-oriented instead of full-screen redraws.
+Environment=NO_COLOR=1
+Environment=TERM=dumb
+Environment=RUST_LOG=info
+WorkingDirectory=${work_dir}
+ExecStart=${INSTALL_DIR}/opensentry-cloudnode run
 StandardOutput=journal
 StandardError=journal
 Restart=on-failure
@@ -433,35 +498,81 @@ UNIT
     rm -f "$tmp_unit"
 
     sudo systemctl daemon-reload
-    if sudo systemctl enable "$svc_name" >/dev/null 2>&1; then
-        echo -e "  ${GREEN}Service enabled — will start on boot.${NC}"
-        echo -e "  ${DIM}Start now:  ${CYAN}sudo systemctl start ${svc_name}${NC}"
-        echo -e "  ${DIM}View logs:  ${CYAN}journalctl -u ${svc_name} -f${NC}"
-        echo -e "  ${DIM}Disable:    ${CYAN}sudo systemctl disable ${svc_name}${NC}"
-    else
+    if ! sudo systemctl enable "$svc_name" >/dev/null 2>&1; then
         echo -e "  ${YELLOW}Unit installed but enable failed. Check: systemctl status ${svc_name}${NC}"
+        return 1
+    fi
+    echo -e "  ${GREEN}Service enabled — will start on boot.${NC}"
+
+    # Start (or restart, if someone re-ran the installer) so the new
+    # binary/unit actually takes effect.  `restart` is idempotent across
+    # both "not yet running" and "was running the old binary".
+    echo -e "  ${DIM}Starting service...${NC}"
+    if sudo systemctl restart "$svc_name"; then
+        sleep 2
+        if sudo systemctl is-active --quiet "$svc_name"; then
+            echo -e "  ${GREEN}Service is running.${NC}"
+            echo -e "  ${DIM}Status:     ${CYAN}systemctl status ${svc_name}${NC}"
+            echo -e "  ${DIM}Live logs:  ${CYAN}journalctl -u ${svc_name} -f${NC}"
+            echo -e "  ${DIM}Stop:       ${CYAN}sudo systemctl stop ${svc_name}${NC}"
+            SERVICE_RUNNING=true
+        else
+            echo -e "  ${YELLOW}Service started but not active — check:${NC}"
+            echo -e "  ${CYAN}journalctl -u ${svc_name} -n 50 --no-pager${NC}"
+        fi
+    else
+        echo -e "  ${YELLOW}Failed to start service — check:${NC}"
+        echo -e "  ${CYAN}journalctl -u ${svc_name} -n 50 --no-pager${NC}"
     fi
 }
 
+SERVICE_RUNNING=false
 if [ "$PLATFORM" = "linux" ] && check_cmd systemctl && [ -d /etc/systemd/system ]; then
     # Skip if we can't prompt (piped, no tty) — never surprise-enable a
     # system service in an unattended install.
     if [ -t 1 ] && [ -r /dev/tty ]; then
-        # Skip if an existing unit is already installed — don't clobber
-        # a deliberate customisation.
-        if [ ! -f /etc/systemd/system/opensentry-cloudnode.service ]; then
+        UNIT_EXISTS=false
+        [ -f /etc/systemd/system/opensentry-cloudnode.service ] && UNIT_EXISTS=true
+
+        if [ "$UNIT_EXISTS" = true ]; then
+            # Re-run of installer: always overwrite the unit so bug fixes
+            # (e.g. wrong WorkingDirectory, missing `run` subcommand,
+            # missing Environment vars) take effect.  The operator
+            # already opted in to systemd the first time — we don't
+            # re-prompt, we just upgrade silently.  Skips only when the
+            # node isn't registered — can't start a service that has
+            # nowhere to read credentials from.
+            if [ "$IS_REGISTERED" = true ]; then
+                echo ""
+                echo -e "${DIM}Upgrading systemd unit + restarting...${NC}"
+                install_systemd_service || true
+            else
+                echo ""
+                echo -e "  ${YELLOW}systemd unit exists but node isn't registered — skipping restart.${NC}"
+                echo -e "  ${DIM}Register first:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
+            fi
+        elif [ "$IS_REGISTERED" = true ]; then
+            # Fresh install, registration in place — this is the happy
+            # path where the service will actually work, so default yes.
             echo ""
             echo -e "${BOLD}  Auto-start on boot?${NC}"
-            echo -e "  ${DIM}Installs a systemd service that starts CloudNode when your system boots.${NC}"
-            echo -e "  ${DIM}Useful for headless deployments like Raspberry Pi.${NC}"
-            reply=""
-            printf "  Install systemd service? [y/N]: "
-            read -r reply </dev/tty || reply="n"
-            case "${reply}" in
-                y|Y|yes|YES)
-                    install_systemd_service
-                    ;;
-            esac
+            echo -e "  ${DIM}Installs a systemd service that starts CloudNode when your system${NC}"
+            echo -e "  ${DIM}boots and restarts it on failure.  Recommended for headless deployments.${NC}"
+            if prompt_yes "Install systemd service and start it now?"; then
+                # `|| true` so a failed sudo / systemctl doesn't abort
+                # the whole installer — the function already prints a
+                # clear error and the operator should still see the
+                # "Next steps" summary below.
+                install_systemd_service || true
+            fi
+        else
+            # No registration — installing the service now would just
+            # make it crash-loop on missing credentials.  Tell the
+            # operator how to wire it up after they've registered.
+            echo ""
+            echo -e "  ${DIM}Skipping systemd service — node not yet registered.${NC}"
+            echo -e "  ${DIM}After running setup, re-run this installer to install the service:${NC}"
+            echo -e "  ${CYAN}curl -fsSL https://opensentry-command.fly.dev/install.sh | bash${NC}"
         fi
     fi
 fi
@@ -476,12 +587,32 @@ esac
 echo ""
 echo -e "${GREEN}${BOLD}  CloudNode installed successfully.${NC}"
 echo ""
-echo -e "  ${BOLD}Next steps:${NC}"
-echo ""
-echo -e "  1. Run setup:        ${CYAN}${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
-echo -e "  2. Start streaming:  ${CYAN}${INSTALL_DIR}/opensentry-cloudnode${NC}"
-echo ""
 
+if [ "$SERVICE_RUNNING" = true ]; then
+    # Turnkey path: registered + service up.  Operator is done.
+    echo -e "  ${GREEN}${BOLD}CloudNode is streaming.${NC}"
+    echo -e "  ${DIM}View your cameras at ${CYAN}https://opensentry-command.fly.dev${NC}"
+    echo ""
+    echo -e "  ${DIM}Live logs:  ${CYAN}journalctl -u opensentry-cloudnode -f${NC}"
+elif [ "$IS_REGISTERED" = true ]; then
+    # Registered but service not installed/running — hand over the
+    # two commands that get them there.
+    echo -e "  ${BOLD}Next steps:${NC}"
+    echo ""
+    echo -e "  Start CloudNode:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode${NC}"
+    echo ""
+    echo -e "  ${DIM}Or install the systemd service: re-run this installer.${NC}"
+else
+    # Not registered yet — setup was declined or failed.
+    echo -e "  ${BOLD}Next steps:${NC}"
+    echo ""
+    echo -e "  1. Register:         ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
+    echo -e "  2. Start streaming:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode${NC}"
+    echo ""
+    echo -e "  ${DIM}Get your node ID + API key at ${CYAN}https://opensentry-command.fly.dev${NC}"
+fi
+
+echo ""
 if [ "$IN_PATH" = false ]; then
     echo -e "  ${DIM}Tip: Add to PATH for easier access:${NC}"
     if [ "$PLATFORM" = "macos" ]; then
@@ -491,6 +622,3 @@ if [ "$IN_PATH" = false ]; then
     fi
     echo ""
 fi
-
-echo -e "  ${DIM}Get your API key at ${CYAN}https://opensentry-command.fly.dev${NC}"
-echo ""
