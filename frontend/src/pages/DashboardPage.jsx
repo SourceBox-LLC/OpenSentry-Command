@@ -8,6 +8,7 @@ import { useMotionAlerts } from "../hooks/useMotionAlerts.jsx"
 import CameraCard from "../components/CameraCard.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 import HeartbeatBanner from "../components/HeartbeatBanner.jsx"
+import { AdminWelcomeHero, MemberWelcomeHero } from "../components/WelcomeHero.jsx"
 
 function DashboardPage() {
   const { getToken } = useAuth()
@@ -241,66 +242,9 @@ function DashboardPage() {
           </button>
         </div>
       ) : Object.keys(cameras).length === 0 ? (
-        <div className="welcome-hero">
-          <div className="welcome-hero-header">
-            <div className="welcome-hero-icon" aria-hidden="true">👋</div>
-            <h2 className="welcome-hero-title">Welcome to OpenSentry</h2>
-            <p className="welcome-hero-subtitle">
-              Your control plane is ready. OpenSentry runs on your own hardware &mdash; let&rsquo;s get the first camera online.
-            </p>
-          </div>
-
-          <ol className="welcome-checklist" role="list">
-            <li className="welcome-step welcome-step-done">
-              <span className="welcome-step-marker" aria-hidden="true">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </span>
-              <div className="welcome-step-body">
-                <div className="welcome-step-title">Workspace created</div>
-                <div className="welcome-step-desc">You&rsquo;re signed in and ready to go.</div>
-              </div>
-            </li>
-
-            <li className={`welcome-step ${isAdmin ? "welcome-step-active" : "welcome-step-disabled"}`}>
-              <span className="welcome-step-marker" aria-hidden="true">2</span>
-              <div className="welcome-step-body">
-                <div className="welcome-step-title">Install a CloudNode</div>
-                <div className="welcome-step-desc">
-                  {isAdmin
-                    ? "Run one command on any computer with a webcam. You'll get credentials you can paste into the setup wizard."
-                    : "An admin needs to add a camera node before cameras will appear here."}
-                </div>
-                {isAdmin && (
-                  <div className="welcome-step-actions">
-                    <Link to="/settings" className="btn btn-primary">
-                      Add your first node
-                    </Link>
-                    <a
-                      href="https://github.com/sbussiso/opensentry-cloudnode"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-secondary"
-                    >
-                      Installation guide ↗
-                    </a>
-                  </div>
-                )}
-              </div>
-            </li>
-
-            <li className="welcome-step welcome-step-pending">
-              <span className="welcome-step-marker" aria-hidden="true">3</span>
-              <div className="welcome-step-body">
-                <div className="welcome-step-title">Camera goes live</div>
-                <div className="welcome-step-desc">
-                  Once the node starts heartbeating, streams appear here automatically &mdash; usually within 30 seconds.
-                </div>
-              </div>
-            </li>
-          </ol>
-        </div>
+        isAdmin
+          ? <AdminWelcomeHero />
+          : <MemberWelcomeHero orgName={organization?.name} />
       ) : (
         <div className="camera-grid">
           {Object.entries(cameras).map(([cameraId, camera]) => (

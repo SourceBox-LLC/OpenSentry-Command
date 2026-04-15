@@ -724,6 +724,15 @@ body {
     min-width: 0;
 }
 
+.welcome-hero-footnote {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
 @media (max-width: 600px) {
     .welcome-hero {
         padding: 28px 20px 24px;
