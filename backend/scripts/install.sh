@@ -183,10 +183,152 @@ else
     echo -e "  ffmpeg:    ${YELLOW}not found${NC}"
     echo ""
     echo -e "${YELLOW}CloudNode requires ffmpeg for video processing.${NC}"
+
+    # The script is usually run via `curl | bash`, so stdin is the pipe
+    # from curl, not a terminal. Reading from /dev/tty is how we still
+    # get an interactive yes/no from the operator — skip silently if
+    # the controlling terminal isn't available (CI, container build).
+    prompt_install_ffmpeg() {
+        local prompt_msg="$1"
+        local install_cmd="$2"
+        if [ ! -t 1 ] || [ ! -r /dev/tty ]; then
+            # No tty — print the manual command and bail.
+            echo -e "  Install:  ${CYAN}${install_cmd}${NC}"
+            return 1
+        fi
+        # Prompt default is "yes" — operators running the installer
+        # almost always want ffmpeg; making them type "y" every time is
+        # friction without safety. They can still say no.
+        local reply=""
+        printf "  %b " "${prompt_msg} [Y/n]:"
+        read -r reply </dev/tty || reply="n"
+        case "${reply:-y}" in
+            y|Y|yes|YES) return 0 ;;
+            *)
+                echo -e "  ${DIM}Skipping — install manually: ${CYAN}${install_cmd}${NC}"
+                return 1
+                ;;
+        esac
+    }
+
     if [ "$PLATFORM" = "linux" ]; then
-        echo -e "  Install:  ${CYAN}sudo apt install ffmpeg${NC}"
+        # apt is the common case (Debian/Ubuntu/Raspberry Pi OS). Fall
+        # back to just printing the command on other distros — trying to
+        # auto-detect dnf/pacman/apk etc. is more footgun than win.
+        if check_cmd apt-get; then
+            if prompt_install_ffmpeg "Install ffmpeg now with sudo apt install?" "sudo apt install ffmpeg"; then
+                echo -e "  ${DIM}Running: sudo apt-get install -y ffmpeg${NC}"
+                if sudo apt-get update -qq && sudo apt-get install -y ffmpeg; then
+                    echo -e "  ffmpeg:    ${GREEN}installed${NC}"
+                else
+                    echo -e "  ${RED}apt install failed — install manually and re-run setup.${NC}"
+                fi
+            fi
+        else
+            echo -e "  Install:  ${CYAN}sudo apt install ffmpeg${NC}  ${DIM}(or your distro's equivalent)${NC}"
+        fi
     elif [ "$PLATFORM" = "macos" ]; then
-        echo -e "  Install:  ${CYAN}brew install ffmpeg${NC}"
+        if check_cmd brew; then
+            if prompt_install_ffmpeg "Install ffmpeg now with Homebrew?" "brew install ffmpeg"; then
+                echo -e "  ${DIM}Running: brew install ffmpeg${NC}"
+                if brew install ffmpeg; then
+                    echo -e "  ffmpeg:    ${GREEN}installed${NC}"
+                else
+                    echo -e "  ${RED}brew install failed — install manually and re-run setup.${NC}"
+                fi
+            fi
+        else
+            echo -e "  Install:  ${CYAN}brew install ffmpeg${NC}  ${DIM}(install Homebrew first from https://brew.sh)${NC}"
+        fi
+    fi
+fi
+
+# ── Offer systemd auto-start on Linux ─────────────────────────────
+# Only fires on Linux + systemd + interactive TTY. Skips on WSL, Docker,
+# CI, and anywhere without /dev/tty so the one-liner stays safe to run
+# in automated contexts. Always opt-in — never flips anything on silently.
+install_systemd_service() {
+    local svc_name="opensentry-cloudnode"
+    local svc_file="/etc/systemd/system/${svc_name}.service"
+    local run_user="${SUDO_USER:-$USER}"
+
+    # Render the unit file to a temp location first so we can inspect it
+    # if the install step fails, and so the sudo move is the only
+    # privileged action. Keeps blast-radius tiny.
+    local tmp_unit
+    tmp_unit=$(mktemp) || return 1
+
+    cat >"$tmp_unit" <<UNIT
+[Unit]
+Description=OpenSentry CloudNode
+Documentation=https://opensentry-command.fly.dev
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${run_user}
+# 'video' is the standard group that owns /dev/video* on Debian/Ubuntu
+# /Raspberry Pi OS — the CloudNode needs it to open USB cameras.
+SupplementaryGroups=video
+# Inherit a sane PATH so ffmpeg (installed via apt above) is found even
+# when systemd's default PATH is missing /usr/local/bin.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/opensentry-cloudnode
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=5s
+# If the service fails to start 5 times in a minute, stop retrying
+# — operator needs to see the logs rather than a busy-loop hiding them.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+    echo ""
+    echo -e "${DIM}Installing systemd unit to ${svc_file}...${NC}"
+    if ! sudo install -m 0644 "$tmp_unit" "$svc_file"; then
+        rm -f "$tmp_unit"
+        echo -e "  ${RED}Failed to install unit file. Skipping auto-start.${NC}"
+        return 1
+    fi
+    rm -f "$tmp_unit"
+
+    sudo systemctl daemon-reload
+    if sudo systemctl enable "$svc_name" >/dev/null 2>&1; then
+        echo -e "  ${GREEN}Service enabled — will start on boot.${NC}"
+        echo -e "  ${DIM}Start now:  ${CYAN}sudo systemctl start ${svc_name}${NC}"
+        echo -e "  ${DIM}View logs:  ${CYAN}journalctl -u ${svc_name} -f${NC}"
+        echo -e "  ${DIM}Disable:    ${CYAN}sudo systemctl disable ${svc_name}${NC}"
+    else
+        echo -e "  ${YELLOW}Unit installed but enable failed. Check: systemctl status ${svc_name}${NC}"
+    fi
+}
+
+if [ "$PLATFORM" = "linux" ] && check_cmd systemctl && [ -d /etc/systemd/system ]; then
+    # Skip if we can't prompt (piped, no tty) — never surprise-enable a
+    # system service in an unattended install.
+    if [ -t 1 ] && [ -r /dev/tty ]; then
+        # Skip if an existing unit is already installed — don't clobber
+        # a deliberate customisation.
+        if [ ! -f /etc/systemd/system/opensentry-cloudnode.service ]; then
+            echo ""
+            echo -e "${BOLD}  Auto-start on boot?${NC}"
+            echo -e "  ${DIM}Installs a systemd service that starts CloudNode when your system boots.${NC}"
+            echo -e "  ${DIM}Useful for headless deployments like Raspberry Pi.${NC}"
+            reply=""
+            printf "  Install systemd service? [y/N]: "
+            read -r reply </dev/tty || reply="n"
+            case "${reply}" in
+                y|Y|yes|YES)
+                    install_systemd_service
+                    ;;
+            esac
+        fi
     fi
 fi
 
