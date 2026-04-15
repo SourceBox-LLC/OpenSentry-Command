@@ -53,13 +53,13 @@ class Config:
     # response includes an `update_available` hint so the dashboard can nudge
     # the operator.  Update this on every CloudNode release.
     MIN_SUPPORTED_NODE_VERSION: str = os.getenv("MIN_SUPPORTED_NODE_VERSION", "0.1.0")
-    # Bumped to 0.1.7 on 2026-04-15 alongside the Linux/Pi polish release
-    # (segment retry numeric-status classifier + USB enumeration wait).
-    # 0.1.6 nodes still work but the retry bug means they can drop
-    # segments during Fly cold-starts — operators should update.  Keep
-    # this in lockstep with the newest GitHub release of
-    # opensentry-cloud-node.
-    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.7")
+    # Bumped to 0.1.8 on 2026-04-15 alongside the supervisor-wedge
+    # recovery fix.  Nodes on 0.1.7 and older still work but can leave
+    # a camera silently dark after an FFmpeg stall (V4L2 deadlock,
+    # thermal throttle, USB starvation) until the operator restarts
+    # them — 0.1.8 self-recovers.  Keep this in lockstep with the
+    # newest GitHub release of opensentry-cloud-node.
+    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.8")
 
     @classmethod
     def is_clerk_configured(cls) -> bool:
