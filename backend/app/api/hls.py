@@ -55,6 +55,16 @@ _segment_cache: dict[str, dict[str, tuple[bytes, float]]] = {}
 # Track playlist update count per camera — used to throttle cache eviction sweeps.
 _playlist_update_count: dict[str, int] = {}
 
+# ── One-shot diagnostic logging ───────────────────────────────────────
+# On a fresh backend, every new camera id logs its first playlist push
+# and first stream.m3u8 fetch exactly once.  This gives an operator
+# ground truth about what the pipeline is doing ("did CloudNode reach
+# /playlist at all?  what's the first segment URI look like?") without
+# drowning Fly logs in per-segment spam.  Cleared when the camera is
+# evicted from the cache so a reconnect relogs.
+_first_playlist_logged: set[str] = set()
+_first_stream_get_logged: set[str] = set()
+
 # ── Stream access logging (rate-limited) ─────────────────────────────
 _ACCESS_LOG_INTERVAL = 300.0  # 5 minutes
 _last_access_logged: dict[tuple[str, str], float] = {}
@@ -69,6 +79,8 @@ def cleanup_camera_cache(camera_id: str):
     _segment_cache.pop(camera_id, None)
     _playlist_cache.pop(camera_id, None)
     _playlist_update_count.pop(camera_id, None)
+    _first_playlist_logged.discard(camera_id)
+    _first_stream_get_logged.discard(camera_id)
 
 
 def _evict_segment_cache(camera_id: str):
@@ -228,13 +240,36 @@ async def get_hls_playlist(
     # Serve from cache (populated by POST /playlist from CloudNode).
     cached = _playlist_cache.get(camera_id)
     if cached and (time.monotonic() - cached[1]) < _PLAYLIST_CACHE_MAX_AGE:
+        if camera_id not in _first_stream_get_logged:
+            _first_stream_get_logged.add(camera_id)
+            logger.info(
+                "hls: first stream.m3u8 HIT for cam=%s (playlist_age=%.1fs, bytes=%d, cached_segments=%d)",
+                camera_id,
+                time.monotonic() - cached[1],
+                len(cached[0]),
+                len(_segment_cache.get(camera_id, {})),
+            )
         return Response(
             content=cached[0],
             media_type="application/vnd.apple.mpegurl",
             headers=headers,
         )
 
-    # No cached playlist — CloudNode hasn't pushed one yet.
+    # No cached playlist — CloudNode hasn't pushed one yet (or it went
+    # stale).  Log once per camera so operators can tell the "CloudNode
+    # isn't pushing playlists" case apart from "stream.m3u8 never called".
+    # With hls.js retrying every 400ms, unmuted INFO would be a flood —
+    # the one-shot flag keeps it to one line per camera per restart.
+    if camera_id not in _first_stream_get_logged:
+        _first_stream_get_logged.add(camera_id)
+        cached_bytes = len(_segment_cache.get(camera_id, {}))
+        logger.warning(
+            "hls: first stream.m3u8 MISS for cam=%s (playlist_cached=%s, segment_cache_entries=%d) — "
+            "CloudNode hasn't POST /playlist for this camera yet",
+            camera_id,
+            cached is not None,
+            cached_bytes,
+        )
     raise HTTPException(status_code=404, detail="Stream not started yet")
 
 
@@ -362,6 +397,34 @@ async def update_hls_playlist(
         playlist_content, camera_id, video_codec, audio_codec
     )
     _playlist_cache[camera_id] = (rewritten, time.monotonic())
+
+    # First-push diagnostic log — capture the first raw segment URI so
+    # we can see how FFmpeg is shaping it in production (bare basename
+    # vs path-prefixed vs something else entirely).  Lives under INFO
+    # so it shows up in Fly's default log view, one line per camera per
+    # backend restart — not the kind of thing you want to see at 1 Hz.
+    if camera_id not in _first_playlist_logged:
+        _first_playlist_logged.add(camera_id)
+        # Sample the first non-comment, non-blank line — that's the
+        # first segment URI (ground truth for the rewriter).
+        sample_uri = next(
+            (
+                ln.strip()
+                for ln in playlist_content.splitlines()
+                if ln.strip() and not ln.lstrip().startswith("#")
+            ),
+            "<none>",
+        )
+        logger.info(
+            "hls: first playlist push cam=%s raw_bytes=%d rewritten_bytes=%d "
+            "first_segment_uri=%r codecs=%s/%s",
+            camera_id,
+            len(playlist_content),
+            len(rewritten),
+            sample_uri[:200],
+            video_codec,
+            audio_codec,
+        )
 
     # Periodic cache eviction.
     count = _playlist_update_count.get(camera_id, 0) + 1
