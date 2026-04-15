@@ -175,3 +175,183 @@ def test_register_clears_error_on_success(admin_client):
         assert node.api_key_hash == hashlib.sha256(real_key.encode()).hexdigest()
     finally:
         session.close()
+
+
+# ── Version reporting & compatibility ────────────────────────────────
+
+
+def _create_and_register(admin_client, *, version=None):
+    """Helper: create a node, register it, return (node_id, api_key, response)."""
+    create = admin_client.post("/api/nodes", json={"name": "Versioned Node"}).json()
+    node_id, api_key = create["node_id"], create["api_key"]
+    body = {
+        "node_id": node_id,
+        "hostname": "h",
+        "local_ip": "127.0.0.1",
+        "http_port": 8765,
+        "cameras": [],
+    }
+    if version is not None:
+        body["node_version"] = version
+    resp = admin_client.post(
+        "/api/nodes/register",
+        headers={"X-Node-API-Key": api_key},
+        json=body,
+    )
+    return node_id, api_key, resp
+
+
+def test_register_persists_node_version(admin_client):
+    """Reported version must land on the node row so the dashboard can show it."""
+    node_id, _, resp = _create_and_register(admin_client, version="0.1.0")
+    assert resp.status_code == 200
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        assert node.node_version == "0.1.0"
+        assert node.version_checked_at is not None
+    finally:
+        session.close()
+
+
+def test_register_without_version_is_tolerated(admin_client):
+    """Old CloudNodes that pre-date version reporting must still register —
+    they just get an update_available hint instead of a 426."""
+    node_id, _, resp = _create_and_register(admin_client, version=None)
+    assert resp.status_code == 200
+    # No version field → row is null but still flagged for an update.
+    assert resp.json().get("update_available")  # LATEST is non-empty by default
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        assert node.node_version is None
+        assert node.version_checked_at is not None
+    finally:
+        session.close()
+
+
+def test_register_rejects_too_old_version(admin_client, monkeypatch):
+    """A CloudNode below MIN_SUPPORTED gets HTTP 426 with the install hint."""
+    # Bump the floor above the version we'll report.
+    from app.core import versions as versions_mod
+    monkeypatch.setattr(versions_mod.settings, "MIN_SUPPORTED_NODE_VERSION", "0.5.0")
+    monkeypatch.setattr(versions_mod.settings, "LATEST_NODE_VERSION", "0.5.0")
+
+    _, _, resp = _create_and_register(admin_client, version="0.1.0")
+    assert resp.status_code == 426
+    detail = resp.json()["detail"]
+    assert detail["reported"] == "0.1.0"
+    assert detail["min_supported"] == "0.5.0"
+    assert detail["latest"] == "0.5.0"
+    assert "no longer supported" in detail["message"]
+
+
+def test_register_too_old_records_error_on_node(admin_client, monkeypatch):
+    """A 426 must also stamp last_register_error so the dashboard can show why
+    the node is stuck (without making the operator hunt through CloudNode logs)."""
+    from app.core import versions as versions_mod
+    monkeypatch.setattr(versions_mod.settings, "MIN_SUPPORTED_NODE_VERSION", "0.5.0")
+    monkeypatch.setattr(versions_mod.settings, "LATEST_NODE_VERSION", "0.5.0")
+
+    node_id, _, resp = _create_and_register(admin_client, version="0.1.0")
+    assert resp.status_code == 426
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        assert node.last_register_error is not None
+        assert "below the minimum" in node.last_register_error
+    finally:
+        session.close()
+
+
+def test_register_at_latest_omits_update_available(admin_client, monkeypatch):
+    """When the node is current there's no nudge to hand back — keep the
+    response payload tight so the field unambiguously means 'newer exists'."""
+    from app.core import versions as versions_mod
+    monkeypatch.setattr(versions_mod.settings, "MIN_SUPPORTED_NODE_VERSION", "0.1.0")
+    monkeypatch.setattr(versions_mod.settings, "LATEST_NODE_VERSION", "0.1.0")
+
+    _, _, resp = _create_and_register(admin_client, version="0.1.0")
+    assert resp.status_code == 200
+    assert "update_available" not in resp.json()
+
+
+def test_register_outdated_includes_update_available(admin_client, monkeypatch):
+    """A node behind LATEST but above MIN gets the hint without being rejected."""
+    from app.core import versions as versions_mod
+    monkeypatch.setattr(versions_mod.settings, "MIN_SUPPORTED_NODE_VERSION", "0.1.0")
+    monkeypatch.setattr(versions_mod.settings, "LATEST_NODE_VERSION", "0.3.0")
+
+    _, _, resp = _create_and_register(admin_client, version="0.2.0")
+    assert resp.status_code == 200
+    assert resp.json().get("update_available") == "0.3.0"
+
+
+def test_heartbeat_persists_node_version(admin_client):
+    """Heartbeat must keep node_version current so an in-place CloudNode
+    upgrade is visible without forcing the operator to re-register."""
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.0")
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id, "node_version": "0.2.0"},
+    )
+    assert hb.status_code == 200
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        assert node.node_version == "0.2.0"
+    finally:
+        session.close()
+
+
+def test_heartbeat_rejects_too_old_version(admin_client, monkeypatch):
+    """Same gate on heartbeat as on register — a node downgraded below
+    MIN can't pretend it's still healthy."""
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.0")
+
+    from app.core import versions as versions_mod
+    monkeypatch.setattr(versions_mod.settings, "MIN_SUPPORTED_NODE_VERSION", "0.5.0")
+    monkeypatch.setattr(versions_mod.settings, "LATEST_NODE_VERSION", "0.5.0")
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id, "node_version": "0.1.0"},
+    )
+    assert hb.status_code == 426
+    assert hb.json()["detail"]["min_supported"] == "0.5.0"
+
+
+def test_heartbeat_outdated_returns_update_available(admin_client, monkeypatch):
+    """Outdated-but-supported heartbeats get the hint in the response so the
+    dashboard can keep the badge fresh between registers."""
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.0")
+
+    from app.core import versions as versions_mod
+    monkeypatch.setattr(versions_mod.settings, "MIN_SUPPORTED_NODE_VERSION", "0.1.0")
+    monkeypatch.setattr(versions_mod.settings, "LATEST_NODE_VERSION", "0.4.0")
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id, "node_version": "0.2.0"},
+    )
+    assert hb.status_code == 200
+    assert hb.json().get("update_available") == "0.4.0"
+
+
+def test_to_dict_exposes_node_version(admin_client):
+    """The /api/nodes listing must surface version info so the dashboard
+    can render an 'update available' badge without a second fetch."""
+    node_id, _, _ = _create_and_register(admin_client, version="0.1.0")
+
+    listing = admin_client.get("/api/nodes").json()
+    entry = next(n for n in listing if n["node_id"] == node_id)
+    assert entry["node_version"] == "0.1.0"
+    assert entry["version_checked_at"]

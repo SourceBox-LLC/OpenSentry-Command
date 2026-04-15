@@ -39,6 +39,22 @@ class Config:
     # How often (in playlist updates) to run cache eviction.
     CLEANUP_INTERVAL: int = int(os.getenv("CLEANUP_INTERVAL", "20"))
 
+    # CloudNode version compatibility.
+    #
+    # MIN_SUPPORTED_NODE_VERSION — register/heartbeat from a CloudNode older
+    # than this is rejected with HTTP 426 Upgrade Required.  Bump only when
+    # we ship a wire-protocol break that genuinely cannot interop with the
+    # old client.  A missing version field (Node version unknown / 0.0.0) is
+    # always tolerated for now so very old CloudNodes that pre-date version
+    # reporting can still register and be told to upgrade.
+    #
+    # LATEST_NODE_VERSION — what the CloudNode installer would download today.
+    # If a node reports a version older than this we still accept it, but the
+    # response includes an `update_available` hint so the dashboard can nudge
+    # the operator.  Update this on every CloudNode release.
+    MIN_SUPPORTED_NODE_VERSION: str = os.getenv("MIN_SUPPORTED_NODE_VERSION", "0.1.0")
+    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.0")
+
     @classmethod
     def is_clerk_configured(cls) -> bool:
         return bool(cls.CLERK_SECRET_KEY and cls.CLERK_PUBLISHABLE_KEY)

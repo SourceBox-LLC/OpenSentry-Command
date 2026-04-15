@@ -58,6 +58,30 @@ def setup_db():
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Drop all in-memory rate-limit counters between tests.
+
+    The slowapi limiter keeps counters in process memory (no Redis in
+    tests), so a test that creates 5 nodes leaves a 5-tick stamp on the
+    "20/hour POST /api/nodes" bucket that the next test inherits.  Tests
+    are supposed to be order-independent — without this reset, adding a
+    new test that creates resources can flake an unrelated suite that
+    runs after it.  Best-effort: storage internals differ between
+    backends, so any AttributeError just means "nothing to clear".
+    """
+    from app.core.limiter import limiter
+    try:
+        storage = getattr(limiter, "_storage", None) or getattr(limiter, "storage", None)
+        if storage is not None and hasattr(storage, "storage"):
+            storage.storage.clear()
+        elif storage is not None and hasattr(storage, "reset"):
+            storage.reset()
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture
 def db():
     """Direct DB session for test setup/assertions."""

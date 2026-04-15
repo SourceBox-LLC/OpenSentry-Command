@@ -30,6 +30,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
+from app.core.versions import check_node_version
 from app.models import CameraNode, Camera, MotionEvent
 
 logger = logging.getLogger(__name__)
@@ -219,11 +220,23 @@ async def node_websocket(
             msg_type = data.get("type")
 
             if msg_type == "heartbeat":
-                await _handle_heartbeat(node_id, node_db_id, org_id, data.get("payload", {}))
+                hb_result = await _handle_heartbeat(node_id, node_db_id, org_id, data.get("payload", {}))
+                # Pass version-compat hints back through the ack so CloudNode
+                # can log "update available" or "you're below the supported
+                # floor" without needing a separate channel.  Keys are
+                # omitted when there's nothing to say (no update, supported)
+                # so old nodes that don't parse the new fields stay happy.
+                ack_payload = {
+                    "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
+                }
+                if hb_result and hb_result.get("update_available"):
+                    ack_payload["update_available"] = hb_result["update_available"]
+                if hb_result and hb_result.get("unsupported"):
+                    ack_payload["unsupported"] = True
                 await ws.send_json({
                     "type": "ack",
                     "id": data.get("id"),
-                    "payload": {"timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat()},
+                    "payload": ack_payload,
                 })
 
             elif msg_type == "command_result":
@@ -258,15 +271,26 @@ async def node_websocket(
 
 # ── Heartbeat Handler ─────────────────────────────────────────────────
 
-async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload: dict):
+async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload: dict) -> dict:
     """Process a heartbeat message — same logic as the HTTP endpoint.
 
     Also detects node/camera online↔offline transitions by comparing the
     previous ``status`` column against the incoming value; any change is
     emitted as a notification AFTER the DB commit so the inbox never
     shows a transition that later got rolled back.
+
+    Returns a dict the caller can mix into the ack payload, currently:
+
+        {"update_available": "X.Y.Z" | None, "unsupported": bool}
+
+    so the node sees both the "newer release exists" hint and the
+    "you're below the floor" warning over the same channel.  Unlike the
+    HTTP endpoint we don't drop the WS connection on too-old — disconnecting
+    cascades into reconnect storms — but the dashboard already flags the
+    bad version and the next register call will get HTTP 426.
     """
     db: Session = SessionLocal()
+    response: dict = {"update_available": None, "unsupported": False}
 
     # Accumulate transitions during the update pass so we can emit them
     # post-commit.  Tuple shape: (kind, entity_id, display_name, new_status, node_id|None)
@@ -275,7 +299,14 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
     try:
         node = db.query(CameraNode).filter_by(node_id=node_id).first()
         if not node:
-            return
+            return response
+
+        reported_version = payload.get("node_version")
+        version_check = check_node_version(reported_version)
+        node.node_version = version_check["parsed"] if reported_version else None
+        node.version_checked_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        response["update_available"] = version_check["update_available"]
+        response["unsupported"] = not version_check["supported"]
 
         prev_node_status = node.status
         node.status = "online"
@@ -325,7 +356,7 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
     except Exception as e:
         logger.error("Heartbeat DB error for node %s: %s", node_id, e)
         db.rollback()
-        return
+        return response
     finally:
         # We leave db open briefly below to reuse for notification writes,
         # then close in the emit block's finally.
@@ -361,6 +392,7 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
             logger.exception("[Heartbeat] Failed to emit transition notifications")
 
     db.close()
+    return response
 
 
 # ── Motion Event Handler ─────────────────────────────────────────────

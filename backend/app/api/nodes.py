@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_display_name
+from app.core.versions import check_node_version
 from app.models.models import CameraNode, Camera, Setting
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
 logger = logging.getLogger(__name__)
@@ -157,6 +158,36 @@ async def register_node(
             )
             raise HTTPException(status_code=403, detail="Invalid API key for this node")
 
+        # Refuse registrations from CloudNodes too old to speak the current
+        # wire protocol — they'd just keep failing in subtle ways downstream
+        # and the operator would have no idea what's wrong.  HTTP 426 with
+        # the canonical "you need at least X" payload makes the next step
+        # obvious.  Persisted on the node row so the dashboard can surface
+        # the bad version even for nodes that get rejected here.
+        version_check = check_node_version(data.node_version)
+        existing_node.node_version = version_check["parsed"] if data.node_version else None
+        existing_node.version_checked_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        if not version_check["supported"]:
+            _record_node_register_error(
+                db, existing_node,
+                f"CloudNode version {version_check['parsed']} is below the minimum "
+                f"supported {version_check['min_supported']}. Update CloudNode to "
+                f"{version_check['latest']} and re-register.",
+            )
+            raise HTTPException(
+                status_code=426,
+                detail={
+                    "message": (
+                        f"CloudNode {version_check['parsed']} is no longer supported. "
+                        f"Minimum: {version_check['min_supported']}, "
+                        f"latest: {version_check['latest']}."
+                    ),
+                    "reported": version_check["reported"],
+                    "min_supported": version_check["min_supported"],
+                    "latest": version_check["latest"],
+                },
+            )
+
         existing_node.hostname = data.hostname or existing_node.hostname
         existing_node.local_ip = data.local_ip or existing_node.local_ip
         existing_node.http_port = data.http_port or existing_node.http_port
@@ -281,6 +312,12 @@ async def register_node(
                     f"Upgrade to add: {', '.join(skipped_cameras)}."
                 ),
             }
+        # Tell the node when a newer release is available.  CloudNode logs this
+        # as a one-line warning and the dashboard turns it into an
+        # "update available" badge on the node row.  We don't push the update
+        # ourselves — operators install CloudNode on their own hardware.
+        if version_check["update_available"]:
+            response["update_available"] = version_check["update_available"]
         return response
 
     logger.warning("Registration failed: node_id=%s not found in database", data.node_id)
@@ -313,6 +350,30 @@ async def node_heartbeat(
     if node.api_key_hash != api_key_hash:
         raise HTTPException(status_code=403, detail="Invalid API key")
 
+    # Same version gate as register — a CloudNode that gets upgraded to a
+    # supported version recovers automatically on its next heartbeat; one
+    # that gets *downgraded* below MIN_SUPPORTED stops being able to
+    # heartbeat and shows up as offline within 90s.  Persist the reported
+    # version on every heartbeat so the dashboard reflects in-place updates
+    # without requiring a re-register.
+    version_check = check_node_version(data.node_version)
+    node.node_version = version_check["parsed"] if data.node_version else None
+    node.version_checked_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    if not version_check["supported"]:
+        raise HTTPException(
+            status_code=426,
+            detail={
+                "message": (
+                    f"CloudNode {version_check['parsed']} is no longer supported. "
+                    f"Minimum: {version_check['min_supported']}, "
+                    f"latest: {version_check['latest']}."
+                ),
+                "reported": version_check["reported"],
+                "min_supported": version_check["min_supported"],
+                "latest": version_check["latest"],
+            },
+        )
+
     node.status = "online"
     node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
     node.local_ip = data.local_ip or node.local_ip
@@ -341,7 +402,10 @@ async def node_heartbeat(
 
     db.commit()
 
-    return {"success": True, "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat()}
+    response = {"success": True, "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat()}
+    if version_check["update_available"]:
+        response["update_available"] = version_check["update_available"]
+    return response
 
 
 @router.get("")

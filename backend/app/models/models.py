@@ -183,6 +183,13 @@ class CameraNode(Base):
     # status badge.  Cleared on successful re-registration.
     last_register_error = Column(String(500), nullable=True)
     last_register_error_at = Column(DateTime, nullable=True)
+    # CloudNode-reported build version (e.g. "0.1.0") + when we last saw it.
+    # Updated by both register and heartbeat; nullable so very old nodes that
+    # pre-date version reporting can still register without failing migration.
+    # Used by the dashboard to surface "update available" badges and by
+    # versions.check_node_version() to gate registrations from too-old nodes.
+    node_version = Column(String(50), nullable=True)
+    version_checked_at = Column(DateTime, nullable=True)
 
     cameras = relationship(
         "Camera", back_populates="node", cascade="all, delete-orphan"
@@ -218,6 +225,10 @@ class CameraNode(Base):
             "last_register_error": self.last_register_error,
             "last_register_error_at": self.last_register_error_at.isoformat()
             if self.last_register_error_at
+            else None,
+            "node_version": self.node_version,
+            "version_checked_at": self.version_checked_at.isoformat()
+            if self.version_checked_at
             else None,
         }
 

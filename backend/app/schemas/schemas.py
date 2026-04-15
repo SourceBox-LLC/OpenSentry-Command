@@ -34,6 +34,11 @@ class NodeRegister(BaseModel):
     cameras: Optional[List[CameraReport]] = []
     video_codec: Optional[str] = Field(None, max_length=50)
     audio_codec: Optional[str] = Field(None, max_length=50)
+    # CloudNode build version ("X.Y.Z" from its Cargo.toml).  Optional so
+    # very old nodes that pre-date version reporting can still register;
+    # they'll show up as "unknown" in the dashboard and get an
+    # update_available hint pointing at the latest release.
+    node_version: Optional[str] = Field(None, max_length=50)
 
 
 class CameraStatus(BaseModel):
@@ -49,6 +54,10 @@ class NodeHeartbeat(BaseModel):
     node_id: str = Field(..., max_length=50)
     local_ip: Optional[str] = Field(None, max_length=45)
     cameras: Optional[List[CameraStatus]] = []
+    # See NodeRegister.node_version — same field, re-sent on every heartbeat
+    # so the backend always knows what's actually running (e.g. after the
+    # operator updates CloudNode without re-registering).
+    node_version: Optional[str] = Field(None, max_length=50)
 
 
 class NodeCreate(BaseModel):
