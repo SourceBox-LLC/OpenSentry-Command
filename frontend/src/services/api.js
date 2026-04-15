@@ -53,6 +53,13 @@ export async function updateRecordingSettings(getToken, settings) {
   })
 }
 
+export async function updateNotificationSettings(getToken, settings) {
+  return fetchWithAuth("/api/settings/notifications", getToken, {
+    method: "POST",
+    body: JSON.stringify(settings)
+  })
+}
+
 export async function getCameraGroups(getToken) {
   return fetchWithAuth("/api/camera-groups", getToken)
 }

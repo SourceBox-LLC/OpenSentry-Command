@@ -29,7 +29,41 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_view
 from app.core.database import SessionLocal, get_db
-from app.models.models import Notification, UserNotificationState
+from app.models.models import Notification, Setting, UserNotificationState
+
+
+# ── Per-org preference gate ────────────────────────────────────────
+# Which notification kinds the org wants delivered to the inbox.
+# Defaults intentionally match "everything on" so behaviour before the
+# settings UI shipped is unchanged — operators only ever see less noise
+# than before, never more.  Keys map kind → (setting_key, default).
+
+_NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
+    "motion": ("motion_notifications", True),
+    "camera_online": ("camera_transition_notifications", True),
+    "camera_offline": ("camera_transition_notifications", True),
+    "node_online": ("node_transition_notifications", True),
+    "node_offline": ("node_transition_notifications", True),
+}
+
+
+def notifications_enabled(db: Session, org_id: str, kind: str) -> bool:
+    """Return True if notifications of ``kind`` should be delivered for
+    ``org_id``.  Unknown kinds default to enabled so new notification
+    types don't silently disappear when added without a settings migration.
+
+    Reads from the ``Setting`` table using the same "string value" pattern
+    the recording toggles use.  Keeping it here (not in the motion path)
+    means every emitter can gate without duplicating the lookup logic.
+    """
+    cfg = _NOTIFICATION_KIND_TO_SETTING.get(kind)
+    if cfg is None:
+        return True
+    key, default = cfg
+    val = Setting.get(db, org_id, key, None)
+    if val is None:
+        return default
+    return val == "true"
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +157,20 @@ def create_notification(
         audience = "all"
     if severity not in ("info", "warning", "error", "critical"):
         severity = "info"
+
+    # Per-org preference gate — an operator who turned off "motion
+    # notifications" in Settings should stop seeing new motion rows in
+    # the inbox without affecting the motion-event pipeline itself.
+    # Done here (vs. at each call site) so every emitter, current and
+    # future, automatically respects the toggle.
+    try:
+        if not notifications_enabled(session, org_id, kind):
+            return None
+    except Exception:
+        # Gate failures must not block notifications — fall through to
+        # the normal create path so we're no worse off than before the
+        # gate existed.
+        logger.exception("[Notifications] preference lookup failed; emitting anyway")
 
     try:
         notif = Notification(

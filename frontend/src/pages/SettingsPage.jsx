@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateRecordingSettings } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateRecordingSettings, updateNotificationSettings } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
@@ -42,6 +42,10 @@ function SettingsPage() {
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
 
+  // Notification preferences (same /api/settings payload, separate subsection).
+  const [notifications, setNotifications] = useState(null)
+  const [notificationsSaving, setNotificationsSaving] = useState(false)
+
   // Upgrade modal
   const [upgradeFeature, setUpgradeFeature] = useState(null)
 
@@ -70,6 +74,15 @@ function SettingsPage() {
       const token = await getToken()
       const data = await getSettings(() => Promise.resolve(token))
       setRecording(data.recording)
+      // Backend defaults to "all on" when the notifications block is
+      // missing, but be defensive for older backends that don't send it.
+      setNotifications(
+        data.notifications || {
+          motion_notifications: true,
+          camera_transition_notifications: true,
+          node_transition_notifications: true,
+        },
+      )
     } catch (err) {
       console.error("Failed to load settings:", err)
       showToast("Failed to load settings", "error")
@@ -100,6 +113,29 @@ function SettingsPage() {
   const handleRecordingChange = (key, value) => {
     const updated = { ...recording, [key]: value }
     saveRecording(updated)
+  }
+
+  const saveNotifications = async (updated) => {
+    // Optimistic update — keep the toggle responsive even if the save
+    // is slow.  Rollback to server state if the request fails.
+    const previous = notifications
+    setNotifications(updated)
+    setNotificationsSaving(true)
+    try {
+      const token = await getToken()
+      await updateNotificationSettings(() => Promise.resolve(token), updated)
+      showToast("Notification settings saved", "success")
+    } catch (err) {
+      setNotifications(previous)
+      showToast(err.message || "Failed to save notification settings", "error")
+    } finally {
+      setNotificationsSaving(false)
+    }
+  }
+
+  const handleNotificationToggle = (key) => {
+    if (!notifications) return
+    saveNotifications({ ...notifications, [key]: !notifications[key] })
   }
 
   const loadNodes = async () => {
@@ -495,6 +531,37 @@ function SettingsPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {notifications && (
+        <div className="settings-section">
+          <h2>Notifications</h2>
+          <p className="section-description">
+            Choose which events show up in the bell inbox. Underlying motion
+            events still record to history for incidents and analytics —
+            turning a toggle off just stops the notification from appearing.
+          </p>
+          <div className="settings-toggles">
+            <label className="toggle-row">
+              <div className="toggle-info">
+                <span className="toggle-label">Motion detection</span>
+                <span className="toggle-desc">
+                  Alert when a camera detects scene changes above its threshold
+                </span>
+              </div>
+              <button
+                type="button"
+                className={`toggle-switch ${notifications.motion_notifications ? "active" : ""}`}
+                onClick={() => handleNotificationToggle("motion_notifications")}
+                disabled={notificationsSaving}
+                aria-label="Toggle motion detection notifications"
+                aria-pressed={notifications.motion_notifications}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </label>
           </div>
         </div>
       )}

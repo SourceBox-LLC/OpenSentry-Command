@@ -81,7 +81,15 @@ export default function NotificationBell() {
         <div className="notif-panel" role="dialog" aria-label="Notifications">
           <div className="notif-panel-header">
             <div className="notif-panel-title">Notifications</div>
-            {notifications.length > 0 && (
+            {/*
+              Opening the panel already marks everything viewed (see
+              togglePanel), so the button is a no-op unless new items
+              arrive *while* the panel is open.  Gate on unreadCount so
+              users don't click a button that does nothing visible — the
+              button now appears only when there's actually unread content
+              to clear, matching the user's mental model.
+            */}
+            {unreadCount > 0 && (
               <button
                 type="button"
                 className="notif-mark-all-btn"

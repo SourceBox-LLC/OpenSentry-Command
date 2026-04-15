@@ -10,8 +10,19 @@ from app.core.limiter import limiter
 from app.models.models import Camera, CameraGroup, Setting, AuditLog
 from app.schemas.schemas import (
     CameraGroupCreate,
+    NotificationSettings,
     RecordingSettings,
 )
+
+
+# Shared defaults for notification toggles — used by the GET handler and
+# the /api/settings aggregate.  Pydantic's NotificationSettings holds the
+# canonical values; this dict re-expresses them as strings for Setting.get_many.
+_NOTIFICATION_SETTING_DEFAULTS = {
+    "motion_notifications": "true",
+    "camera_transition_notifications": "true",
+    "node_transition_notifications": "true",
+}
 
 router = APIRouter(prefix="/api", tags=["api"])
 logger = logging.getLogger(__name__)
@@ -233,6 +244,7 @@ async def get_all_settings(
         "scheduled_start": "06:00",
         "scheduled_end": "17:00",
         "continuous_24_7": "false",
+        **_NOTIFICATION_SETTING_DEFAULTS,
     })
     return {
         "recording": {
@@ -240,6 +252,11 @@ async def get_all_settings(
             "scheduled_start": vals["scheduled_start"],
             "scheduled_end": vals["scheduled_end"],
             "continuous_24_7": vals["continuous_24_7"] == "true",
+        },
+        "notifications": {
+            "motion_notifications": vals["motion_notifications"] == "true",
+            "camera_transition_notifications": vals["camera_transition_notifications"] == "true",
+            "node_transition_notifications": vals["node_transition_notifications"] == "true",
         },
     }
 
@@ -289,6 +306,67 @@ async def update_recording_settings(
             "scheduled_start": str(data.scheduled_start),
             "scheduled_end": str(data.scheduled_end),
             "continuous_24_7": bool(data.continuous_24_7),
+        },
+        request=request,
+    )
+    return {"success": True}
+
+
+# Notification preferences — parallel to the recording settings pair.
+# GET is view-level (every member needs to know what's on), POST is
+# admin-only (same audit-worthy gate as the other per-org toggles).
+
+@router.get("/settings/notifications")
+async def get_notification_settings(
+    user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
+):
+    """Return the org's notification preferences.
+
+    Defaults to "all on" for backward compat with orgs that existed
+    before the settings UI landed — the gate only starts filtering
+    after an admin explicitly flips a toggle off.
+    """
+    vals = Setting.get_many(db, user.org_id, _NOTIFICATION_SETTING_DEFAULTS)
+    return {
+        "motion_notifications": vals["motion_notifications"] == "true",
+        "camera_transition_notifications": vals["camera_transition_notifications"] == "true",
+        "node_transition_notifications": vals["node_transition_notifications"] == "true",
+    }
+
+
+@router.post("/settings/notifications")
+@limiter.limit("30/minute")
+async def update_notification_settings(
+    data: NotificationSettings,
+    request: Request,
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update notification preferences. Requires admin.
+
+    Persists each toggle as a stringified bool so the existing Setting
+    key/value table can store it without a schema change — same
+    convention the recording toggles use.
+    """
+    Setting.set(db, user.org_id, "motion_notifications", str(data.motion_notifications).lower())
+    Setting.set(
+        db, user.org_id, "camera_transition_notifications",
+        str(data.camera_transition_notifications).lower(),
+    )
+    Setting.set(
+        db, user.org_id, "node_transition_notifications",
+        str(data.node_transition_notifications).lower(),
+    )
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="notification_settings_updated",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={
+            "motion_notifications": bool(data.motion_notifications),
+            "camera_transition_notifications": bool(data.camera_transition_notifications),
+            "node_transition_notifications": bool(data.node_transition_notifications),
         },
         request=request,
     )

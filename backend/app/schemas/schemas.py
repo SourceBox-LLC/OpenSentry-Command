@@ -15,6 +15,19 @@ class RecordingSettings(BaseModel):
     continuous_24_7: bool = False
 
 
+class NotificationSettings(BaseModel):
+    """Per-org toggles controlling which kinds of notifications show up in
+    the bell inbox.  Camera/node transitions stay on by default because
+    those are operator-critical; motion can get noisy so we let operators
+    silence it per-org without disabling the motion-event pipeline itself
+    (motion still records to the DB for incidents and analytics).
+    """
+
+    motion_notifications: bool = True
+    camera_transition_notifications: bool = True
+    node_transition_notifications: bool = True
+
+
 class CameraReport(BaseModel):
     camera_id: Optional[str] = Field(None, max_length=150)
     device_path: Optional[str] = Field(None, max_length=255)

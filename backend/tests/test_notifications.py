@@ -23,9 +23,10 @@ from app.api.notifications import (
     emit_camera_transition,
     emit_node_transition,
     notification_broadcaster,
+    notifications_enabled,
 )
 from app.main import run_offline_sweep
-from app.models.models import Camera, CameraNode, Notification, UserNotificationState
+from app.models.models import Camera, CameraNode, Notification, Setting, UserNotificationState
 from tests.conftest import TestSession
 
 
@@ -473,3 +474,85 @@ def test_offline_sweep_mixed_fresh_and_stale(db):
     notifs = {n.kind: n for n in db.query(Notification).all()}
     assert notifs["camera_offline"].node_id == "node_1"  # linked to parent node
     assert notifs["node_offline"].audience == "admin"
+
+
+# ── Preference gate ────────────────────────────────────────────────
+# The Settings UI lets operators silence specific notification kinds
+# without disabling the underlying event pipeline.  These tests pin the
+# gate's behaviour so a refactor can't silently stop respecting the
+# toggle (which would be noisy in the worst way — spam returns).
+
+def test_notifications_enabled_defaults_true(db):
+    # No Setting row exists → gate returns the per-kind default, which is
+    # True for every kind we ship today.  Legacy orgs shouldn't lose
+    # notifications just because they never visited the settings page.
+    assert notifications_enabled(db, "org_test123", "motion") is True
+    assert notifications_enabled(db, "org_test123", "camera_offline") is True
+    assert notifications_enabled(db, "org_test123", "node_online") is True
+
+
+def test_notifications_enabled_honors_false_flag(db):
+    Setting.set(db, "org_test123", "motion_notifications", "false")
+    assert notifications_enabled(db, "org_test123", "motion") is False
+    # Other kinds unaffected — each toggle is scoped to its setting key.
+    assert notifications_enabled(db, "org_test123", "camera_offline") is True
+
+
+def test_notifications_enabled_unknown_kind_defaults_true(db):
+    # A future notification kind added without a settings migration
+    # should default to delivered, not silently dropped.
+    assert notifications_enabled(db, "org_test123", "brand_new_kind") is True
+
+
+def test_create_notification_respects_motion_toggle(db):
+    Setting.set(db, "org_test123", "motion_notifications", "false")
+
+    result = create_notification(
+        org_id="org_test123",
+        kind="motion",
+        title="Motion on cam_abc",
+        body="Scene change detected at 42% intensity.",
+        audience="all",
+        camera_id="cam_abc",
+        db=db,
+    )
+
+    # Gate returns None when disabled — no row persisted, no broadcast.
+    assert result is None
+    assert db.query(Notification).filter_by(kind="motion").count() == 0
+
+
+def test_create_notification_motion_allowed_when_toggle_on(db):
+    # Explicitly enable (belt-and-suspenders; default is also True).
+    Setting.set(db, "org_test123", "motion_notifications", "true")
+
+    result = create_notification(
+        org_id="org_test123",
+        kind="motion",
+        title="Motion on cam_abc",
+        audience="all",
+        camera_id="cam_abc",
+        db=db,
+    )
+
+    assert result is not None
+    assert db.query(Notification).filter_by(kind="motion").count() == 1
+
+
+def test_create_notification_camera_transition_gated(db):
+    # Camera online/offline share one toggle.  Turning it off suppresses
+    # BOTH directions — the user either wants camera transition alerts or
+    # doesn't.
+    Setting.set(db, "org_test123", "camera_transition_notifications", "false")
+
+    offline = create_notification(
+        org_id="org_test123", kind="camera_offline",
+        title="cam_abc offline", audience="all", db=db,
+    )
+    online = create_notification(
+        org_id="org_test123", kind="camera_online",
+        title="cam_abc online", audience="all", db=db,
+    )
+    assert offline is None
+    assert online is None
+    assert db.query(Notification).count() == 0
