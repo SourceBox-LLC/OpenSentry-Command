@@ -44,7 +44,7 @@ function HlsPlayer({ cameraId, cameraName }) {
 
                         xhrSetup: (xhr, url) => {
                             const token = LOCAL_TEST_MODE ? null : getCurrentToken()
-                            if (token && url.startsWith(ownOrigin)) {
+                            if (token) {
                                 xhr.setRequestHeader("Authorization", `Bearer ${token}`)
                                 // Prevent browser from serving cached playlist/segment
                                 xhr.setRequestHeader("Cache-Control", "no-cache")

@@ -42,7 +42,9 @@ _RE_SEGMENT_FILENAME = re.compile(r"^segment_\d+\.ts$")
 #
 # {camera_id: (rewritten_playlist_text, timestamp)}
 _playlist_cache: dict[str, tuple[str, float]] = {}
-_PLAYLIST_CACHE_MAX_AGE = 30.0  # 30 seconds — short for live video
+_PLAYLIST_CACHE_MAX_AGE = (
+    10.0  # 10 seconds — must be shorter than segment window to avoid stale refs
+)
 _CACHE_MAX_CAMERAS = 500
 
 # ── In-memory segment cache ──────────────────────────────────────────
@@ -72,6 +74,7 @@ _ACCESS_LOG_MAX_ENTRIES = 10000
 
 
 # ── Cache management ─────────────────────────────────────────────────
+
 
 def cleanup_camera_cache(camera_id: str):
     """Remove all cached segments and playlist for a camera.
@@ -118,7 +121,7 @@ def _evict_caches():
 
     if len(_playlist_cache) > _CACHE_MAX_CAMERAS:
         sorted_entries = sorted(_playlist_cache.items(), key=lambda x: x[1][1])
-        for camera_id, _ in sorted_entries[:len(sorted_entries) - _CACHE_MAX_CAMERAS]:
+        for camera_id, _ in sorted_entries[: len(sorted_entries) - _CACHE_MAX_CAMERAS]:
             del _playlist_cache[camera_id]
             _playlist_update_count.pop(camera_id, None)
 
@@ -152,6 +155,7 @@ def _maybe_log_access(
 
     try:
         from datetime import datetime, timezone
+
         log_entry = StreamAccessLog(
             user_id=user_id,
             user_email=user_email,
@@ -190,17 +194,17 @@ def _rewrite_playlist(
     # group is the basename only — prefix is discarded.
     playlist_text = _RE_SEGMENT_URI.sub(r"segment/\1", raw_playlist)
 
-    # Remove any existing CODECS line then inject after VERSION.
+    # Remove any existing CODECS line.  #EXT-X-CODECS is only valid in
+    # Master Playlists — injecting it into a Media Playlist causes
+    # hls.js to attempt master-playlist parsing and fail to fire
+    # MANIFEST_PARSED, locking the player at "Connecting…".
     playlist_text = _RE_CODECS.sub("", playlist_text)
-    playlist_text = _RE_VERSION.sub(
-        rf"\1\n#EXT-X-CODECS:{video_codec},{audio_codec}",
-        playlist_text,
-    )
 
     return playlist_text
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────
+
 
 @router.get("/stream.m3u8")
 async def get_hls_playlist(
@@ -390,12 +394,14 @@ async def update_hls_playlist(
 
     # Pre-compute the rewritten playlist with proxy segment URLs
     # and cache it. Browser polls will serve this instantly.
-    video_codec = camera.video_codec or (node.video_codec if node else None) or "avc1.42e01e"
-    audio_codec = camera.audio_codec or (node.audio_codec if node else None) or "mp4a.40.2"
-
-    rewritten = _rewrite_playlist(
-        playlist_content, camera_id, video_codec, audio_codec
+    video_codec = (
+        camera.video_codec or (node.video_codec if node else None) or "avc1.42e01e"
     )
+    audio_codec = (
+        camera.audio_codec or (node.audio_codec if node else None) or "mp4a.40.2"
+    )
+
+    rewritten = _rewrite_playlist(playlist_content, camera_id, video_codec, audio_codec)
     _playlist_cache[camera_id] = (rewritten, time.monotonic())
 
     # First-push diagnostic log — capture the first raw segment URI so
@@ -468,11 +474,34 @@ async def push_motion_event(
     body = await request.json()
 
     from app.api.ws import _handle_motion_event
-    await _handle_motion_event(node.node_id, node.org_id, {
-        "camera_id": camera_id,
-        "score": body.get("score"),
-        "segment_seq": body.get("segment_seq"),
-        "timestamp": body.get("timestamp"),
-    })
+
+    await _handle_motion_event(
+        node.node_id,
+        node.org_id,
+        {
+            "camera_id": camera_id,
+            "score": body.get("score"),
+            "segment_seq": body.get("segment_seq"),
+            "timestamp": body.get("timestamp"),
+        },
+    )
 
     return {"success": True}
+
+
+@router.get("/debug/playlist")
+async def debug_playlist(
+    camera_id: str,
+):
+    cam_segs = _segment_cache.get(camera_id, {})
+    seg_list = sorted(cam_segs.keys())
+    pl = _playlist_cache.get(camera_id)
+    return {
+        "camera_id": camera_id,
+        "cached_segments": len(seg_list),
+        "oldest": seg_list[0] if seg_list else None,
+        "newest": seg_list[-1] if seg_list else None,
+        "playlist_cached": pl is not None,
+        "playlist_age_s": round(time.monotonic() - pl[1], 1) if pl else None,
+        "playlist_content": pl[0] if pl else None,
+    }

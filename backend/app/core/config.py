@@ -28,14 +28,20 @@ class Config:
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
     # Trace sample rate — 0.1 keeps us inside Sentry's free-tier event
     # budget at expected volumes.  Bump when you need finer perf insight.
-    SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+    SENTRY_TRACES_SAMPLE_RATE: float = float(
+        os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
+    )
 
     # Segments kept in memory per camera for the live proxy cache.
-    # CloudNode ships with 1-second segments by default, so 15 = ~15s of buffer —
-    # enough for HLS to start at the live edge and recover from one short stall.
-    SEGMENT_CACHE_MAX_PER_CAMERA: int = int(os.getenv("SEGMENT_CACHE_MAX_PER_CAMERA", "15"))
+    # CloudNode ships with 1-second segments by default, so 60 = ~60s of buffer —
+    # enough for HLS to recover from network stalls without falling off the cache edge.
+    SEGMENT_CACHE_MAX_PER_CAMERA: int = int(
+        os.getenv("SEGMENT_CACHE_MAX_PER_CAMERA", "60")
+    )
     # Max size of a single pushed segment (safety valve).
-    SEGMENT_PUSH_MAX_BYTES: int = int(os.getenv("SEGMENT_PUSH_MAX_BYTES", str(2 * 1024 * 1024)))
+    SEGMENT_PUSH_MAX_BYTES: int = int(
+        os.getenv("SEGMENT_PUSH_MAX_BYTES", str(2 * 1024 * 1024))
+    )
     # How often (in playlist updates) to run cache eviction.
     CLEANUP_INTERVAL: int = int(os.getenv("CLEANUP_INTERVAL", "20"))
 
