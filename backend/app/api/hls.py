@@ -33,7 +33,6 @@ _RE_SEGMENT_URI = re.compile(
     re.MULTILINE,
 )
 _RE_CODECS = re.compile(r"^#EXT-X-CODECS:.*$", re.MULTILINE)
-_RE_VERSION = re.compile(r"(#EXT-X-VERSION:\d+)")
 _RE_SEGMENT_FILENAME = re.compile(r"^segment_\d+\.ts$")
 
 # ── Rewritten playlist cache ──────────────────────────────────────────
@@ -113,6 +112,9 @@ def _evict_stale_cameras():
     for camera_id in stale:
         del _segment_cache[camera_id]
         _playlist_cache.pop(camera_id, None)
+        _playlist_update_count.pop(camera_id, None)
+        _first_playlist_logged.discard(camera_id)
+        _first_stream_get_logged.discard(camera_id)
 
 
 def _evict_caches():
@@ -173,22 +175,22 @@ def _maybe_log_access(
         db.rollback()
 
 
-def _rewrite_playlist(
-    raw_playlist: str,
-    camera_id: str,
-    video_codec: str = "avc1.42e01e",
-    audio_codec: str = "mp4a.40.2",
-) -> str:
+def _rewrite_playlist(raw_playlist: str) -> str:
     """
     Rewrite raw HLS playlist: replace segment URIs with relative proxy
-    URLs (``segment/<filename>``) and inject codec headers.  Pure
-    string manipulation — no I/O.
+    URLs (``segment/<filename>``) and remove invalid ``#EXT-X-CODECS``
+    lines.  Pure string manipulation — no I/O.
 
     The incoming URI can be either a bare basename or a path-prefixed
     name (see ``_RE_SEGMENT_URI``).  We strip any prefix and emit the
     canonical ``segment/<basename>`` so the browser always resolves to
     ``/api/cameras/{id}/segment/<basename>`` — the endpoint backed by
     the in-memory cache.
+
+    ``#EXT-X-CODECS`` is only valid in Master Playlists; injecting it
+    into a Media Playlist causes hls.js to attempt master-playlist
+    parsing and never fire ``MANIFEST_PARSED``, leaving the player
+    stuck at "Connecting…".
     """
     # Normalize segment URIs to relative proxy paths.  The capture
     # group is the basename only — prefix is discarded.
@@ -401,7 +403,7 @@ async def update_hls_playlist(
         camera.audio_codec or (node.audio_codec if node else None) or "mp4a.40.2"
     )
 
-    rewritten = _rewrite_playlist(playlist_content, camera_id, video_codec, audio_codec)
+    rewritten = _rewrite_playlist(playlist_content)
     _playlist_cache[camera_id] = (rewritten, time.monotonic())
 
     # First-push diagnostic log — capture the first raw segment URI so
@@ -487,21 +489,3 @@ async def push_motion_event(
     )
 
     return {"success": True}
-
-
-@router.get("/debug/playlist")
-async def debug_playlist(
-    camera_id: str,
-):
-    cam_segs = _segment_cache.get(camera_id, {})
-    seg_list = sorted(cam_segs.keys())
-    pl = _playlist_cache.get(camera_id)
-    return {
-        "camera_id": camera_id,
-        "cached_segments": len(seg_list),
-        "oldest": seg_list[0] if seg_list else None,
-        "newest": seg_list[-1] if seg_list else None,
-        "playlist_cached": pl is not None,
-        "playlist_age_s": round(time.monotonic() - pl[1], 1) if pl else None,
-        "playlist_content": pl[0] if pl else None,
-    }

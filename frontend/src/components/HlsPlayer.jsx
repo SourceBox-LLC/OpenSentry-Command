@@ -44,7 +44,10 @@ function HlsPlayer({ cameraId, cameraName }) {
 
                         xhrSetup: (xhr, url) => {
                             const token = LOCAL_TEST_MODE ? null : getCurrentToken()
-                            if (token) {
+                            // hls.js may pass relative URLs (e.g. "segment/segment_00042.ts")
+                            // or absolute URLs (e.g. "https://...stream.m3u8").  Always attach
+                            // the token for our own API endpoints; skip third-party origins.
+                            if (token && (url.startsWith(ownOrigin) || url.startsWith("/"))) {
                                 xhr.setRequestHeader("Authorization", `Bearer ${token}`)
                                 // Prevent browser from serving cached playlist/segment
                                 xhr.setRequestHeader("Cache-Control", "no-cache")

@@ -9,9 +9,9 @@ Covers:
 - Playlist rewriting: raw playlist text pushed by the CloudNode is
   served back with segment filenames proxied through this backend
   (``segment/segment_00001.ts``) — no absolute URLs leak through.
-- Codec injection: the rewritten playlist always advertises an
-  ``#EXT-X-CODECS`` line derived from the DB row, so MSE decoders
-  don't have to sniff the first TS packet.
+- Codec stripping: ``#EXT-X-CODECS`` lines are removed from media
+  playlists since they're only valid in master playlists and break
+  hls.js parsing.
 - Cache eviction bounds: pushing more than
   ``SEGMENT_CACHE_MAX_PER_CAMERA`` segments drops the oldest.
 - ``stream.m3u8`` returns 404 when no playlist has ever been pushed.

@@ -44,12 +44,17 @@ async def list_cameras(
         node_ids = {cam.node_id for cam in cameras if cam.node_id}
         if node_ids:
             existing_node_ids = {
-                n.id for n in db.query(CameraNode.id).filter(CameraNode.id.in_(node_ids)).all()
+                n.id
+                for n in db.query(CameraNode.id)
+                .filter(CameraNode.id.in_(node_ids))
+                .all()
             }
             for cam in cameras:
                 if cam.node_id and cam.node_id not in existing_node_ids:
                     logger.warning(
-                        "Orphan camera %s (node_id=%s not found)", cam.camera_id, cam.node_id
+                        "Orphan camera %s (node_id=%s not found)",
+                        cam.camera_id,
+                        cam.node_id,
                     )
 
     result = [c.to_dict() for c in cameras]
@@ -96,7 +101,10 @@ async def take_snapshot(
 
     try:
         result = await manager.send_command(
-            node.node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
+            node.node_id,
+            "take_snapshot",
+            {"camera_id": camera_id},
+            timeout=15.0,
         )
         return result
     except TimeoutError:
@@ -136,7 +144,10 @@ async def toggle_recording(
     command = "start_recording" if recording else "stop_recording"
     try:
         result = await manager.send_command(
-            node.node_id, command, {"camera_id": camera_id}, timeout=10.0,
+            node.node_id,
+            command,
+            {"camera_id": camera_id},
+            timeout=10.0,
         )
         write_audit(
             db,
@@ -240,13 +251,17 @@ async def get_all_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """Get all settings for the user's organization."""
-    vals = Setting.get_many(db, user.org_id, {
-        "scheduled_recording": "false",
-        "scheduled_start": "06:00",
-        "scheduled_end": "17:00",
-        "continuous_24_7": "false",
-        **_NOTIFICATION_SETTING_DEFAULTS,
-    })
+    vals = Setting.get_many(
+        db,
+        user.org_id,
+        {
+            "scheduled_recording": "false",
+            "scheduled_start": "06:00",
+            "scheduled_end": "17:00",
+            "continuous_24_7": "false",
+            **_NOTIFICATION_SETTING_DEFAULTS,
+        },
+    )
     return {
         "recording": {
             "scheduled_recording": vals["scheduled_recording"] == "true",
@@ -256,8 +271,10 @@ async def get_all_settings(
         },
         "notifications": {
             "motion_notifications": vals["motion_notifications"] == "true",
-            "camera_transition_notifications": vals["camera_transition_notifications"] == "true",
-            "node_transition_notifications": vals["node_transition_notifications"] == "true",
+            "camera_transition_notifications": vals["camera_transition_notifications"]
+            == "true",
+            "node_transition_notifications": vals["node_transition_notifications"]
+            == "true",
         },
     }
 
@@ -267,12 +284,16 @@ async def get_recording_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
     """Get recording settings."""
-    vals = Setting.get_many(db, user.org_id, {
-        "scheduled_recording": "false",
-        "scheduled_start": "06:00",
-        "scheduled_end": "17:00",
-        "continuous_24_7": "false",
-    })
+    vals = Setting.get_many(
+        db,
+        user.org_id,
+        {
+            "scheduled_recording": "false",
+            "scheduled_start": "06:00",
+            "scheduled_end": "17:00",
+            "continuous_24_7": "false",
+        },
+    )
     return {
         "scheduled_recording": vals["scheduled_recording"] == "true",
         "scheduled_start": vals["scheduled_start"],
@@ -317,6 +338,7 @@ async def update_recording_settings(
 # GET is view-level (every member needs to know what's on), POST is
 # admin-only (same audit-worthy gate as the other per-org toggles).
 
+
 @router.get("/settings/notifications")
 async def get_notification_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
@@ -330,8 +352,10 @@ async def get_notification_settings(
     vals = Setting.get_many(db, user.org_id, _NOTIFICATION_SETTING_DEFAULTS)
     return {
         "motion_notifications": vals["motion_notifications"] == "true",
-        "camera_transition_notifications": vals["camera_transition_notifications"] == "true",
-        "node_transition_notifications": vals["node_transition_notifications"] == "true",
+        "camera_transition_notifications": vals["camera_transition_notifications"]
+        == "true",
+        "node_transition_notifications": vals["node_transition_notifications"]
+        == "true",
     }
 
 
@@ -349,13 +373,19 @@ async def update_notification_settings(
     key/value table can store it without a schema change — same
     convention the recording toggles use.
     """
-    Setting.set(db, user.org_id, "motion_notifications", str(data.motion_notifications).lower())
     Setting.set(
-        db, user.org_id, "camera_transition_notifications",
+        db, user.org_id, "motion_notifications", str(data.motion_notifications).lower()
+    )
+    Setting.set(
+        db,
+        user.org_id,
+        "camera_transition_notifications",
         str(data.camera_transition_notifications).lower(),
     )
     Setting.set(
-        db, user.org_id, "node_transition_notifications",
+        db,
+        user.org_id,
+        "node_transition_notifications",
         str(data.node_transition_notifications).lower(),
     )
     write_audit(
@@ -366,7 +396,9 @@ async def update_notification_settings(
         username=audit_label(user),
         details={
             "motion_notifications": bool(data.motion_notifications),
-            "camera_transition_notifications": bool(data.camera_transition_notifications),
+            "camera_transition_notifications": bool(
+                data.camera_transition_notifications
+            ),
             "node_transition_notifications": bool(data.node_transition_notifications),
         },
         request=request,
@@ -443,11 +475,13 @@ async def report_camera_codec(
     if not video_codec:
         raise HTTPException(status_code=400, detail="video_codec is required")
 
-    # Codec strings are injected into HLS #EXT-X-CODECS headers —
+    # Codec strings are stored for diagnostics and MCP tool reporting —
     # reject newlines or absurd lengths to prevent playlist corruption.
-    if len(video_codec) > 64 or '\n' in video_codec or '\r' in video_codec:
+    if len(video_codec) > 64 or "\n" in video_codec or "\r" in video_codec:
         raise HTTPException(status_code=400, detail="Invalid video_codec format")
-    if audio_codec and (len(audio_codec) > 64 or '\n' in audio_codec or '\r' in audio_codec):
+    if audio_codec and (
+        len(audio_codec) > 64 or "\n" in audio_codec or "\r" in audio_codec
+    ):
         raise HTTPException(status_code=400, detail="Invalid audio_codec format")
 
     # Defensive sanitization — older CloudNode builds shipped garbage
@@ -467,17 +501,26 @@ async def report_camera_codec(
         node.audio_codec = camera.audio_codec
         node.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
         logger.info(
-            "Updated node %s codec: video=%s, audio=%s", node.node_id, video_codec, camera.audio_codec
+            "Updated node %s codec: video=%s, audio=%s",
+            node.node_id,
+            video_codec,
+            camera.audio_codec,
         )
 
     db.commit()
 
-    logger.info("Updated codec for camera %s: video=%s, audio=%s", camera_id, video_codec, camera.audio_codec)
+    logger.info(
+        "Updated codec for camera %s: video=%s, audio=%s",
+        camera_id,
+        video_codec,
+        camera.audio_codec,
+    )
 
     return {"success": True, "message": "Codec updated"}
 
 
 # ── Danger Zone ──────────────────────────────────────────────────────
+
 
 @router.post("/settings/danger/wipe-logs")
 @limiter.limit("5/hour")
@@ -496,9 +539,12 @@ async def wipe_stream_logs(
 
     count = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
     from app.models.models import McpActivityLog
+
     mcp_count = db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
     db.commit()
-    logger.warning("Admin wiped %d stream + %d MCP logs (org redacted)", count, mcp_count)
+    logger.warning(
+        "Admin wiped %d stream + %d MCP logs (org redacted)", count, mcp_count
+    )
     write_audit(
         db,
         org_id=user.org_id,
@@ -544,7 +590,10 @@ async def full_reset(
         # Tell CloudNode to wipe local data
         try:
             from app.api.ws import manager
-            result = await manager.send_command(node.node_id, "wipe_data", {}, timeout=10)
+
+            result = await manager.send_command(
+                node.node_id, "wipe_data", {}, timeout=10
+            )
             if result and result.get("status") == "success":
                 results["nodes_wiped"] += 1
         except Exception as e:
@@ -558,14 +607,21 @@ async def full_reset(
         results["nodes_deleted"] += 1
 
     # 2. Wipe stream access logs
-    results["logs_deleted"] = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
+    results["logs_deleted"] = (
+        db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
+    )
 
     # 3. Wipe MCP activity logs
     from app.models.models import McpActivityLog
-    results["mcp_logs_deleted"] = db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
+
+    results["mcp_logs_deleted"] = (
+        db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
+    )
 
     # 4. Wipe settings
-    results["settings_deleted"] = db.query(Setting).filter_by(org_id=user.org_id).delete()
+    results["settings_deleted"] = (
+        db.query(Setting).filter_by(org_id=user.org_id).delete()
+    )
 
     # 5. Wipe audit logs
     db.query(AuditLog).filter_by(org_id=user.org_id).delete()
