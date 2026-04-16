@@ -29,6 +29,7 @@ from app.models.models import Camera, CameraNode
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
+
 def _seed_node_with_camera(db, *, org_id="org_test123"):
     """Create one node+camera and return ``(raw_api_key, camera_id)``.
 
@@ -46,19 +47,22 @@ def _seed_node_with_camera(db, *, org_id="org_test123"):
     db.commit()
     db.refresh(node)
     cam_id = "cam_hls_" + uuid.uuid4().hex[:8]
-    db.add(Camera(
-        camera_id=cam_id,
-        org_id=org_id,
-        node_id=node.id,
-        name="HlsTestCam",
-        video_codec="avc1.42e01e",
-        audio_codec="mp4a.40.2",
-    ))
+    db.add(
+        Camera(
+            camera_id=cam_id,
+            org_id=org_id,
+            node_id=node.id,
+            name="HlsTestCam",
+            video_codec="avc1.42e01e",
+            audio_codec="mp4a.40.2",
+        )
+    )
     db.commit()
     return raw_key, cam_id
 
 
 # ── Segment roundtrip ────────────────────────────────────────────────
+
 
 def test_segment_roundtrip_bytes_match(admin_client, unauthenticated_client, db):
     """Push a segment with the owning node key; fetch it back as an
@@ -97,7 +101,9 @@ def test_segment_fetch_missing_returns_404(admin_client, db):
     assert resp.status_code == 404
 
 
-def test_segment_filename_rejects_path_traversal(admin_client, unauthenticated_client, db):
+def test_segment_filename_rejects_path_traversal(
+    admin_client, unauthenticated_client, db
+):
     """The endpoint must reject anything that isn't ``segment_\\d+\\.ts``.
     A successful traversal here would let a node poison the cache for
     arbitrary keys or let a viewer request arbitrary files — both bad."""
@@ -143,7 +149,10 @@ def test_push_segment_rejects_oversize(unauthenticated_client, db, monkeypatch):
 
 # ── Cache eviction ───────────────────────────────────────────────────
 
-def test_segment_cache_evicts_oldest_when_over_limit(unauthenticated_client, db, monkeypatch):
+
+def test_segment_cache_evicts_oldest_when_over_limit(
+    unauthenticated_client, db, monkeypatch
+):
     """Push MAX+3 segments — only the newest MAX must remain.  This is
     the whole reason segments are keyed by monotonic filename prefix."""
     from app.api.hls import _segment_cache
@@ -186,7 +195,9 @@ _RAW_PLAYLIST = (
 
 
 def test_playlist_segments_use_relative_proxy_paths(
-    admin_client, unauthenticated_client, db,
+    admin_client,
+    unauthenticated_client,
+    db,
 ):
     """After a CloudNode pushes a raw playlist, the cached rewrite served
     to the browser must route every segment through this backend via a
@@ -217,11 +228,11 @@ def test_playlist_segments_use_relative_proxy_paths(
         assert marker not in lowered, (marker, body)
 
 
-def test_playlist_injects_codec_header_from_db(
-    admin_client, unauthenticated_client, db,
+def test_playlist_does_not_inject_codec_header(
+    admin_client, unauthenticated_client, db
 ):
-    """The DB's video_codec must show up as #EXT-X-CODECS — this is the
-    whole reason the server-side codec sanitizer exists."""
+    """#EXT-X-CODECS is only valid in Master Playlists per HLS spec.
+    Injecting it into Media Playlists causes hls.js to fail parsing."""
     raw_key, cam_id = _seed_node_with_camera(db)
 
     unauthenticated_client.post(
@@ -231,15 +242,14 @@ def test_playlist_injects_codec_header_from_db(
     )
     body = admin_client.get(f"/api/cameras/{cam_id}/stream.m3u8").text
 
-    # Exactly one CODECS line — the regex must not accumulate duplicates
-    # across repeated pushes.
-    assert body.count("#EXT-X-CODECS:") == 1
-    assert "avc1.42e01e" in body
-    assert "mp4a.40.2" in body
+    # No CODECS line in media playlist — codec info is in the bitstream
+    assert "#EXT-X-CODECS:" not in body
 
 
 def test_playlist_rewrite_handles_path_prefixed_segment_uris(
-    admin_client, unauthenticated_client, db,
+    admin_client,
+    unauthenticated_client,
+    db,
 ):
     """FFmpeg's HLS muxer sometimes writes the ``-hls_segment_filename``
     verbatim into the playlist URIs — so on a node where the segment
@@ -280,7 +290,9 @@ def test_playlist_rewrite_handles_path_prefixed_segment_uris(
 
 
 def test_playlist_rewrite_handles_crlf_line_endings(
-    admin_client, unauthenticated_client, db,
+    admin_client,
+    unauthenticated_client,
+    db,
 ):
     """A CloudNode running on Windows can write the playlist with CRLF
     line endings.  The regex must treat ``\\r`` as trailing whitespace
@@ -313,7 +325,9 @@ def test_playlist_rewrite_handles_crlf_line_endings(
 
 
 def test_playlist_rewrite_is_idempotent_across_pushes(
-    admin_client, unauthenticated_client, db,
+    admin_client,
+    unauthenticated_client,
+    db,
 ):
     """Push the same raw playlist twice.  The served version should look
     the same — no doubled codec lines, no re-prefixed segment paths like
@@ -322,18 +336,23 @@ def test_playlist_rewrite_is_idempotent_across_pushes(
     headers = {"X-Node-API-Key": raw_key}
 
     unauthenticated_client.post(
-        f"/api/cameras/{cam_id}/playlist", content=_RAW_PLAYLIST, headers=headers,
+        f"/api/cameras/{cam_id}/playlist",
+        content=_RAW_PLAYLIST,
+        headers=headers,
     )
     first = admin_client.get(f"/api/cameras/{cam_id}/stream.m3u8").text
 
     unauthenticated_client.post(
-        f"/api/cameras/{cam_id}/playlist", content=_RAW_PLAYLIST, headers=headers,
+        f"/api/cameras/{cam_id}/playlist",
+        content=_RAW_PLAYLIST,
+        headers=headers,
     )
     second = admin_client.get(f"/api/cameras/{cam_id}/stream.m3u8").text
 
     assert first == second
     assert "segment/segment/" not in second
-    assert second.count("#EXT-X-CODECS:") == 1
+    # No CODECS line in media playlist
+    assert "#EXT-X-CODECS:" not in second
 
 
 def test_stream_without_push_returns_404(admin_client, db):
@@ -347,8 +366,10 @@ def test_stream_without_push_returns_404(admin_client, db):
 
 # ── cleanup_camera_cache ─────────────────────────────────────────────
 
+
 def test_cleanup_camera_cache_drops_segments_and_playlist(
-    unauthenticated_client, db,
+    unauthenticated_client,
+    db,
 ):
     """``cleanup_camera_cache`` is the function called from every delete
     path (camera delete, node delete, org delete, stale-camera sweep).
@@ -366,7 +387,9 @@ def test_cleanup_camera_cache_drops_segments_and_playlist(
         headers=headers,
     )
     unauthenticated_client.post(
-        f"/api/cameras/{cam_id}/playlist", content=_RAW_PLAYLIST, headers=headers,
+        f"/api/cameras/{cam_id}/playlist",
+        content=_RAW_PLAYLIST,
+        headers=headers,
     )
     assert cam_id in _segment_cache
     assert cam_id in _playlist_cache
