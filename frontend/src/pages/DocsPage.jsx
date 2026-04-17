@@ -1,5 +1,15 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
+import {
+  SystemArchitectureDiagram,
+  HlsPipelineDiagram,
+  MotionStateMachineDiagram,
+  ConfigPrecedenceDiagram,
+  IncidentLifecycleDiagram,
+  McpWorkflowDiagram,
+  SecurityModelDiagram,
+  DashboardIaDiagram,
+} from "../components/DocsDiagrams"
 
 function DocsPage() {
   const [os, setOs] = useState('linux')
@@ -290,6 +300,7 @@ function DocsPage() {
               <li><strong>Environment variables</strong> — override any stored value at runtime</li>
               <li><strong>CLI flags</strong> — highest priority, typically used for debugging</li>
             </ol>
+            <ConfigPrecedenceDiagram />
 
             <h3>Environment variables</h3>
             <div className="docs-plans-table">
@@ -519,6 +530,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
               <li>The event is sent over the persistent WebSocket to Command Center. If the socket is down, it falls back to <code>POST /api/cameras/{"{id}"}/motion</code></li>
               <li>A per-camera cooldown timer prevents flapping (identical wind-blown tree, flickering light) from spamming events</li>
             </ol>
+            <MotionStateMachineDiagram />
 
             <h3>Configuration</h3>
             <div className="docs-plans-table">
@@ -628,6 +640,8 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
             <h2>Dashboard & Features<a href="#dashboard" className="docs-anchor">#</a></h2>
             <p>The Command Center web dashboard is where your team actually uses the system. It's organized into a few main areas.</p>
 
+            <DashboardIaDiagram />
+
             <h3>Live view</h3>
             <p>
               The default page after sign-in. Every camera appears as a tile with a status
@@ -668,6 +682,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
               snapshots, video clips, and a timeline of observations — all editable from the
               Incidents tab in the dashboard.
             </p>
+            <IncidentLifecycleDiagram />
             <ul>
               <li><strong>Create</strong> — Agents open an incident when they notice something worth
                 flagging (possible intruder, equipment fault, unexpected motion).</li>
@@ -833,6 +848,15 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
               When you connect an AI tool to SourceBox Sentry via MCP, it can list your cameras, check node
               status, get stream URLs, manage recording settings, and more — all through conversation.
             </p>
+
+            <h3>Agent workflow</h3>
+            <p>
+              A typical agent session flows through three lanes. The agent drives the
+              conversation and calls MCP tools; Command Center authenticates each call
+              and routes it; CloudNode produces physical data (JPEGs, clip bytes)
+              whenever a tool needs a live view of a camera.
+            </p>
+            <McpWorkflowDiagram />
 
             <h3>Setup</h3>
             <div className="docs-steps">
@@ -1093,19 +1117,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
             <p>SourceBox Sentry uses a cloud-first architecture designed for simplicity and security.</p>
 
             <h3>Data Flow</h3>
-            <div className="docs-flow-diagram">
-              <div className="docs-flow-node">USB Camera</div>
-              <span className="docs-flow-arrow">→</span>
-              <div className="docs-flow-node">FFmpeg</div>
-              <span className="docs-flow-arrow">→</span>
-              <div className="docs-flow-node">CloudNode</div>
-              <span className="docs-flow-arrow">→</span>
-              <div className="docs-flow-node cloud">Command Center</div>
-              <span className="docs-flow-arrow">→</span>
-              <div className="docs-flow-node">In-memory cache</div>
-              <span className="docs-flow-arrow">→</span>
-              <div className="docs-flow-node">Browser</div>
-            </div>
+            <SystemArchitectureDiagram />
 
             <h3>How It Works</h3>
             <ol>
@@ -1115,7 +1127,23 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
               <li>Viewers watch via HLS through the Command Center backend — no third-party storage in the live video path, no direct connection to your network</li>
             </ol>
 
+            <h3>HLS Segment Pipeline</h3>
+            <p>
+              Zooming into the streaming path: each camera runs two FFmpeg processes
+              in parallel — one producing playable HLS segments, a second probing
+              scene changes for motion events. Playback is served same-origin from
+              the backend's RAM cache, never through object storage.
+            </p>
+            <HlsPipelineDiagram />
+
             <h3>Security Model</h3>
+            <p>
+              Every request crosses four layers of protection. TLS on the wire, an
+              authenticated identity at the edge, hashing or encryption wherever
+              data is stored, and tenant isolation all the way down to the database
+              query.
+            </p>
+            <SecurityModelDiagram />
             <ul>
               <li><strong>Outbound Only</strong> — CloudNode pushes to cloud. No inbound ports, no router config.</li>
               <li><strong>Same-origin Streaming</strong> — Live segments are served through the authenticated backend, not a third-party object store.</li>
