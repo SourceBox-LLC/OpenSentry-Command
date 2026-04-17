@@ -78,7 +78,7 @@ export async function deleteCameraGroup(getToken, groupId) {
 }
 
 export async function assignCameraGroup(getToken, cameraId, groupId) {
-  return fetchWithAuth(`/api/camera/${cameraId}/group?group_id=${groupId}`, getToken, {
+  return fetchWithAuth(`/api/cameras/${cameraId}/group?group_id=${groupId}`, getToken, {
     method: "PUT"
   })
 }
