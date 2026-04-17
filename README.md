@@ -38,7 +38,7 @@ OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It rece
 
 ### Prerequisites
 
-- **Python** 3.10+
+- **Python** 3.12+ (backend declares `requires-python = ">=3.12"` in `pyproject.toml`)
 - **Node.js** 18+
 - **uv** ([Python package manager](https://docs.astral.sh/uv/))
 
@@ -360,7 +360,12 @@ frontend/
     │   └── TestHlsPage.jsx         # Admin-only HLS debug page
     ├── components/                 # HlsPlayer, CameraCard, IncidentReportModal,
     │                               # NotificationBell, KeyRotationModal, AddNodeModal,
-    │                               # UpgradeModal, ToastContainer, Layout, etc.
+    │                               # UpgradeModal, ToastContainer, Layout,
+    │                               # HeartbeatBanner (first-heartbeat polling after
+    │                               #   node creation, localStorage-backed),
+    │                               # WelcomeHero (Admin / Member empty-state heroes),
+    │                               # CameraGridPreview, EmptyState, PublicLayout,
+    │                               # LandingNav, LandingFooter, LoadingSpinner
     ├── hooks/                      # useNotifications, useMotionAlerts, usePlanInfo,
     │                               # useSharedToken, useToasts
     └── services/api.js             # Typed client for every backend endpoint
@@ -406,6 +411,39 @@ Deployed on [Fly.io](https://fly.io) via GitHub Actions:
 Memory sizing: each camera uses ~3.75 MB of cache (`SEGMENT_CACHE_MAX_PER_CAMERA × ~250 KB per segment`). The default 1 GB Fly instance comfortably handles ~150 cameras with headroom. Bump `[[vm]] memory_mb` if you need more.
 
 Production URL: [opensentry-command.fly.dev](https://opensentry-command.fly.dev)
+
+---
+
+## Troubleshooting
+
+### Live video never shows up in the dashboard
+
+Symptom: the camera appears in the grid but the tile stays black, or the HLS player loops the buffering spinner.
+
+Check, in order:
+
+1. **CloudNode heartbeat is arriving.** Visit `/settings`, find the node, confirm "Last seen" updates every ~30s. If it doesn't, the node never registered — check CloudNode logs for a `register` failure.
+2. **Segments are being pushed.** In the browser devtools Network tab, look for `GET /api/cameras/{id}/segment/...` returning `200`. If they 404, the CloudNode isn't pushing — check `POST /api/cameras/{id}/push-segment` on the CloudNode side.
+3. **The playlist is fresh.** `GET /api/cameras/{id}/stream.m3u8` — if the `#EXTINF` segment list is empty or the `segment/...` URLs are stale, the CloudNode's playlist upload stalled.
+4. **The browser can decode the codec.** Admin-only `/test-hls` (the `TestHlsPage`) shows the raw SPS-derived codec string. If it's missing, the CloudNode's libx264 / hardware encoder wrote a non-conforming SPS — update the CloudNode to ≥ v0.1.15 and restart it.
+
+The companion runbook in the CloudNode repo (`docs/runbooks/video-not-showing.md`) walks through this from the node's side.
+
+### "Your plan doesn't allow another node"
+
+You're at the plan's node limit. `GET /api/nodes/plan` returns `{ nodes_used, nodes_limit }`. Upgrade from the Pricing page or delete an unused node from Settings.
+
+### Motion events don't appear
+
+- Motion reporting is controlled by the CloudNode's `motion.enabled` config — if it's off, no events will ever arrive.
+- The dashboard subscribes to `/api/motion/events/stream` (SSE). If your deployment is behind a proxy that buffers responses, SSE may never flush — make sure proxy-buffering is disabled for `/api/*/stream`.
+- Per-org rate limits cap motion events at 120/min per camera; check `app/api/motion.py` if you need to tune this.
+
+### MCP tools don't show up in my agent
+
+- Make sure the agent is on Pro or Business — MCP access is plan-gated at the organization layer (see `app.core.auth` / `get_mcp_plan_info`).
+- The installer scripts only patch configs for clients that already exist on the machine. If you installed Cursor *after* running `mcp-setup.sh`, re-run the installer.
+- `GET /api/mcp/activity/stream` is the fastest way to confirm the agent is hitting your backend at all — if you see calls but `403`s, the key's `scope_mode` doesn't cover the tool the agent invoked.
 
 ---
 

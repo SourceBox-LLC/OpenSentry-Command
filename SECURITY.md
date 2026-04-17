@@ -6,10 +6,11 @@ OpenSentry is a security-focused application and we take vulnerabilities serious
 
 | Version | Supported |
 |---------|-----------|
-| 2.0.x (FastAPI) | :white_check_mark: |
-| < 2.0 (Flask) | :x: |
+| 2.1.x (FastAPI) | :white_check_mark: |
+| 2.0.x (FastAPI) | :x: |
+| < 2.0 (Flask)   | :x: |
 
-Always run the latest version.
+Always run the latest version. The current release is tracked in `backend/pyproject.toml` (`version = "2.1.0"` at time of writing) and surfaced by `GET /api/health`.
 
 ## Security Features
 

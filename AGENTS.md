@@ -4,6 +4,8 @@ OpenSentry Command Center — cloud dashboard for managing and viewing security 
 
 ## Build & Run
 
+**Prerequisites:** Python ≥ 3.12 (enforced by `backend/pyproject.toml`), Node 18+, `uv` for Python dependency management.
+
 ```bash
 # Backend
 cd backend
@@ -98,10 +100,18 @@ frontend/
     │   ├── CameraCard.jsx            # Live thumbnail + status + actions
     │   ├── CameraGridPreview.jsx     # Static preview for the landing page
     │   ├── IncidentReportModal.jsx   # Markdown + evidence viewer
-    │   ├── NotificationBell.jsx      # Unread badge + inbox popover (SSE-fed)
+    │   ├── NotificationBell.jsx     # Unread badge + inbox popover (SSE-fed)
     │   ├── AddNodeModal.jsx          # Node creation flow (shows one-time API key)
-    │   ├── KeyRotationModal.jsx      # Rotate node API key
+    │   ├── KeyRotationModal.jsx     # Rotate node API key
     │   ├── UpgradeModal.jsx          # Paywall prompt (plan gating)
+    │   ├── HeartbeatBanner.jsx       # "Waiting for first heartbeat" banner shown
+    │   │                             # after node creation; polls /api/nodes/{id}
+    │   │                             # until it sees a last_seen, persists its
+    │   │                             # dismissed state in localStorage
+    │   ├── WelcomeHero.jsx           # Dashboard empty-state hero — exports
+    │   │                             # AdminWelcomeHero (3-step "set up your first
+    │   │                             # camera" checklist) and MemberWelcomeHero
+    │   │                             # (capability-focused welcome for non-admins)
     │   ├── Layout.jsx / PublicLayout.jsx
     │   ├── LandingNav.jsx / LandingFooter.jsx
     │   ├── ToastContainer.jsx / LoadingSpinner.jsx
@@ -428,6 +438,10 @@ HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are intentionally unlimited �
 **Motion broadcaster:** the motion SSE stream pushes events from either the WebSocket channel (`/ws/node`) or the HTTP fallback (`POST /api/cameras/{id}/motion`).
 
 **Shared Clerk token:** frontend's `useSharedToken` serialises the Clerk JWT for HLS.js's `xhrSetup` so segment fetches ride on the same auth as API calls.
+
+**First-heartbeat UX:** when the admin creates a node, the dashboard stashes the new `node_id` in `localStorage` and `HeartbeatBanner` starts polling `GET /api/nodes/{node_id}` every few seconds. As soon as `last_seen` is non-null the banner auto-dismisses. Users don't have to refresh — it's a reassurance loop for the 30–60s window where the node is downloading ffmpeg / registering cameras.
+
+**Role-split welcome hero:** `WelcomeHero.jsx` exports two components — `AdminWelcomeHero` shows the "Install a CloudNode → Camera goes live" checklist with CTAs into Settings + the install guide; `MemberWelcomeHero` shows a capability-focused welcome (live monitoring, motion alerts, team workspace) because members can't act on a setup checklist. `DashboardPage` picks the right one based on `is_admin`.
 
 ## Setup Scripts
 
