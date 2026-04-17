@@ -17,6 +17,10 @@ dependencies = [
     "httpx>=0.27.0",
     "svix>=1.89.0",
     "clerk-backend-api>=5.0.6",
+    # Pinned >=1.6.11 for GHSA-jj8c-mmj3-mmgv — CSRF in
+    # authlib.integrations.*_client.OAuth when cache is used.
+    # Transitive via fastmcp; not reached directly by our code.
+    "authlib>=1.6.11",
     "slowapi>=0.1.9",
     "redis>=5.0.0",
     "websockets>=12.0",
