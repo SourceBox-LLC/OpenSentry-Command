@@ -92,18 +92,18 @@ The scripts detect which clients you already have and merge an `opensentry` entr
   │ USB Camera   │            │  FastAPI Backend      │         │  React 19    │
   │      ↓       │            │                       │         │              │
   │ FFmpeg (HLS) │──push─────→│  In-memory segment    │←─GET───→│  HLS.js      │
-  │              │  segments  │  cache (~15 segs/cam) │  proxy  │  (video)     │
+  │              │  segments  │  cache (~60 segs/cam) │  proxy  │  (video)     │
   │              │──register─→│  SQLite / PostgreSQL  │  URLs   │              │
   │              │──heartbeat→│  Clerk Auth           │←─JWT───→│  Clerk Auth  │
   │              │──WS events │  FastMCP (/mcp)       │←──SSE───│  Motion feed │
   └──────────────┘            └───────────────────────┘         └──────────────┘
 ```
 
-**Video pipeline:** CloudNode transcodes USB camera video into HLS segments and pushes each `.ts` file directly to the backend via `POST /api/cameras/{id}/push-segment`. The backend caches segments in memory (15 per camera by default, ~30s buffer) and serves them through the same-origin proxy at `GET /api/cameras/{id}/segment/{file}`. The rewritten playlist contains relative segment URLs, so the browser's Clerk JWT auth header is automatically attached. No S3, no presigned URLs, no third-party storage in the live path.
+**Video pipeline:** CloudNode transcodes USB camera video into HLS segments and pushes each `.ts` file directly to the backend via `POST /api/cameras/{id}/push-segment`. The backend caches segments in memory (60 per camera by default, ~60s buffer) and serves them through the same-origin proxy at `GET /api/cameras/{id}/segment/{file}`. The rewritten playlist contains relative segment URLs, so the browser's Clerk JWT auth header is automatically attached. No S3, no presigned URLs, no third-party storage in the live path.
 
 **Authentication:** Clerk handles user sign-up, login, and organization management. The backend validates JWT tokens (V1 and V2 permission formats) and extracts organization-scoped permissions. CloudNodes authenticate with API keys (SHA-256 hashed in the database) passed via `X-Node-API-Key`. MCP clients authenticate with `Authorization: Bearer osc_...` keys (also hashed).
 
-**Storage:** Live segments live in the backend's in-memory cache; they expire automatically once `SEGMENT_CACHE_MAX_PER_CAMERA` is exceeded. Recordings and snapshots live on the CloudNode itself. SQLite is used for development (`opensentry.db`); PostgreSQL for production. Incident snapshots and clips are stored inline on `IncidentEvidence.data` (LargeBinary) — evidence travels with the incident.
+**Storage:** Live segments live in the backend's in-memory cache; they expire automatically once `SEGMENT_CACHE_MAX_PER_CAMERA` is exceeded. Recordings and snapshots live on the CloudNode itself in its encrypted SQLite database. SQLite is used for development on the Command Center (`opensentry.db`); PostgreSQL for production. Incident snapshots and clips are stored inline on `IncidentEvidence.data` (LargeBinary) — evidence travels with the incident.
 
 **Real-time:** CloudNodes maintain a WebSocket channel (`/ws/node`) used for commands, status, and motion events. The dashboard subscribes to SSE feeds for motion events (`/api/motion/events/stream`), notifications (`/api/notifications/stream`), and MCP activity (`/api/mcp/activity/stream`).
 
@@ -120,12 +120,15 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 | `CLERK_WEBHOOK_SECRET` | No | | Svix signature secret for Clerk webhooks |
 | `DATABASE_URL` | No | `sqlite:///./opensentry.db` | SQLAlchemy connection string |
 | `FRONTEND_URL` | No | `http://localhost:5173` | Extra CORS origin (must include scheme, no trailing slash) |
-| `SEGMENT_CACHE_MAX_PER_CAMERA` | No | `15` | Segments cached in memory per camera (~2s each) |
+| `SEGMENT_CACHE_MAX_PER_CAMERA` | No | `60` | Segments cached in memory per camera (~1s each) |
 | `SEGMENT_PUSH_MAX_BYTES` | No | `2097152` | Max bytes per pushed segment (2 MB) |
 | `CLEANUP_INTERVAL` | No | `20` | Run cache eviction every N playlist updates |
 | `INACTIVE_CAMERA_CLEANUP_HOURS` | No | `24` | Free caches for cameras offline this long |
 | `LOG_RETENTION_DAYS` | No | `90` | Stream, MCP, audit, motion, and notification log retention |
 | `OFFLINE_SWEEP_INTERVAL_SECONDS` | No | `30` | How often to flip stale `online` rows to `offline` |
+| `REDIS_URL` | No | (empty) | Redis connection for rate limiter storage; in-memory fallback when unset (fine for single-instance, but limits don't hold across VMs) |
+| `SENTRY_DSN` | No | (empty) | Sentry error tracking DSN; leave blank to disable (no-ops gracefully) |
+| `SENTRY_TRACES_SAMPLE_RATE` | No | `0.1` | Sentry performance trace sample rate (0.0–1.0) |
 
 ### Frontend environment variables
 
@@ -258,6 +261,7 @@ See [AGENTS.md](AGENTS.md) for the full per-tool list.
 |--------|----------|-------------|
 | GET | `/install.sh` / `/install.ps1` | CloudNode installer scripts |
 | GET | `/mcp-setup.sh` / `/mcp-setup.ps1` | MCP client setup helpers |
+| GET | `/downloads/{os}/{arch}` | 302 redirect to the latest CloudNode binary on GitHub Releases (os: `linux`/`macos`/`windows`, arch: `x86_64`/`aarch64`/`armv7`) |
 
 ### System
 
@@ -327,13 +331,20 @@ backend/
 │   │   ├── ws.py                # WebSocket channel (heartbeat, commands, motion events)
 │   │   └── webhooks.py          # Clerk subscription webhooks
 │   ├── mcp/
-│   │   └── server.py            # FastMCP server + 22 tools + ScopeMiddleware
+│   │   ├── server.py            # FastMCP server + 22 tools + ScopeMiddleware
+│   │   └── activity.py          # MCP activity tracking + per-org broadcasting
 │   ├── core/
 │   │   ├── auth.py              # Clerk JWT validation (V1 + V2), dependencies
+│   │   ├── audit.py             # Audit log helper (records admin actions)
+│   │   ├── codec.py             # Video codec string sanitization
 │   │   ├── config.py            # Environment loading (Config class)
 │   │   ├── clerk.py             # Clerk SDK initialization
 │   │   ├── database.py          # SQLAlchemy engine + session factory
-│   │   └── limiter.py           # slowapi Limiter instance
+│   │   ├── limiter.py           # slowapi Limiter instance (tenant-aware key)
+│   │   ├── migrations.py        # Manual schema migrations (stand-in for Alembic)
+│   │   ├── plans.py             # Plan limit logic (node quotas per tier)
+│   │   ├── sentry.py            # Sentry error tracking initialization
+│   │   └── versions.py          # CloudNode version compatibility checking
 │   ├── models/models.py         # 13 ORM models (see table above)
 │   └── schemas/schemas.py       # Pydantic request/response schemas
 ├── scripts/
@@ -364,8 +375,9 @@ frontend/
     │                               # HeartbeatBanner (first-heartbeat polling after
     │                               #   node creation, localStorage-backed),
     │                               # WelcomeHero (Admin / Member empty-state heroes),
-    │                               # CameraGridPreview, EmptyState, PublicLayout,
-    │                               # LandingNav, LandingFooter, LoadingSpinner
+    │                               # CameraGridPreview, DocsDiagrams, EmptyState,
+    │                               # PublicLayout, LandingNav, LandingFooter,
+    │                               # LoadingSpinner
     ├── hooks/                      # useNotifications, useMotionAlerts, usePlanInfo,
     │                               # useSharedToken, useToasts
     └── services/api.js             # Typed client for every backend endpoint
@@ -408,7 +420,7 @@ Deployed on [Fly.io](https://fly.io) via GitHub Actions:
 3. Live video segments are cached in the backend's process memory — no external storage
 4. Clerk handles authentication (no user database needed)
 
-Memory sizing: each camera uses ~3.75 MB of cache (`SEGMENT_CACHE_MAX_PER_CAMERA × ~250 KB per segment`). The default 1 GB Fly instance comfortably handles ~150 cameras with headroom. Bump `[[vm]] memory_mb` if you need more.
+Memory sizing: each camera uses ~7.5 MB of cache (`SEGMENT_CACHE_MAX_PER_CAMERA × ~125 KB per 1-second segment`). The default 1 GB Fly instance comfortably handles ~130 cameras with headroom. Bump `[[vm]] memory_mb` if you need more.
 
 Production URL: [opensentry-command.fly.dev](https://opensentry-command.fly.dev)
 

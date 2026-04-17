@@ -24,6 +24,7 @@ Always run the latest version. The current release is tracked in `backend/pyproj
 | **Audit Logging** | Stream access tracked with user ID, IP, and user agent |
 | **Encrypted Storage** | CloudNode encrypts API key at rest with AES-256-GCM |
 | **Webhook Verification** | Clerk webhooks verified via Svix signature |
+| **Security Headers** | All responses include `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`, and `Strict-Transport-Security` (HTTPS) |
 
 ## Reporting a Vulnerability
 
