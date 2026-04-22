@@ -10,7 +10,7 @@ function HlsPlayer({ cameraId, cameraName }) {
     const videoRef = useRef(null)
     const hlsRef = useRef(null)
     const stallRef = useRef(null)
-    const { getCurrentToken, refreshNow } = useSharedToken()
+    const { getCurrentToken, refreshNow, ready } = useSharedToken()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [isLive, setIsLive] = useState(false)
@@ -21,6 +21,16 @@ function HlsPlayer({ cameraId, cameraName }) {
                 return
         }
 
+        // Wait for the shared Clerk token before building the hls.js
+        // instance.  Mounting earlier means the first playlist/segment
+        // XHR fires with a null Authorization header → 401 → fatal
+        // NETWORK_ERROR → forced recovery.  Usually survives but leaves
+        // the player stuck on "Connecting…" for a beat and spams 401s
+        // in the backend log on every page load.
+        if (!LOCAL_TEST_MODE && !ready) {
+            return
+        }
+
         const API_URL = import.meta.env.VITE_API_URL || ""
         const ownOrigin = API_URL || window.location.origin
 
@@ -29,11 +39,6 @@ function HlsPlayer({ cameraId, cameraName }) {
                 const playlistUrl = LOCAL_TEST_MODE
                     ? `http://localhost:8080/hls/${cameraId}/stream.m3u8`
                     : `${API_URL}/api/cameras/${cameraId}/stream.m3u8`
-
-                // Get the current shared auth token. xhrSetup reads the
-                // latest token on each request via getCurrentToken(), so
-                // no per-player refresh interval is needed.
-                let authToken = LOCAL_TEST_MODE ? null : getCurrentToken()
 
                 if (Hls.isSupported()) {
                     const hls = new Hls({
@@ -68,8 +73,12 @@ function HlsPlayer({ cameraId, cameraName }) {
                         maxMaxBufferLength: 20,
                         maxBufferSize: 20 * 1024 * 1024, // 20 MB
 
-                        // Back buffer: moderate trim to limit memory on long streams
-                        backBufferLength: 15,
+                        // Back buffer: liveBackBufferLength (above) governs
+                        // this in live mode.  backBufferLength is the
+                        // VOD-mode equivalent — kept in sync so switching
+                        // a live stream to a DVR-style replay wouldn't
+                        // silently change retention.
+                        backBufferLength: 10,
 
                         // Playlist reload — poll aggressively for new segments.
                         manifestLoadingMaxRetry: 15,
@@ -189,7 +198,7 @@ function HlsPlayer({ cameraId, cameraName }) {
                 hlsRef.current = null
             }
         }
-    }, [cameraId, getCurrentToken])
+    }, [cameraId, getCurrentToken, ready])
 
     if (error) {
         return (

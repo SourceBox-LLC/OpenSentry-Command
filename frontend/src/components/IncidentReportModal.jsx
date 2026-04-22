@@ -8,6 +8,7 @@ import {
   incidentEvidencePlaylistUrl,
 } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
+import { useSharedToken } from "../hooks/useSharedToken.jsx"
 
 const SEVERITY_LABELS = {
   low: "Low",
@@ -247,14 +248,19 @@ function EvidenceImage({ incidentId, evidenceId, caption, getToken, onClick }) {
   )
 }
 
-function EvidenceVideo({ incidentId, evidenceId, caption, getToken }) {
+function EvidenceVideo({ incidentId, evidenceId, caption }) {
   const videoRef = useRef(null)
   const hlsRef = useRef(null)
   const [error, setError] = useState(null)
+  const { getCurrentToken, ready } = useSharedToken()
 
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
+    // Wait for the shared Clerk token before mounting hls.js — mirrors
+    // HlsPlayer so the first playlist/segment XHR never goes out with
+    // a null Authorization header.
+    if (!ready) return undefined
 
     let cancelled = false
     const playlistUrl = incidentEvidencePlaylistUrl(incidentId, evidenceId)
@@ -267,16 +273,14 @@ function EvidenceVideo({ incidentId, evidenceId, caption, getToken }) {
 
     const hls = new Hls({
       // Clip is a single short segment — VOD playback, no live tuning needed.
-      xhrSetup: async (xhr, url) => {
-        // Both the playlist and the segment ride on the same JWT as the
-        // live player; getToken is async (Clerk).
-        try {
-          const token = getToken ? await getToken() : null
-          if (token && url.startsWith(ownOrigin)) {
-            xhr.setRequestHeader("Authorization", `Bearer ${token}`)
-          }
-        } catch {
-          /* swallow — request will 401 and surface as a load error */
+      xhrSetup: (xhr, url) => {
+        const token = getCurrentToken()
+        // hls.js may resolve segment URIs inside the playlist to
+        // absolute URLs (matching ownOrigin) or hand us the relative
+        // form verbatim.  Accept both; skip third-party origins.
+        if (token && (url.startsWith(ownOrigin) || url.startsWith("/"))) {
+          xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+          xhr.setRequestHeader("Cache-Control", "no-cache")
         }
       },
       // VOD-friendly buffering for very short clips
@@ -303,7 +307,7 @@ function EvidenceVideo({ incidentId, evidenceId, caption, getToken }) {
         hlsRef.current = null
       }
     }
-  }, [incidentId, evidenceId, getToken])
+  }, [incidentId, evidenceId, getCurrentToken, ready])
 
   return (
     <div className="incident-evidence-clip">
@@ -488,7 +492,6 @@ function IncidentReportModal({ incidentId, onClose, onUpdated }) {
                         incidentId={incident.id}
                         evidenceId={e.id}
                         caption={e.text || e.camera_id}
-                        getToken={getToken}
                       />
                     ))}
                   </div>

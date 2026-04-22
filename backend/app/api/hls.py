@@ -41,9 +41,13 @@ _RE_SEGMENT_FILENAME = re.compile(r"^segment_\d+\.ts$")
 #
 # {camera_id: (rewritten_playlist_text, timestamp)}
 _playlist_cache: dict[str, tuple[str, float]] = {}
-_PLAYLIST_CACHE_MAX_AGE = (
-    10.0  # 10 seconds — must be shorter than segment window to avoid stale refs
-)
+# 30 seconds.  With 1s segments and hls_list_size=15 the real segment window
+# is ~15s, so we want the cache TTL comfortably larger than the gap between
+# CloudNode playlist pushes — otherwise one or two dropped pushes expires
+# the cache and the browser gets 404 "Stream not started yet" even though
+# fresh segments are still being uploaded.  Segment cache eviction runs on
+# its own 60s inactivity cutoff so stale-ref risk is bounded.
+_PLAYLIST_CACHE_MAX_AGE = 30.0
 _CACHE_MAX_CAMERAS = 500
 
 # ── In-memory segment cache ──────────────────────────────────────────
@@ -346,10 +350,10 @@ async def push_segment(
     if len(body) > settings.SEGMENT_PUSH_MAX_BYTES:
         raise HTTPException(status_code=400, detail="Segment too large")
 
-    # Cache the segment.
-    if camera_id not in _segment_cache:
-        _segment_cache[camera_id] = {}
-    _segment_cache[camera_id][filename] = (body, time.monotonic())
+    # Cache the segment.  setdefault is atomic on CPython dicts; avoids
+    # the check-then-insert race that would drop segments if two async
+    # handlers for the same camera interleaved around an await point.
+    _segment_cache.setdefault(camera_id, {})[filename] = (body, time.monotonic())
     _evict_segment_cache(camera_id)
 
     return {"success": True, "cached_segments": len(_segment_cache[camera_id])}
@@ -396,13 +400,6 @@ async def update_hls_playlist(
 
     # Pre-compute the rewritten playlist with proxy segment URLs
     # and cache it. Browser polls will serve this instantly.
-    video_codec = (
-        camera.video_codec or (node.video_codec if node else None) or "avc1.42e01e"
-    )
-    audio_codec = (
-        camera.audio_codec or (node.audio_codec if node else None) or "mp4a.40.2"
-    )
-
     rewritten = _rewrite_playlist(playlist_content)
     _playlist_cache[camera_id] = (rewritten, time.monotonic())
 
@@ -425,13 +422,11 @@ async def update_hls_playlist(
         )
         logger.info(
             "hls: first playlist push cam=%s raw_bytes=%d rewritten_bytes=%d "
-            "first_segment_uri=%r codecs=%s/%s",
+            "first_segment_uri=%r",
             camera_id,
             len(playlist_content),
             len(rewritten),
             sample_uri[:200],
-            video_codec,
-            audio_codec,
         )
 
     # Periodic cache eviction.
