@@ -35,3 +35,16 @@ dev = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
+
+[tool.uv]
+# Transitive constraints — pin versions forced up from what the
+# ecosystem currently resolves, without adding them as top-level deps.
+#
+# authlib: GHSA-jj8c-mmj3-mmgv (CSRF in OAuth client state caching,
+# CVSS 5.4).  Pulled in by fastmcp; we don't use authlib's OAuth
+# client so the vulnerable path isn't reachable, but clearing the
+# Dependabot alert is cheaper than arguing about it.  Remove this
+# line once fastmcp's own pin moves past 1.6.11.
+constraint-dependencies = [
+    "authlib>=1.6.11",
+]
