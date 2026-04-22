@@ -1,5 +1,5 @@
 name: Feature Request
-description: Suggest an idea or enhancement for OpenSentry
+description: Suggest an idea or enhancement for SourceBox Sentry
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
@@ -22,7 +22,7 @@ body:
     attributes:
       label: Proposed Solution
       description: Describe the solution you'd like to see.
-      placeholder: "I would like OpenSentry to..."
+      placeholder: "I would like SourceBox Sentry to..."
     validations:
       required: true
 
@@ -36,7 +36,7 @@ body:
     id: component
     attributes:
       label: Component
-      description: Which part of OpenSentry would this affect?
+      description: Which part of SourceBox Sentry would this affect?
       options:
         - Frontend (React Dashboard)
         - Backend (FastAPI API)

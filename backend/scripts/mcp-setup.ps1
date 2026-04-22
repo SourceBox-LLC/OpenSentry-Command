@@ -1,7 +1,7 @@
 # -----------------------------------------------------
-# OpenSentry MCP Client Setup (Windows)
+# SourceBox Sentry MCP Client Setup (Windows)
 # Automatically configure AI tools to connect to your
-# OpenSentry cameras via the Model Context Protocol.
+# SourceBox Sentry cameras via the Model Context Protocol.
 # -----------------------------------------------------
 
 param(
@@ -18,7 +18,7 @@ if (-not $ApiKey -or -not $ServerUrl) {
     Write-Host "  Usage (local):  .\mcp-setup.ps1 <api_key> <server_url>"
     Write-Host "  Usage (remote): & ([scriptblock]::Create((irm <url>/mcp-setup.ps1))) <api_key> <server_url>"
     Write-Host ""
-    Write-Host "  Get your command from the OpenSentry MCP dashboard:"
+    Write-Host "  Get your command from the SourceBox Sentry MCP dashboard:"
     Write-Host "  https://opensentry-command.fly.dev/mcp" -ForegroundColor Cyan
     Write-Host ""
     exit 1
@@ -27,7 +27,7 @@ if (-not $ApiKey -or -not $ServerUrl) {
 # -- Header --------------------------------------------
 
 Write-Host ""
-Write-Host "  OpenSentry MCP Setup" -ForegroundColor Green
+Write-Host "  SourceBox Sentry MCP Setup" -ForegroundColor Green
 Write-Host "  Configure AI tools to connect to your cameras" -ForegroundColor DarkGray
 Write-Host ""
 
@@ -287,7 +287,7 @@ function Configure-Client {
         $config["mcpServers"] = [ordered]@{}
     }
 
-    # Add/update OpenSentry entry.
+    # Add/update SourceBox Sentry entry.
     $config["mcpServers"]["opensentry"] = [ordered]@{
         type = "http"
         url = $ServerUrl
@@ -347,7 +347,7 @@ if ($script:SkippedClients.Count -gt 0) {
 
 Write-Host "  Setup Complete" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Your AI tools can now access your OpenSentry cameras." -ForegroundColor DarkGray
+Write-Host "  Your AI tools can now access your SourceBox Sentry cameras." -ForegroundColor DarkGray
 Write-Host "  Restart the clients you configured so they pick up the new MCP server." -ForegroundColor DarkGray
 Write-Host "  Try asking: `"List my cameras`" or `"Show me what the front door sees`"" -ForegroundColor DarkGray
 Write-Host ""

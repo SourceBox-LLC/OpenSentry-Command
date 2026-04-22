@@ -1,6 +1,6 @@
 # Security Policy
 
-OpenSentry is a security-focused application and we take vulnerabilities seriously.
+SourceBox Sentry is a security-focused application and we take vulnerabilities seriously.
 
 ## Supported Versions
 

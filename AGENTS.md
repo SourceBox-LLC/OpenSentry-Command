@@ -1,6 +1,6 @@
 # AGENTS.md
 
-OpenSentry Command Center — cloud dashboard for managing and viewing security cameras. FastAPI backend + React 19 frontend with Clerk authentication. Live video is streamed through an in-memory segment cache — **no Tigris, no S3, no presigned URLs in the live path**.
+SourceBox Sentry Command Center — cloud dashboard for managing and viewing security cameras. FastAPI backend + React 19 frontend with Clerk authentication. Live video is streamed through an in-memory segment cache — **no Tigris, no S3, no presigned URLs in the live path**.
 
 ## Build & Run
 

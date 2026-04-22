@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center">OpenSentry Command Center</h1>
+  <h1 align="center">SourceBox Sentry Command Center</h1>
   <p align="center">
     Cloud dashboard for managing and viewing your security cameras in real time.
     <br />
@@ -21,7 +21,7 @@
 
 ---
 
-OpenSentry Command Center is the cloud hub for the OpenSentry ecosystem. It receives live HLS video streams from [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) devices on your local network, caches segments in memory, and proxies them to any browser. Authentication and multi-tenant isolation are handled by Clerk.
+SourceBox Sentry Command Center is the cloud hub for the SourceBox Sentry ecosystem. It receives live HLS video streams from [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) devices on your local network, caches segments in memory, and proxies them to any browser. Authentication and multi-tenant isolation are handled by Clerk.
 
 **What it does:**
 - Receives live HLS video from CloudNode devices and proxies it to the browser via a same-origin in-memory cache — no object store, no presigned URLs
@@ -456,7 +456,7 @@ This project is **not currently accepting external code contributions**. Bug rep
 ---
 
 <p align="center">
-  <a href="https://opensentry-command.fly.dev">OpenSentry Command Center</a>
+  <a href="https://opensentry-command.fly.dev">SourceBox Sentry Command Center</a>
   &middot;
   <a href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode">CloudNode</a>
   &middot;

@@ -1,10 +1,10 @@
-# Contributing to OpenSentry
+# Contributing to SourceBox Sentry
 
-Thanks for your interest in OpenSentry. This document explains how you can help, and what we accept.
+Thanks for your interest in SourceBox Sentry. This document explains how you can help, and what we accept.
 
 ## We do not currently accept external code contributions
 
-OpenSentry is **source-available under AGPL-3.0**. The source is open so you can audit it, self-host it, and learn from it — but we do not accept pull requests from outside the core team at this time.
+SourceBox Sentry is **source-available under AGPL-3.0**. The source is open so you can audit it, self-host it, and learn from it — but we do not accept pull requests from outside the core team at this time.
 
 External pull requests opened against this repository will be automatically closed with a link back to this document. This is not personal — we keep the contribution surface narrow so we can move fast, retain clean copyright, and avoid the overhead of a Contributor License Agreement.
 
@@ -33,7 +33,7 @@ See [SECURITY.md](SECURITY.md). Do **not** file public issues for vulnerabilitie
 
 ## Self-hosting and development setup
 
-OpenSentry has two main components:
+SourceBox Sentry has two main components:
 
 | Component | Language | Repository |
 |-----------|----------|------------|
@@ -68,8 +68,8 @@ See the [CloudNode README](https://github.com/SourceBox-LLC/OpenSentry-CloudNode
 
 ## License
 
-OpenSentry Command Center is licensed under [AGPL-3.0](LICENSE). If you self-host a modified version and offer it to users over a network, AGPL §13 requires you to make your modifications available to those users. Read the license before deploying.
+SourceBox Sentry Command Center is licensed under [AGPL-3.0](LICENSE). If you self-host a modified version and offer it to users over a network, AGPL §13 requires you to make your modifications available to those users. Read the license before deploying.
 
 ---
 
-Thank you for your interest in OpenSentry.
+Thank you for your interest in SourceBox Sentry.

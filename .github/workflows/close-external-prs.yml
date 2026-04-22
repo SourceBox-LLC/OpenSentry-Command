@@ -1,7 +1,7 @@
 name: Close External PRs
 
 # Auto-close pull requests opened by anyone outside the core team.
-# OpenSentry is source-available but does not accept external code
+# SourceBox Sentry is source-available but does not accept external code
 # contributions — see CONTRIBUTING.md for details.
 
 on:
@@ -29,7 +29,7 @@ jobs:
             const body = [
               `Hi @${author}, thanks for taking the time to open this PR.`,
               ``,
-              `OpenSentry is **source-available under AGPL-3.0** but does not currently accept external code contributions. This PR is being closed automatically — it is not a reflection of the quality of your work.`,
+              `SourceBox Sentry is **source-available under AGPL-3.0** but does not currently accept external code contributions. This PR is being closed automatically — it is not a reflection of the quality of your work.`,
               ``,
               `If you found a bug or have an idea, we would still love to hear about it:`,
               ``,
@@ -38,7 +38,7 @@ jobs:
               ``,
               `See [CONTRIBUTING.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/master/CONTRIBUTING.md) for the full policy.`,
               ``,
-              `Thanks for your interest in OpenSentry.`,
+              `Thanks for your interest in SourceBox Sentry.`,
             ].join('\n');
 
             await github.rest.issues.createComment({

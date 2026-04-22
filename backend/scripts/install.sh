@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# OpenSentry CloudNode Installer
+# SourceBox Sentry CloudNode Installer
 # Usage: curl -fsSL https://opensentry-command.fly.dev/install.sh | bash
 
 # ── Colors ──────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ INSTALL_DIR="${OPENSENTRY_INSTALL_DIR:-$HOME/.opensentry}"
 
 # ── Banner ──────────────────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}${BOLD}  OpenSentry CloudNode Installer${NC}"
+echo -e "${GREEN}${BOLD}  SourceBox Sentry CloudNode Installer${NC}"
 echo -e "${DIM}  ================================${NC}"
 echo ""
 
@@ -454,7 +454,7 @@ install_systemd_service() {
 
     cat >"$tmp_unit" <<UNIT
 [Unit]
-Description=OpenSentry CloudNode
+Description=SourceBox Sentry CloudNode
 Documentation=https://opensentry-command.fly.dev
 After=network-online.target
 Wants=network-online.target

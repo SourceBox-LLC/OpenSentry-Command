@@ -1,7 +1,7 @@
 [project]
 name = "opensentry-backend"
 version = "2.1.0"
-description = "OpenSentry Command Center Backend - FastAPI with Clerk Auth"
+description = "SourceBox Sentry Command Center Backend - FastAPI with Clerk Auth"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
