@@ -59,12 +59,14 @@ class Config:
     # response includes an `update_available` hint so the dashboard can nudge
     # the operator.  Update this on every CloudNode release.
     MIN_SUPPORTED_NODE_VERSION: str = os.getenv("MIN_SUPPORTED_NODE_VERSION", "0.1.0")
-    # Bumped to 0.1.9 on 2026-04-15: fixes Docker build (Cargo.lock v4
-    # compat), snapshot endpoint (playlist-based segment selection avoids
-    # reading half-written .ts files), and the supervisor-wedge recovery
-    # from 0.1.8.  Keep in lockstep with the newest GitHub release of
-    # opensentry-cloud-node.
-    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.9")
+    # Bumped to 0.1.16 on 2026-04-21: rolls up seven streaming fixes —
+    # orphan HLS segment sweep + disk-full crash annotation (0.1.16),
+    # libx264 preset/level fixes (0.1.15), h264_v4l2m2m retirement
+    # (0.1.14), strict ffprobe validation (0.1.13), hardware encoder
+    # round-trip verify (0.1.12), dashboard /wipe confirmation fix
+    # (0.1.11), and musl V4L2 ioctl cast (0.1.10).  Keep in lockstep
+    # with the newest GitHub release of opensentry-cloud-node.
+    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.16")
 
     @classmethod
     def is_clerk_configured(cls) -> bool:
