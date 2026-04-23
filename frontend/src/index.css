@@ -428,6 +428,24 @@ body {
     animation: pulse-fast 1s ease-in-out infinite;
 }
 
+/* Plan-cap suspension — distinct from `failed` (pipeline broken) and
+   `offline` (nothing running). The camera pipeline may be perfectly
+   healthy on the node; the backend is just refusing to accept uploads
+   until the org upgrades. Amber rather than red so it doesn't read as
+   an error the operator should debug. Pairs with the "Suspended — Plan
+   Limit" placeholder inside the feed container. */
+.status-badge.suspended {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+}
+.status-badge.suspended .dot {
+    background: #f59e0b;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+.feed-loading.suspended {
+    color: #f59e0b;
+}
+
 /* Video Feed */
 .camera-feed-container {
     position: relative;

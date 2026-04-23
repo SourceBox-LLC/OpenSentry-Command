@@ -151,8 +151,14 @@ function DashboardPage() {
 
       {isAdmin && planInfo?.payment_past_due && (
         <div className="payment-past-due-banner">
-          <span>Your payment is past due. Please update your billing information to avoid service interruption.</span>
-          <Link to="/settings">Update Billing</Link>
+          <span>
+            Your payment is past due. Cameras beyond your free-tier limit will be
+            suspended after a 7-day grace period — update your payment method to
+            keep streaming.
+          </span>
+          <Link to="/pricing" className="btn btn-primary btn-small">
+            Manage Billing
+          </Link>
         </div>
       )}
 
@@ -252,6 +258,7 @@ function DashboardPage() {
               key={cameraId}
               cameraId={cameraId}
               camera={camera}
+              onRequestUpgrade={() => setShowUpgrade(true)}
             />
           ))}
         </div>

@@ -7,6 +7,7 @@ import HlsPlayer from "./HlsPlayer.jsx"
 function CameraCard({
   cameraId,
   camera,
+  onRequestUpgrade,
 }) {
   const { getToken } = useAuth()
   const { showToast } = useToasts()
@@ -50,37 +51,51 @@ function CameraCard({
   // "restarting" and "starting" are transient; the HLS player will just
   // show its buffering state until segments arrive.
   const status = camera.status
-  const isDown = status === "offline" || status === "failed" || status === "error"
-  const isTransient = status === "starting" || status === "restarting"
+  // Plan-cap suspension takes precedence over every other state: the
+  // backend is 402-ing every push, so even if FFmpeg is running locally
+  // the viewer has no stream to watch. Render the card as "down" and
+  // swap the normal offline copy for an upgrade CTA.
+  const isSuspendedByPlan = Boolean(camera.disabled_by_plan)
+  const isDown = isSuspendedByPlan || status === "offline" || status === "failed" || status === "error"
+  const isTransient = !isSuspendedByPlan && (status === "starting" || status === "restarting")
 
   const nodeTypeLabel = camera.node_type || "Camera"
   const nodeTypeIcon = "📹"
 
-  const statusClass =
-    status === "online"     ? "online" :
-    status === "streaming"  ? "streaming" :
-    status === "recording"  ? "recording" :
-    status === "starting"   ? "starting" :
-    status === "restarting" ? "restarting" :
-    status === "failed"     ? "failed" :
-    status === "error"      ? "error" : "offline"
+  const statusClass = isSuspendedByPlan
+    ? "suspended"
+    : status === "online"     ? "online" :
+      status === "streaming"  ? "streaming" :
+      status === "recording"  ? "recording" :
+      status === "starting"   ? "starting" :
+      status === "restarting" ? "restarting" :
+      status === "failed"     ? "failed" :
+      status === "error"      ? "error" : "offline"
+
+  const statusText = isSuspendedByPlan ? "suspended" : (status || "unknown")
 
   // Down-state messages used inside the feed placeholder. "failed" and
   // "error" render the supervisor's last_error if we have it so the user
-  // isn't left guessing why the camera went dark.
-  const downLabel =
-    status === "failed" ? "Pipeline Failed" :
-    status === "error"  ? "Pipeline Error"  : "Camera Offline"
-  const downDetail =
-    (status === "failed" || status === "error") && camera.last_error
+  // isn't left guessing why the camera went dark. A plan-suspended camera
+  // gets its own dedicated copy so the operator knows exactly why the
+  // feed is dark — it isn't broken, it's just outside their plan.
+  const downLabel = isSuspendedByPlan
+    ? "Suspended — Plan Limit"
+    : status === "failed" ? "Pipeline Failed" :
+      status === "error"  ? "Pipeline Error"  : "Camera Offline"
+  const downDetail = isSuspendedByPlan
+    ? "Upgrade your plan to resume streaming."
+    : (status === "failed" || status === "error") && camera.last_error
       ? camera.last_error
       : null
 
   // Tooltip content for the status badge. Shows the reason inline so the
   // user doesn't have to hover into the feed to see what's wrong.
-  const badgeTitle = camera.last_error
-    ? `${status}: ${camera.last_error}`
-    : status || "unknown"
+  const badgeTitle = isSuspendedByPlan
+    ? "Suspended by plan limit — upgrade to resume streaming"
+    : camera.last_error
+      ? `${status}: ${camera.last_error}`
+      : status || "unknown"
 
   const cardClasses = `camera-card ${isDown ? "offline" : ""}`
 
@@ -97,16 +112,26 @@ function CameraCard({
         </div>
         <div className={`status-badge ${statusClass}`} title={badgeTitle}>
           <span className="dot"></span>
-          <span className="status-text">{status || "unknown"}</span>
+          <span className="status-text">{statusText}</span>
         </div>
       </div>
 
       <div className="camera-feed-container">
         {isDown ? (
-          <div className="feed-loading error">
-            <span className="status-icon">⚠️</span>
+          <div className={`feed-loading error${isSuspendedByPlan ? " suspended" : ""}`}>
+            <span className="status-icon">{isSuspendedByPlan ? "🔒" : "⚠️"}</span>
             <span>{downLabel}</span>
             {downDetail && <span className="feed-detail">{downDetail}</span>}
+            {isSuspendedByPlan && onRequestUpgrade && (
+              <button
+                type="button"
+                className="btn btn-primary btn-small"
+                onClick={onRequestUpgrade}
+                style={{ marginTop: "0.5rem" }}
+              >
+                Upgrade plan
+              </button>
+            )}
           </div>
         ) : (
           <HlsPlayer
@@ -157,6 +182,8 @@ export default memo(CameraCard, (prevProps, nextProps) => {
     prevProps.cameraId === nextProps.cameraId &&
     prevProps.camera.status === nextProps.camera.status &&
     prevProps.camera.name === nextProps.camera.name &&
-    prevProps.camera.last_error === nextProps.camera.last_error
+    prevProps.camera.last_error === nextProps.camera.last_error &&
+    prevProps.camera.disabled_by_plan === nextProps.camera.disabled_by_plan &&
+    prevProps.onRequestUpgrade === nextProps.onRequestUpgrade
   )
 })
