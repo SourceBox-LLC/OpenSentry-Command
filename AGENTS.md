@@ -40,6 +40,7 @@ Backend config is loaded from environment variables (see `backend/.env.example`)
 - `INACTIVE_CAMERA_CLEANUP_HOURS` — free caches for cameras offline this long (default 24)
 - `LOG_RETENTION_DAYS` — stream + MCP + audit + motion + notification log retention (default 90)
 - `OFFLINE_SWEEP_INTERVAL_SECONDS` — how often to mark stale rows offline (default 30)
+- `SENTRY_DSN` — error tracking. In production this is managed by the Fly Sentry extension (`fly ext sentry create -a opensentry-command`) which provisions a sponsored Team plan and auto-injects the secret; you rarely set this by hand. `app/core/sentry.py::init_sentry()` is a no-op when the DSN is absent, so local dev needs no extra config. Dashboard: `fly ext sentry dashboard -a opensentry-command`.
 
 Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
 
