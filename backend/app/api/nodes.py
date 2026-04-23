@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import (
+    PAYMENT_GRACE_DAYS,
     enforce_camera_cap,
     get_plan_limits,
     get_plan_limits_for_org,
@@ -506,13 +507,43 @@ async def get_plan_info(
     user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return the org's current plan, usage, and limits."""
+    """Return the org's current plan, usage, limits, and (when past-due) the
+    remaining grace window. The countdown lets the dashboard show a clear
+    "X days until suspension" banner instead of the static "7 days" copy the
+    ToS guarantees but operators can't see live.
+    """
     from app.models.models import Setting
+    from datetime import datetime, timedelta, timezone
 
     limits = get_plan_limits(user.plan)
     current_nodes = db.query(CameraNode).filter_by(org_id=user.org_id).count()
     current_cameras = db.query(Camera).filter_by(org_id=user.org_id).count()
     payment_past_due = Setting.get(db, user.org_id, "payment_past_due", "false") == "true"
+
+    # Compute grace window when past-due. The ToS promises PAYMENT_GRACE_DAYS
+    # from payment_past_due_at; after that, effective_plan_for_caps tightens
+    # everyone to free_org. We expose the remaining days + expiry timestamp
+    # so the dashboard banner can warn users before it bites.
+    grace_days_remaining: int | None = None
+    grace_expires_at: str | None = None
+    if payment_past_due:
+        past_due_at_str = Setting.get(db, user.org_id, "payment_past_due_at", "")
+        if past_due_at_str:
+            try:
+                past_due_at = datetime.fromisoformat(past_due_at_str.replace("Z", "+00:00"))
+                if past_due_at.tzinfo is None:
+                    past_due_at = past_due_at.replace(tzinfo=timezone.utc)
+                expires_at = past_due_at + timedelta(days=PAYMENT_GRACE_DAYS)
+                remaining = expires_at - datetime.now(tz=timezone.utc)
+                # Negative remaining means grace already expired — surface as
+                # 0 so the UI shows "suspended" rather than a negative number.
+                grace_days_remaining = max(0, remaining.days)
+                grace_expires_at = expires_at.isoformat()
+            except (ValueError, TypeError):
+                # Unparseable timestamp — leave fields None, same posture as
+                # effective_plan_for_caps (keep nominal plan until resolved).
+                pass
+
     return {
         "plan": user.plan,
         "plan_name": get_plan_display_name(user.plan),
@@ -523,6 +554,9 @@ async def get_plan_info(
             "cameras": current_cameras,
         },
         "payment_past_due": payment_past_due,
+        "grace_days_remaining": grace_days_remaining,
+        "grace_expires_at": grace_expires_at,
+        "grace_window_days": PAYMENT_GRACE_DAYS,
     }
 
 

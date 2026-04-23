@@ -149,18 +149,52 @@ function DashboardPage() {
     <div className="dashboard-container">
       <HeartbeatBanner />
 
-      {isAdmin && planInfo?.payment_past_due && (
-        <div className="payment-past-due-banner">
-          <span>
-            Your payment is past due. Cameras beyond your free-tier limit will be
-            suspended after a 7-day grace period — update your payment method to
-            keep streaming.
-          </span>
-          <Link to="/pricing" className="btn btn-primary btn-small">
-            Manage Billing
-          </Link>
-        </div>
-      )}
+      {isAdmin && planInfo?.payment_past_due && (() => {
+        // Grace countdown: backend returns grace_days_remaining + grace_expires_at.
+        // When the timestamp parses cleanly we show the live number; otherwise
+        // fall back to the ToS-guaranteed window (grace_window_days) so the
+        // copy still reads correctly for older backends that haven't shipped
+        // the countdown fields yet.
+        const daysLeft = planInfo.grace_days_remaining
+        const windowDays = planInfo.grace_window_days ?? 7
+        let copy
+        if (daysLeft === 0) {
+          copy = (
+            <>
+              <strong>Grace period expired.</strong> Cameras beyond the free-tier
+              limit are now suspended. Update your payment method to restore them.
+            </>
+          )
+        } else if (typeof daysLeft === "number") {
+          copy = (
+            <>
+              <strong>Payment past due — {daysLeft} day{daysLeft === 1 ? "" : "s"} left.</strong>
+              {" "}After that, cameras beyond the free-tier limit will be suspended.
+              Update your payment method now to avoid interruption.
+            </>
+          )
+        } else {
+          copy = (
+            <>
+              Your payment is past due. Cameras beyond your free-tier limit will be
+              suspended after a {windowDays}-day grace period — update your payment method to
+              keep streaming.
+            </>
+          )
+        }
+        return (
+          <div
+            className={`payment-past-due-banner${daysLeft === 0 ? " payment-past-due-expired" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span>{copy}</span>
+            <Link to="/pricing" className="btn btn-primary btn-small">
+              Manage Billing
+            </Link>
+          </div>
+        )
+      })()}
 
       {planInfo && planInfo.features?.includes("admin") && (
         <div className={`pro-status-bar pro-status-${planInfo.plan}`}>

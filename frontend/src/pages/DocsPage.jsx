@@ -100,6 +100,7 @@ function DocsPage() {
           <div className="docs-sidebar-group">
             <div className="docs-sidebar-group-label">Reference</div>
             <a href="#api-reference" className="docs-sidebar-link">API Reference</a>
+            <a href="#api-rate-limits" className="docs-sidebar-link">API Rate Limits</a>
           </div>
         </nav>
         <div className="docs-sidebar-footer">
@@ -1439,7 +1440,7 @@ brew install ffmpeg            # macOS`}</code>
               <li><strong>401</strong> — missing or invalid auth header</li>
               <li><strong>403</strong> — authenticated but not authorized (wrong org, insufficient role, plan gate)</li>
               <li><strong>404</strong> — resource not found in the caller's org</li>
-              <li><strong>429</strong> — rate-limit exceeded (MCP only, under Pro/Business budgets)</li>
+              <li><strong>429</strong> — rate-limit exceeded. Applies to both REST routes (per-route limits, see <a href="#api-rate-limits">API Rate Limits</a>) and MCP tool calls (per-key budget on Pro/Business). The response body includes an <code>error: "rate_limit_exceeded"</code> field, the matched <code>limit</code>, and a <code>retry_after_seconds</code> hint; clients should honour the <code>Retry-After</code> header.</li>
               <li><strong>5xx</strong> — server error; <code>request_id</code> in the body is what to include in bug reports</li>
             </ul>
 
@@ -1523,6 +1524,106 @@ brew install ffmpeg            # macOS`}</code>
             <h3>MCP Endpoint</h3>
             <p>Streamable HTTP transport at <code>/mcp</code>. Authenticate with <code>Authorization: Bearer osc_...</code> header.</p>
             <p>See the <a href="#mcp">MCP Integration</a> section for setup and available tools.</p>
+          </section>
+
+          {/* ── API Rate Limits ──────────────────────────────── */}
+          <section className="docs-section" id="api-rate-limits">
+            <h2>API Rate Limits<a href="#api-rate-limits" className="docs-anchor">#</a></h2>
+            <p>
+              Every mutating route is rate limited to protect the service from
+              runaway scripts and abuse. Limits are bucketed per tenant: a
+              CloudNode API key gets its own bucket, an authenticated user's
+              Clerk JWT shares a bucket with the rest of their org, and
+              unauthenticated callers bucket by IP. This means one noisy integrator
+              can't starve other orgs.
+            </p>
+            <p>
+              When you exceed a limit the response is HTTP <code>429</code> with the
+              body shape below and a <code>Retry-After: 60</code> header:
+            </p>
+            <div className="docs-code-block">
+              <code>{`{
+  "error": "rate_limit_exceeded",
+  "message": "Too many requests. Back off and retry after the Retry-After window.",
+  "limit": "60 per 1 minute",
+  "retry_after_seconds": 60
+}`}</code>
+              <button className="docs-copy-btn" onClick={() => copyToClipboard(`{
+  "error": "rate_limit_exceeded",
+  "message": "Too many requests. Back off and retry after the Retry-After window.",
+  "limit": "60 per 1 minute",
+  "retry_after_seconds": 60
+}`)}>Copy</button>
+            </div>
+
+            <h3>REST API Limits</h3>
+            <div className="docs-plans-table">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Endpoint</th>
+                    <th>Limit</th>
+                    <th>Bucket</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>POST <code>/api/nodes/validate</code></td><td>10 / min</td><td>Per IP / org</td></tr>
+                  <tr><td>POST <code>/api/nodes/register</code></td><td>10 / min</td><td>Per IP / org</td></tr>
+                  <tr><td>POST <code>/api/nodes/heartbeat</code></td><td>60 / min</td><td>Per node key</td></tr>
+                  <tr><td>POST <code>/api/nodes/{"{id}"}/rotate-key</code></td><td>5 / min</td><td>Per org</td></tr>
+                  <tr><td>POST <code>/api/nodes</code></td><td>20 / hour</td><td>Per org</td></tr>
+                  <tr><td>POST <code>/api/nodes/self/decommission</code></td><td>10 / hour</td><td>Per node key</td></tr>
+                  <tr><td>POST <code>/api/cameras/{"{id}"}/snapshot</code></td><td>30 / min</td><td>Per org</td></tr>
+                  <tr><td>POST <code>/api/cameras/{"{id}"}/recording</code></td><td>30 / min</td><td>Per org</td></tr>
+                  <tr><td>POST <code>/api/cameras/{"{id}"}/push-segment</code></td><td>1200 / min</td><td>Per node key</td></tr>
+                  <tr><td>POST <code>/api/cameras/{"{id}"}/playlist</code></td><td>600 / min</td><td>Per node key</td></tr>
+                  <tr><td>POST <code>/api/cameras/{"{id}"}/motion</code></td><td>120 / min</td><td>Per node key</td></tr>
+                  <tr><td>POST <code>/api/cameras/{"{id}"}/codec</code></td><td>30 / min</td><td>Per node key</td></tr>
+                  <tr><td>GET <code>/api/incidents</code></td><td>120 / min</td><td>Per org</td></tr>
+                  <tr><td>PATCH <code>/api/incidents/{"{id}"}</code></td><td>120 / min</td><td>Per org</td></tr>
+                  <tr><td>DELETE <code>/api/incidents/{"{id}"}</code></td><td>60 / min</td><td>Per org</td></tr>
+                  <tr><td>POST <code>/api/mcp/keys</code></td><td>10 / hour</td><td>Per org</td></tr>
+                  <tr><td>DELETE <code>/api/mcp/keys/{"{id}"}</code></td><td>30 / hour</td><td>Per org</td></tr>
+                  <tr><td>DELETE <code>/api/camera-groups/{"{id}"}</code></td><td>60 / min</td><td>Per org</td></tr>
+                  <tr><td>POST <code>/api/webhooks/clerk</code></td><td>120 / min</td><td>Per IP (Svix-signed)</td></tr>
+                  <tr><td>GET/POST live stream and segment proxies</td><td>Unlimited</td><td>Read-path fast path</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>MCP Tool-Call Limits</h3>
+            <p>
+              MCP keys have a separate budget on top of the REST limits. Buckets
+              are per-key, so revoking and re-issuing a key starts fresh.
+            </p>
+            <div className="docs-plans-table">
+              <table>
+                <thead>
+                  <tr><th>Plan</th><th>Calls / minute</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Free</td><td>— (MCP not available)</td></tr>
+                  <tr><td>Pro</td><td>30</td></tr>
+                  <tr><td>Business</td><td>120</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>Other caps</h3>
+            <ul>
+              <li><strong>SSE subscribers</strong> — 50 concurrent streams per org per channel (motion, notifications, MCP activity). Hitting the cap returns 429; close unused dashboard tabs to free a slot.</li>
+              <li><strong>Segment payload size</strong> — <code>push-segment</code> uploads are capped at 2 MiB per segment. Oversized segments return HTTP 400.</li>
+              <li><strong>Pagination</strong> — <code>limit</code> is capped per endpoint (200 for incidents and notifications, 500 for motion events, 500 for audit logs). <code>offset</code> is capped at 1,000,000 on every paginated endpoint because large offsets force a full table scan.</li>
+              <li><strong>Plan resolution</strong> — live Clerk lookups are throttled to one every 60 seconds per org to bound our billing-API spend; cached plan values are always served in between.</li>
+            </ul>
+
+            <h3>Scaling past the defaults</h3>
+            <p>
+              If a legitimate workload is bumping into these limits (e.g. an
+              integration that needs a higher MCP budget or burst headroom on
+              heartbeat), email SourceBox LLC via the <a href="https://github.com/SourceBox-LLC" target="_blank" rel="noopener noreferrer">GitHub org page</a>.
+              We'd rather raise your bucket than have you build retry jitter.
+            </p>
           </section>
 
           {/* ── Resources ─────────────────────────────────────── */}

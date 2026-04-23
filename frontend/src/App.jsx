@@ -18,6 +18,7 @@ const PricingPage = lazy(() => import("./pages/PricingPage.jsx"))
 const McpPage = lazy(() => import("./pages/McpPage.jsx"))
 const SentinelPage = lazy(() => import("./pages/SentinelPage.jsx"))
 const LegalPage = lazy(() => import("./pages/LegalPage.jsx"))
+const SecurityPage = lazy(() => import("./pages/SecurityPage.jsx"))
 
 function RequireOrg({ children }) {
   const { organization, isLoaded } = useOrganization()
@@ -98,6 +99,7 @@ function App() {
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/sentinel" element={<SentinelPage />} />
           <Route path="/legal/:page" element={<LegalPage />} />
+          <Route path="/security" element={<SecurityPage />} />
         </Route>
 
         {/* Auth routes (public but use Clerk components) */}

@@ -21,6 +21,12 @@ PLAN_MEMBER_LIMITS = {
     "business": 20,
 }
 
+# Paid plan slugs. Seeing a subscription.updated with one of these means the
+# payment card is active (Clerk wouldn't mark the subscription live otherwise),
+# so we can clear any past-due flag we were holding. Kept local to this module
+# rather than imported from plans.py to keep webhook semantics self-contained.
+PAID_PLAN_SLUGS_WEBHOOK = frozenset({"pro", "business"})
+
 
 def set_org_member_limit(org_id: str, limit: int):
     """Update the Clerk org's max allowed memberships."""
@@ -70,6 +76,17 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             set_org_member_limit(org_id, limit)
             # Persist plan in DB so API-key-authenticated endpoints can look it up
             Setting.set(db, org_id, "org_plan", plan_slug)
+            # If the subscription is now on a paid plan, clear any lingering
+            # past-due flag. Clerk only emits subscription.active/updated once
+            # the payment has actually gone through, so seeing this event with
+            # a paid plan means the card is good again — the org should get
+            # their paid caps back immediately, not after the next
+            # paymentAttempt.updated trickles in. Without this clear, an org
+            # that upgrades *during* the grace window stays capped at free
+            # because effective_plan_for_caps still sees past_due=true.
+            if plan_slug in PAID_PLAN_SLUGS_WEBHOOK:
+                Setting.set(db, org_id, "payment_past_due", "false")
+                Setting.set(db, org_id, "payment_past_due_at", "")
             # Re-evaluate camera cap — a plan change (up or down) may flip
             # rows in either direction. Flushing the Setting first ensures
             # `resolve_org_plan` inside enforce_camera_cap reads the new value.

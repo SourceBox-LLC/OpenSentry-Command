@@ -1401,6 +1401,120 @@ body {
     text-decoration: underline;
 }
 
+.payment-past-due-banner.payment-past-due-expired {
+    background: rgba(220, 38, 38, 0.18);
+    border-color: rgba(220, 38, 38, 0.55);
+    color: #fecaca;
+}
+
+/* Security Page */
+.security-page {
+    min-height: 100vh;
+    color: var(--text-primary);
+}
+
+.security-hero {
+    padding: 4rem 1.5rem 2.5rem;
+    text-align: center;
+    background: linear-gradient(180deg, rgba(59, 130, 246, 0.08), transparent);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.security-title {
+    font-size: clamp(1.875rem, 4vw, 2.75rem);
+    margin: 0 0 0.75rem;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.security-subtitle {
+    max-width: 42rem;
+    margin: 0 auto;
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+    line-height: 1.55;
+}
+
+.security-body {
+    max-width: 880px;
+    padding: 2.5rem 1.5rem 5rem;
+}
+
+.security-section {
+    margin-bottom: 3rem;
+}
+
+.security-section h2 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.security-section h3 {
+    font-size: 1.05rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.security-section p {
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: 1rem;
+}
+
+.security-section code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.security-bullets {
+    list-style: disc;
+    padding-left: 1.25rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+}
+
+.security-bullets li {
+    margin-bottom: 0.6rem;
+}
+
+.security-bullets li strong {
+    color: var(--text-primary);
+}
+
+.security-dataflow {
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+}
+
+.security-dataflow table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.security-dataflow th,
+.security-dataflow td {
+    padding: 0.65rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    vertical-align: top;
+}
+
+.security-dataflow th {
+    color: var(--text-primary);
+    font-weight: 600;
+    border-bottom-color: rgba(255, 255, 255, 0.15);
+}
+
+.security-dataflow td {
+    color: var(--text-secondary);
+}
+
 /* Legal Pages */
 .legal-container {
     max-width: 800px;

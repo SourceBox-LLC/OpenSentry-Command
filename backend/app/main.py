@@ -9,9 +9,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
@@ -70,7 +70,37 @@ app = FastAPI(
 )
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """Custom 429 response — gives the client everything it needs to retry.
+
+    The slowapi default emits a bare `{"detail": "429 ..."}` string with no
+    Retry-After header, which leaves integrators guessing at the backoff
+    window and which limit they hit. We return:
+      - a stable JSON shape matching the rest of the API's error envelope
+      - the exact limit string (e.g. "60 per 1 minute") so callers know what
+        bucket they tripped
+      - a `Retry-After: 60` header, per RFC 9110, so off-the-shelf HTTP
+        clients back off without special handling
+    60s is a safe upper bound because our tightest rate windows are minute-
+    scoped; callers that honour Retry-After will idle through the window and
+    succeed on the next attempt.
+    """
+    limit_str = str(exc.detail) if getattr(exc, "detail", None) else "rate limit exceeded"
+    body = {
+        "error": "rate_limit_exceeded",
+        "message": (
+            "Too many requests. Back off and retry after the Retry-After window. "
+            "See /docs#api-rate-limits for per-route limits."
+        ),
+        "limit": limit_str,
+        "retry_after_seconds": 60,
+    }
+    return JSONResponse(status_code=429, content=body, headers={"Retry-After": "60"})
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # Get frontend URL from environment (set in fly.toml or .env)

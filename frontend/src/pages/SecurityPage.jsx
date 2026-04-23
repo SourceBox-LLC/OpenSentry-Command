@@ -1,0 +1,358 @@
+import { Link } from "react-router-dom"
+
+/**
+ * /security — privacy & architecture page.
+ *
+ * Every claim on this page is backed by code you can read in our public
+ * repositories. Links throughout point at the exact file/function that
+ * implements the behaviour, so "you can verify" isn't a marketing slogan.
+ *
+ * Keep the copy honest. When you add a claim here, cite the implementing
+ * commit or file. When we change behaviour, this page changes too.
+ */
+function SecurityPage() {
+  return (
+    <div className="security-page">
+      <div className="security-hero">
+        <div className="landing-container">
+          <h1 className="security-title">
+            Security & Privacy at <span className="landing-logo-text">Sentry</span>
+          </h1>
+          <p className="security-subtitle">
+            How SourceBox Sentry handles your video, what stays on your devices,
+            and what you can independently verify in our source code.
+          </p>
+        </div>
+      </div>
+
+      <div className="landing-container security-body">
+
+        {/* ── TL;DR ──────────────────────────────────────────────── */}
+        <section className="security-section">
+          <h2>At a glance</h2>
+          <ul className="security-bullets">
+            <li>
+              <strong>Motion detection runs on your device.</strong> No video
+              frames leave your network for cloud ML — detection uses FFmpeg's
+              scene-change analysis locally on the CloudNode.
+            </li>
+            <li>
+              <strong>Live video is cached in RAM, not stored.</strong> The
+              Command Center holds roughly the last 60 seconds of HLS segments
+              in memory per camera so your browser can play them back. Nothing
+              is written to cloud disk or object storage.
+            </li>
+            <li>
+              <strong>Recordings stay local to the CloudNode.</strong> If you
+              enable recording, segments are stored in the node's local SQLite
+              database. We never ingest your footage to the cloud.
+            </li>
+            <li>
+              <strong>API keys and recordings are encrypted at rest on the node.</strong>
+              {" "}Both are sealed with AES-256-GCM using a key derived from the
+              host's OS machine ID. A stolen DB file alone can't be decrypted
+              on another machine.
+            </li>
+            <li>
+              <strong>No analytics, no ad networks, no data brokers.</strong> The
+              only third parties that touch your account are Clerk (auth +
+              billing), Stripe (payment, via Clerk), Fly.io (hosting), and
+              optionally Sentry (error tracking, off by default).
+            </li>
+            <li>
+              <strong>Source code is open.</strong> Command Center is AGPL-3.0;
+              CloudNode is GPL-3.0. Every claim on this page points to the
+              file that implements it.
+            </li>
+          </ul>
+        </section>
+
+        {/* ── Data flow ──────────────────────────────────────────── */}
+        <section className="security-section">
+          <h2>What actually travels to the cloud</h2>
+          <p>
+            When you watch a live camera, the CloudNode pushes 1-second HLS
+            segments to the Command Center over authenticated HTTPS. The
+            Command Center holds the most recent window in RAM and serves it
+            same-origin to your browser. That's the whole live path.
+          </p>
+
+          <div className="security-dataflow">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Where it lives</th>
+                  <th>How long</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Live video segments (.ts files)</td>
+                  <td>Command Center RAM cache</td>
+                  <td>Rolling ~60-second buffer per camera. Never persisted to disk.</td>
+                </tr>
+                <tr>
+                  <td>Recordings (if enabled)</td>
+                  <td>CloudNode local SQLite, AES-256-GCM encrypted</td>
+                  <td>Until you delete them or disk quota evicts the oldest.</td>
+                </tr>
+                <tr>
+                  <td>Snapshots (if enabled)</td>
+                  <td>CloudNode local SQLite, AES-256-GCM encrypted</td>
+                  <td>Same as recordings — local only, retention is yours.</td>
+                </tr>
+                <tr>
+                  <td>Motion events</td>
+                  <td>Command Center database (metadata only: timestamp, score, camera)</td>
+                  <td>90 days, then auto-deleted.</td>
+                </tr>
+                <tr>
+                  <td>Stream access logs</td>
+                  <td>Command Center database (user, IP, user agent, timestamp)</td>
+                  <td>90 days, then auto-deleted.</td>
+                </tr>
+                <tr>
+                  <td>Audit logs (admin actions)</td>
+                  <td>Command Center database</td>
+                  <td>90 days, then auto-deleted.</td>
+                </tr>
+                <tr>
+                  <td>Cloud API key (held by your node)</td>
+                  <td>CloudNode local SQLite, encrypted at rest</td>
+                  <td>Until you rotate or decommission.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            What's <em>not</em> in that list: no raw audio frames, no
+            object-detection thumbnails, no ML-derived face or person embeddings,
+            no location data, no geographic IP lookups. Cameras do not ship
+            video to third parties under any condition we've designed for.
+          </p>
+        </section>
+
+        {/* ── Motion on-device ───────────────────────────────────── */}
+        <section className="security-section">
+          <h2>Motion detection is local</h2>
+          <p>
+            Consumer cameras like Ring and Nest ship frames to cloud services
+            for person, vehicle, and animal detection. We don't — motion
+            detection is implemented with FFmpeg's <code>select='gte(scene,T)'</code>
+            scene-change filter running as a local subprocess on the CloudNode.
+            When a segment's scene score crosses your threshold, the node
+            posts <em>only</em> the event metadata (camera ID, score, timestamp,
+            segment sequence) to Command Center. The pixels stay on your device.
+          </p>
+          <p>
+            You can read the implementation:{" "}
+            <a
+              href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/src/streaming/motion_detector.rs"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <code>src/streaming/motion_detector.rs</code>
+            </a>. There is no cloud ML dependency — no OpenAI, no Anthropic, no
+            Google Vision, no AWS Rekognition. Verifiable with a <code>grep</code> of the
+            source tree.
+          </p>
+        </section>
+
+        {/* ── Encryption ─────────────────────────────────────────── */}
+        <section className="security-section">
+          <h2>Encryption</h2>
+
+          <h3>In transit</h3>
+          <p>
+            TLS everywhere. CloudNode pushes and heartbeats use HTTPS; the
+            browser fetches HLS over HTTPS same-origin; the MCP endpoint is
+            HTTPS. Setup validation explicitly rejects invalid certificates —
+            we don't have a "skip TLS" code path.
+          </p>
+
+          <h3>API keys (at rest, on the node)</h3>
+          <p>
+            The cloud API key your CloudNode holds is encrypted with AES-256-GCM.
+            The 256-bit key is derived by hashing the host's OS-managed machine
+            identifier (<code>/etc/machine-id</code> on Linux, <code>MachineGuid</code> on
+            Windows, <code>IOPlatformUUID</code> on macOS) with a domain-separation tag.
+            An attacker who steals just the DB file can't decrypt the key
+            without also having code execution on the original host.
+          </p>
+          <p>
+            Command Center stores node API keys and MCP keys as SHA-256 hashes —
+            the plaintext values are shown once at creation and never again.
+            Rotation invalidates the old hash immediately.
+          </p>
+
+          <h3>Recordings and snapshots (at rest, on the node)</h3>
+          <p>
+            Every recording segment and snapshot is encrypted with AES-256-GCM
+            before it's written to the CloudNode's local SQLite database. The
+            encryption key is the same machine-id-derived key used for your
+            API key, which means:
+          </p>
+          <ul className="security-bullets">
+            <li>An attacker who copies <code>node.db</code> off the device gets useless ciphertext — they also need code execution on the original host to re-derive the key.</li>
+            <li>Every blob uses a fresh random nonce, so identical frames never produce identical ciphertexts.</li>
+            <li>AES-GCM's authentication tag means tampering is detected — you can't silently flip bytes in a stored recording.</li>
+          </ul>
+          <p>
+            For defense in depth we still recommend running your CloudNode on
+            a disk protected with OS-level encryption (LUKS, BitLocker,
+            FileVault) — that guards the machine-id file itself from offline
+            attacks. But the application-level encryption means a casual
+            theft or misplaced SD card doesn't expose your footage.
+          </p>
+
+          <h3>Command Center data</h3>
+          <p>
+            The Command Center database contains metadata only — camera names,
+            motion event rows, audit and access logs, settings, hashed API
+            keys. Our hosting provider (Fly.io) encrypts volumes at rest by
+            default. No video content is stored on Command Center disks.
+          </p>
+        </section>
+
+        {/* ── Access logs & transparency ──────────────────────── */}
+        <section className="security-section">
+          <h2>Who watched what, and when</h2>
+          <p>
+            Every authenticated stream view is logged: the viewer's user ID,
+            email, IP address, truncated user agent, camera ID, and timestamp.
+            Admins can see this from the in-app admin dashboard and export it.
+            Logs are retained for 90 days and then automatically purged.
+          </p>
+          <p>
+            This log trail belongs to your organization, not to us. We don't
+            have a separate copy, we don't share it with partners, and we
+            don't use it for analytics.
+          </p>
+        </section>
+
+        {/* ── Third parties ─────────────────────────────────────── */}
+        <section className="security-section">
+          <h2>Third parties</h2>
+          <p>
+            The only third-party services that touch your account:
+          </p>
+          <ul className="security-bullets">
+            <li><strong>Clerk</strong> — identity, organizations, session tokens, and subscription billing. Clerk never sees video.</li>
+            <li><strong>Stripe</strong> — processes payments on Clerk's behalf. We never see your card details.</li>
+            <li><strong>Fly.io</strong> — hosts the Command Center application and its database. Fly does not see video content (it's cached in application RAM, never written to persistent storage).</li>
+            <li><strong>Sentry</strong> (optional) — error tracking. Disabled if <code>SENTRY_DSN</code> is unset. When enabled, captures exception stack traces, not video or user content. 10% trace sample rate.</li>
+          </ul>
+          <p>
+            That's the complete list. No analytics providers, no ad networks,
+            no data brokers, no tracking cookies, no third-party SDKs in the
+            dashboard. You can verify by searching our source for the usual
+            names (Mixpanel, Segment, GA, PostHog) — none are present.
+          </p>
+        </section>
+
+        {/* ── LE & legal process ────────────────────────────────── */}
+        <section className="security-section">
+          <h2>Law enforcement & legal process</h2>
+          <p>
+            We have no pre-arranged data-sharing agreements with law
+            enforcement. We do not participate in programs that grant warrantless
+            access to customer accounts.
+          </p>
+          <p>
+            If we receive a valid legal request, we respond only to the
+            narrow scope it mandates. In practice, the only SourceBox-held
+            data subject to such a request is what lives on Command Center: log
+            metadata (access logs, audit logs) and account information.{" "}
+            <strong>We do not have your video.</strong> Live segments are
+            ephemeral in RAM; recordings live on your CloudNode hardware. If
+            a request targets footage, the requester needs to approach you
+            directly — we can't hand over something we don't store.
+          </p>
+          <p>
+            We'll also notify the affected organization admin of any legal
+            request unless legally prohibited from doing so.
+          </p>
+        </section>
+
+        {/* ── Your data, your control ────────────────────────────── */}
+        <section className="security-section">
+          <h2>Deleting your data</h2>
+          <p>
+            Two buttons in the dashboard, both irreversible:
+          </p>
+          <ul className="security-bullets">
+            <li>
+              <strong>Node &rarr; Decommission</strong> — removes a node and all
+              its cameras from your org, cleans up in-memory caches, and
+              invalidates the node's API key. The node itself wipes its local
+              database on confirmation.
+            </li>
+            <li>
+              <strong>Settings &rarr; Delete Organization</strong> — triggers a
+              full cascade: every node, camera, group, MCP key, audit log,
+              stream access log, motion event, and settings row is removed in
+              a single transaction. There's no archival copy and no soft-delete
+              grace window for this path.
+            </li>
+          </ul>
+          <p>
+            Between those two, every piece of data we hold about your
+            organization can be removed by you, at any time, without contacting
+            support.
+          </p>
+        </section>
+
+        {/* ── Offline / self-host ────────────────────────────────── */}
+        <section className="security-section">
+          <h2>What happens if SourceBox goes down</h2>
+          <p>
+            The CloudNode is designed to keep recording locally even when the
+            Command Center is unreachable. Live streaming stops because the
+            browser can't reach the cache, but segment capture, motion
+            detection, and local recording all keep running. When connectivity
+            returns, uploads resume automatically.
+          </p>
+          <p>
+            Because both projects are open source and can be self-hosted, a
+            motivated operator can also run the entire stack on their own
+            infrastructure. We don't lock you in at the data layer — your
+            recordings are yours, in a SQLite file on hardware you own.
+          </p>
+        </section>
+
+        {/* ── Reporting a vulnerability ─────────────────────────── */}
+        <section className="security-section">
+          <h2>Reporting a vulnerability</h2>
+          <p>
+            If you find a security issue, please report it privately via the{" "}
+            <a
+              href="https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Command Center security advisories
+            </a>{" "}
+            page on GitHub. We triage within 72 hours. Coordinated disclosure
+            works — please don't publicly file details of an unpatched issue.
+          </p>
+        </section>
+
+        {/* ── Related links ─────────────────────────────────────── */}
+        <section className="security-section">
+          <h2>Related</h2>
+          <ul className="security-bullets">
+            <li><Link to="/legal/privacy">Privacy Policy</Link> — the legal version of the policies on this page.</li>
+            <li><Link to="/legal/terms">Terms of Service</Link> — grace periods, plan enforcement, acceptable use.</li>
+            <li><Link to="/docs#api-rate-limits">API Rate Limits</Link> — per-route limits and bucketing.</li>
+            <li><Link to="/docs#security-procedures">Security Procedures</Link> — what to do if a key is compromised.</li>
+          </ul>
+        </section>
+
+      </div>
+    </div>
+  )
+}
+
+export default SecurityPage
