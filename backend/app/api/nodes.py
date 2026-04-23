@@ -435,10 +435,23 @@ async def node_heartbeat(
     # few seconds of a plan change and advisory on the node anyway.
     cached_plan = Setting.get(db, node.org_id, "org_plan", "free_org") or "free_org"
 
+    # List of camera_ids on THIS node that are currently suspended by the
+    # plan cap. Used by the CloudNode to (a) show a "suspended" status on
+    # those camera rows in the TUI and (b) stop pushing segments for them
+    # so the log isn't flooded with 402s.  Scoped to this node's cameras
+    # only — a sibling node in the same org handles its own disabled list.
+    disabled_cameras = [
+        c.camera_id
+        for c in db.query(Camera)
+        .filter_by(node_id=node.id, disabled_by_plan=True)
+        .all()
+    ]
+
     response = {
         "success": True,
         "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
         "plan": wire_plan_slug(cached_plan),
+        "disabled_cameras": disabled_cameras,
     }
     if version_check["update_available"]:
         response["update_available"] = version_check["update_available"]

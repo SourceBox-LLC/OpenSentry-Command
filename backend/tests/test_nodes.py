@@ -507,3 +507,62 @@ def test_heartbeat_plan_updates_when_setting_changes(admin_client):
     )
     assert hb.status_code == 200
     assert hb.json().get("plan") == "business"
+
+
+def test_heartbeat_reports_disabled_cameras(admin_client):
+    """When the backend has suspended some of this node's cameras by plan
+    cap, the heartbeat response lists their camera_ids so the CloudNode
+    can mark them ``suspended`` in the TUI and stop pushing segments."""
+    from app.models.models import Camera, CameraNode
+    from tests.conftest import TestSession
+
+    node_id, api_key, _ = _create_and_register(admin_client)
+
+    # Seed two cameras, flag one as disabled_by_plan.
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).one()
+        session.add_all([
+            Camera(
+                camera_id="cam_suspended",
+                org_id=node.org_id,
+                node_id=node.id,
+                name="Suspended",
+                status="online",
+                disabled_by_plan=True,
+            ),
+            Camera(
+                camera_id="cam_active",
+                org_id=node.org_id,
+                node_id=node.id,
+                name="Active",
+                status="online",
+                disabled_by_plan=False,
+            ),
+        ])
+        session.commit()
+    finally:
+        session.close()
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id},
+    )
+    assert hb.status_code == 200
+    disabled = hb.json().get("disabled_cameras")
+    assert disabled == ["cam_suspended"], disabled
+
+
+def test_heartbeat_disabled_cameras_is_empty_when_none_suspended(admin_client):
+    """Happy path: a paid org with no over-cap cameras gets an empty list,
+    not a missing field."""
+    node_id, api_key, _ = _create_and_register(admin_client)
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id},
+    )
+    assert hb.status_code == 200
+    assert hb.json().get("disabled_cameras") == []
