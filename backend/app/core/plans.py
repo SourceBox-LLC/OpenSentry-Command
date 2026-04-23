@@ -3,7 +3,7 @@ Plan configuration and limit enforcement for SourceBox Sentry billing tiers.
 
 Plan slugs must match the keys defined in the Clerk Dashboard:
   - free_org  (Free)
-  - pro       (Pro — $14/mo)
+  - pro       (Pro — $12/mo, or $10/mo billed annually = $120/yr)
   - business  (Business — $29/mo; will be renamed "Pro Plus" once the
                Clerk product is renamed in the dashboard)
 """
