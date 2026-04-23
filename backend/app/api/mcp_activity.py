@@ -13,14 +13,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
 from app.core.database import get_db
 from app.models.models import McpActivityLog
-from app.mcp.activity import tracker
+from app.mcp.activity import MAX_SSE_SUBSCRIBERS_PER_ORG, tracker
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,15 @@ async def stream_activity(user: AuthUser = Depends(require_admin)):
     """
     org_id = user.org_id
     queue = tracker.subscribe(org_id)
+    if queue is None:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Too many open MCP activity streams for this org "
+                f"(cap: {MAX_SSE_SUBSCRIBERS_PER_ORG}). Close unused "
+                f"tabs and retry."
+            ),
+        )
 
     async def event_generator():
         try:
@@ -68,7 +77,10 @@ async def stream_activity(user: AuthUser = Depends(require_admin)):
 
 @router.get("/recent")
 async def get_recent_activity(
-    limit: int = 50,
+    # Cap matches the in-memory tracker's bounded buffer size; without a
+    # `le` an accidental `limit=10000` would silently be clamped inside
+    # the tracker, but returning a 422 here keeps the contract honest.
+    limit: int = Query(default=50, ge=1, le=500),
     user: AuthUser = Depends(require_admin),
 ):
     """Get recent MCP tool call events."""
@@ -99,7 +111,8 @@ async def get_mcp_logs(
     key_name: Optional[str] = None,
     status: Optional[str] = None,
     limit: int = Query(default=100, le=500),
-    offset: int = Query(default=0, ge=0),
+    # OFFSET is O(n) — cap so no one can force SQLite to skip billions.
+    offset: int = Query(default=0, ge=0, le=1_000_000),
     admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):

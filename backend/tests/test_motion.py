@@ -117,3 +117,55 @@ def test_motion_broadcaster_unsubscribe():
 
     motion_broadcaster.notify("org_unsub", {"camera_id": "cam2", "score": 50})
     assert q.empty()
+
+
+def test_motion_broadcaster_caps_subscribers_per_org():
+    """Per-org SSE cap — the (N+1)th subscribe must return None so the
+    route handler can raise 429. Without this, one authenticated member
+    with a scripted loop could exhaust the server's open-connection
+    capacity. Matches `MAX_SSE_SUBSCRIBERS_PER_ORG` in api/motion.py."""
+    from app.api.motion import MAX_SSE_SUBSCRIBERS_PER_ORG
+
+    queues = []
+    try:
+        # Fill the bucket.
+        for _ in range(MAX_SSE_SUBSCRIBERS_PER_ORG):
+            q = motion_broadcaster.subscribe("org_cap_test")
+            assert q is not None
+            queues.append(q)
+
+        # One over the cap must be rejected.
+        assert motion_broadcaster.subscribe("org_cap_test") is None
+
+        # Freeing one slot re-opens a seat.
+        motion_broadcaster.unsubscribe("org_cap_test", queues.pop())
+        again = motion_broadcaster.subscribe("org_cap_test")
+        assert again is not None
+        queues.append(again)
+    finally:
+        for q in queues:
+            motion_broadcaster.unsubscribe("org_cap_test", q)
+
+
+def test_motion_broadcaster_cap_is_scoped_per_org():
+    """One org hitting the cap must NOT block a different org — the
+    counter is per-org, not global. Otherwise a single abuser could
+    DOS every other tenant with one account's credentials."""
+    from app.api.motion import MAX_SSE_SUBSCRIBERS_PER_ORG
+
+    queues_a = []
+    try:
+        # Fill org A to its cap.
+        for _ in range(MAX_SSE_SUBSCRIBERS_PER_ORG):
+            q = motion_broadcaster.subscribe("org_A_solo")
+            assert q is not None
+            queues_a.append(q)
+        assert motion_broadcaster.subscribe("org_A_solo") is None
+
+        # Org B should still get through.
+        q_b = motion_broadcaster.subscribe("org_B_unaffected")
+        assert q_b is not None
+        motion_broadcaster.unsubscribe("org_B_unaffected", q_b)
+    finally:
+        for q in queues_a:
+            motion_broadcaster.unsubscribe("org_A_solo", q)

@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_label, write_audit
@@ -200,7 +200,9 @@ async def create_camera_group(
 
 
 @router.delete("/camera-groups/{group_id}")
+@limiter.limit("60/minute")
 async def delete_camera_group(
+    request: Request,
     group_id: int,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -408,10 +410,14 @@ async def update_notification_settings(
 
 # Audit Logs
 @router.get("/audit-logs")
+@limiter.limit("120/minute")
 async def list_audit_logs(
+    request: Request,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
-    limit: int = 100,
+    # Capped at 500 to bound the response payload — without `le` an
+    # attacker or runaway script could force a table-scan-size return.
+    limit: int = Query(default=100, ge=1, le=500),
 ):
     """List audit logs for the user's organization."""
     logs = (

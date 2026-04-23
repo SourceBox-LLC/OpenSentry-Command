@@ -23,7 +23,7 @@ import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -75,6 +75,10 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 # subscriber, scoped by org.  Each event also carries the audience so
 # the stream generator can filter per subscriber.
 
+# Cap per-org SSE connections; see the matching comment in motion.py.
+MAX_SSE_SUBSCRIBERS_PER_ORG = 50
+
+
 class NotificationBroadcaster:
     """Push notification events to inbox SSE subscribers, scoped by org."""
 
@@ -105,12 +109,25 @@ class NotificationBroadcaster:
                 except (ValueError, KeyError):
                     pass
 
-    def subscribe(self, org_id: str, is_admin: bool) -> asyncio.Queue:
+    def subscribe(self, org_id: str, is_admin: bool) -> Optional[asyncio.Queue]:
+        """Add a new SSE subscription for an org.
+
+        Returns the queue on success, or ``None`` when this org is
+        already at the per-org subscriber cap — the route handler
+        translates that into a 429.
+        """
+        existing = self._subscribers.setdefault(org_id, [])
+        if len(existing) >= MAX_SSE_SUBSCRIBERS_PER_ORG:
+            logger.warning(
+                "[Notifications] SSE cap hit for org %s (%d) — rejecting",
+                org_id, len(existing),
+            )
+            return None
         q: asyncio.Queue = asyncio.Queue(maxsize=100)
-        self._subscribers.setdefault(org_id, []).append((q, is_admin))
+        existing.append((q, is_admin))
         logger.info(
             "[Notifications] SSE subscriber added for org %s (admin=%s, total=%d)",
-            org_id, is_admin, len(self._subscribers[org_id]),
+            org_id, is_admin, len(existing),
         )
         return q
 
@@ -373,7 +390,8 @@ def _audience_filter_clause(user: AuthUser):
 @router.get("")
 async def list_notifications(
     limit: int = Query(default=50, le=200, ge=1),
-    offset: int = Query(default=0, ge=0),
+    # OFFSET is O(n) — cap so no one can force SQLite to skip billions.
+    offset: int = Query(default=0, ge=0, le=1_000_000),
     hours: int = Query(default=168, le=720),  # default 7 days, max 30 days
     user: AuthUser = Depends(require_view),
     db: Session = Depends(get_db),
@@ -504,6 +522,15 @@ async def stream_notifications(user: AuthUser = Depends(require_view)):
     org_id = user.org_id
     is_admin = user.is_admin
     queue = notification_broadcaster.subscribe(org_id, is_admin)
+    if queue is None:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Too many open notification streams for this org "
+                f"(cap: {MAX_SSE_SUBSCRIBERS_PER_ORG}). Close unused "
+                f"tabs and retry."
+            ),
+        )
 
     async def event_generator():
         try:

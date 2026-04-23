@@ -63,6 +63,13 @@ class McpEvent:
         return {k: v for k, v in asdict(self).items() if v is not None}
 
 
+# Cap per-org SSE connections; see the matching comment in api/motion.py.
+# Activity SSE is admin-only (MCP dashboard), so the bar is already higher
+# than end-user streams — but we still enforce the same cap so a
+# compromised admin key can't be used to exhaust connections.
+MAX_SSE_SUBSCRIBERS_PER_ORG = 50
+
+
 class McpActivityTracker:
     """
     Thread-safe in-memory tracker for MCP tool calls.
@@ -122,15 +129,25 @@ class McpActivityTracker:
                     except (ValueError, KeyError):
                         pass
 
-    def subscribe(self, org_id: str) -> asyncio.Queue:
-        """Create a new SSE subscription for an org. Returns an async queue."""
-        q: asyncio.Queue = asyncio.Queue(maxsize=100)
+    def subscribe(self, org_id: str) -> Optional[asyncio.Queue]:
+        """Create a new SSE subscription for an org.
+
+        Returns the queue on success, or ``None`` when the org is already
+        at the SSE subscriber cap — the route handler translates that
+        into a 429 so the client doesn't hang on an endless fake stream.
+        """
         with self._lock:
-            if org_id not in self._subscribers:
-                self._subscribers[org_id] = []
-            self._subscribers[org_id].append(q)
+            existing = self._subscribers.setdefault(org_id, [])
+            if len(existing) >= MAX_SSE_SUBSCRIBERS_PER_ORG:
+                logger.warning(
+                    "[Activity] SSE cap hit for org %s (%d) — rejecting",
+                    org_id, len(existing),
+                )
+                return None
+            q: asyncio.Queue = asyncio.Queue(maxsize=100)
+            existing.append(q)
         logger.info("[Activity] New SSE subscriber for org %s (total: %d)",
-                     org_id, len(self._subscribers[org_id]))
+                     org_id, len(existing))
         return q
 
     def unsubscribe(self, org_id: str, q: asyncio.Queue):

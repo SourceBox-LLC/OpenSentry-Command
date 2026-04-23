@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,14 @@ router = APIRouter(prefix="/api/motion", tags=["motion"])
 # ── Motion Event Broadcaster ────────────────────────────────────────
 # Lightweight pub/sub that forwards motion events to SSE subscribers.
 # Called by ws.py after persisting each motion event to the DB.
+
+# Cap per-org SSE connections. A single authenticated member could
+# otherwise open thousands of long-lived streams from a scripted loop
+# and exhaust server memory. 50 is well above legitimate dashboard use
+# (a few admins × a few tabs × a few devices) and small enough that an
+# abuser can't meaningfully DOS us with one org's credentials.
+MAX_SSE_SUBSCRIBERS_PER_ORG = 50
+
 
 class MotionBroadcaster:
     """Push motion events to dashboard SSE connections, scoped by org."""
@@ -49,13 +57,23 @@ class MotionBroadcaster:
                 except (ValueError, KeyError):
                     pass
 
-    def subscribe(self, org_id: str) -> asyncio.Queue:
+    def subscribe(self, org_id: str) -> Optional[asyncio.Queue]:
+        """Add a new SSE subscription for an org.
+
+        Returns the queue on success, or ``None`` when this org is already
+        at the per-org cap (the route handler turns that into a 429).
+        """
+        existing = self._subscribers.setdefault(org_id, [])
+        if len(existing) >= MAX_SSE_SUBSCRIBERS_PER_ORG:
+            logger.warning(
+                "[Motion] SSE cap hit for org %s (%d) — rejecting",
+                org_id, len(existing),
+            )
+            return None
         q: asyncio.Queue = asyncio.Queue(maxsize=100)
-        if org_id not in self._subscribers:
-            self._subscribers[org_id] = []
-        self._subscribers[org_id].append(q)
+        existing.append(q)
         logger.info("[Motion] SSE subscriber added for org %s (total: %d)",
-                    org_id, len(self._subscribers[org_id]))
+                    org_id, len(existing))
         return q
 
     def unsubscribe(self, org_id: str, q: asyncio.Queue):
@@ -75,7 +93,8 @@ async def list_motion_events(
     camera_id: Optional[str] = None,
     hours: int = Query(default=24, le=168),
     limit: int = Query(default=100, le=500),
-    offset: int = Query(default=0, ge=0),
+    # OFFSET is O(n) — cap so no one can force SQLite to skip billions.
+    offset: int = Query(default=0, ge=0, le=1_000_000),
     user: AuthUser = Depends(require_view),
     db: Session = Depends(get_db),
 ):
@@ -157,6 +176,15 @@ async def stream_motion_events(user: AuthUser = Depends(require_view)):
     """
     org_id = user.org_id
     queue = motion_broadcaster.subscribe(org_id)
+    if queue is None:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Too many open motion streams for this org "
+                f"(cap: {MAX_SSE_SUBSCRIBERS_PER_ORG}). Close unused "
+                f"dashboard tabs and retry."
+            ),
+        )
 
     async def event_generator():
         try:

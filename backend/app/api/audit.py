@@ -24,7 +24,10 @@ async def get_stream_logs(
     camera_id: Optional[str] = None,
     user_id: Optional[str] = None,
     limit: int = Query(default=100, le=500),
-    offset: int = Query(default=0, ge=0),
+    # Cap so an attacker can't force SQLite to skip billions of rows per
+    # request (OFFSET is O(n) even with an index). 1M is well past any
+    # realistic history a UI would page through.
+    offset: int = Query(default=0, ge=0, le=1_000_000),
     admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):

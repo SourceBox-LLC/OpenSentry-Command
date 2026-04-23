@@ -10,7 +10,9 @@ the rest of the MCP audit surface.
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+
+from app.core.limiter import limiter
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -49,7 +51,8 @@ async def list_incidents(
     severity: Optional[str] = Query(default=None, description="Filter by severity"),
     camera_id: Optional[str] = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    # OFFSET is O(n) — cap so no one can force SQLite to skip billions.
+    offset: int = Query(default=0, ge=0, le=1_000_000),
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -133,7 +136,9 @@ async def get_incident(
 
 
 @router.patch("/{incident_id}")
+@limiter.limit("120/minute")
 async def update_incident(
+    request: Request,
     incident_id: int,
     patch: IncidentPatch,
     user: AuthUser = Depends(require_admin),
@@ -174,7 +179,9 @@ async def update_incident(
 
 
 @router.delete("/{incident_id}")
+@limiter.limit("60/minute")
 async def delete_incident(
+    request: Request,
     incident_id: int,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
