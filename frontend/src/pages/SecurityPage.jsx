@@ -276,6 +276,121 @@ function SecurityPage() {
           </p>
         </section>
 
+        {/* ── How we compare ───────────────────────────────────── */}
+        <section className="security-section">
+          <h2>How we compare</h2>
+          <p>
+            Where SourceBox Sentry differs from consumer cameras people
+            already have at home. Every row is sourced from the vendor's
+            own policy pages or reputable journalism published in 2024 or
+            later — citations are linked at the end of each cell.
+            We'll keep this table current; if you find a stale claim,{" "}
+            <a
+              href="https://github.com/SourceBox-LLC/OpenSentry-Command/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              open an issue
+            </a>.
+          </p>
+
+          <div className="security-compare">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Dimension</th>
+                  <th scope="col">SourceBox Sentry</th>
+                  <th scope="col">Ring</th>
+                  <th scope="col">Google Nest</th>
+                  <th scope="col">Wyze</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">Video processed in cloud for AI features</th>
+                  <td className="yes">On-device only (FFmpeg scene-change; no cloud ML)</td>
+                  <td className="no">Cloud for Person/Package/Vehicle alerts, Video Descriptions, Familiar Faces (paid tier)</td>
+                  <td className="no">Mixed; older cams process faces in cloud, newer on-device; paid-tier gated</td>
+                  <td className="no">Edge + cloud; Descriptive Alerts and AI Search require Cam Unlimited Pro</td>
+                </tr>
+                <tr>
+                  <th scope="row">Recording works without a subscription</th>
+                  <td className="yes">Yes — all recording is local to your CloudNode, no cloud plan required</td>
+                  <td className="no">No native local recording; cancel your plan and all cloud recordings are deleted</td>
+                  <td className="partial">Cloud-first; only select Nest Cam models support microSD</td>
+                  <td className="yes">microSD up to 512 GB supported natively, no subscription needed</td>
+                </tr>
+                <tr>
+                  <th scope="row">Recordings encrypted at rest</th>
+                  <td className="yes">AES-256-GCM with a machine-id-derived key</td>
+                  <td className="partial">Amazon/AWS at rest; keys held by Amazon</td>
+                  <td className="partial">Google at rest; keys held by Google; no user E2EE</td>
+                  <td className="partial">AES-128 streams + TLS; Wyze holds the keys, not E2EE</td>
+                </tr>
+                <tr>
+                  <th scope="row">Law-enforcement posture</th>
+                  <td className="yes">No standing sharing agreements; our servers don't hold your video — requests for footage must go to you</td>
+                  <td className="no">Ended Request-for-Assistance Jan 2024 — then restored warrantless request pathway in 2025 via Axon "Community Requests"</td>
+                  <td className="partial">Reviews/narrows requests; data folded into Google's main Transparency Report</td>
+                  <td className="partial">Complies with legal process incl. "national security or law enforcement requirements"; no public transparency report located</td>
+                </tr>
+                <tr>
+                  <th scope="row">Sells or shares data for advertising</th>
+                  <td className="yes">No — no analytics providers, ad networks, or data brokers</td>
+                  <td className="partial">Amazon umbrella privacy policy applies; Ring-specific ad disclosures not detailed on Ring's own policy pages</td>
+                  <td className="yes">No ad personalization from video, audio, or home-sensor data; third-party sharing requires explicit user permission</td>
+                  <td className="no">Privacy policy explicitly states Wyze "sells" and "shares" personal information for advertising under state privacy laws</td>
+                </tr>
+                <tr>
+                  <th scope="row">Source code you can audit</th>
+                  <td className="yes">Yes — Command Center (AGPL-3.0) and CloudNode (GPL-3.0) are public on GitHub</td>
+                  <td className="no">Proprietary firmware and app; OSS attribution only</td>
+                  <td className="no">Proprietary firmware; some Nest dependencies public, not the device firmware or app</td>
+                  <td className="no">Proprietary firmware and app; community firmware exists unofficially for some older models</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Notes and citations</h3>
+          <ul className="security-bullets">
+            <li>
+              <strong>Ring's law-enforcement reversal:</strong> Ring ended the Neighbors Request-for-Assistance program in January 2024 (<a href="https://www.eff.org/deeplinks/2024/01/ring-announces-it-will-no-longer-facilitate-police-requests-footage-users" target="_blank" rel="noopener noreferrer">EFF, Jan 2024</a>). In 2025 it restored a warrantless-request pathway through the Axon-powered "Community Requests" feature (<a href="https://www.consumerreports.org/electronics/privacy/ring-community-requests-lets-police-ask-for-user-videos-a2437818485/" target="_blank" rel="noopener noreferrer">Consumer Reports, Sept 2025</a>; <a href="https://www.cnbc.com/2025/10/16/amazon-ring-cameras-surveillance-law-enforcement-crime-police-investigations.html" target="_blank" rel="noopener noreferrer">CNBC, Oct 2025</a>).
+            </li>
+            <li>
+              <strong>Ring cloud-recording cancellation:</strong> After cancelling a Ring Protect / Ring Home subscription, cloud recordings are deleted and unrecoverable; as of November 6, 2025, pro-rata refunds were ended (<a href="https://ring.com/support/articles/0p7eu/Cancel-Ring-Protect-Subscription-Plan" target="_blank" rel="noopener noreferrer">Ring support, 2025</a>).
+            </li>
+            <li>
+              <strong>Ring E2EE:</strong> Opt-in only; enabling it disables roughly twenty features including Shared User access, Event Timeline, Video Search, Person Detection, and Familiar Faces (<a href="https://ring.com/support/articles/7e3lk/using-video-end-to-end-encryption-e2ee" target="_blank" rel="noopener noreferrer">Ring support, 2025</a>).
+            </li>
+            <li>
+              <strong>Google Nest:</strong> Google commits that video, audio, and home-sensor data are kept separate from advertising and not used for ad personalization (<a href="https://safety.google/nest/" target="_blank" rel="noopener noreferrer">safety.google/nest</a>). Government requests are folded into Google's main Transparency Report since 2020 (<a href="https://transparencyreport.google.com/user-data/overview" target="_blank" rel="noopener noreferrer">transparencyreport.google.com</a>). No E2EE is offered.
+            </li>
+            <li>
+              <strong>Wyze data sale / share:</strong> Wyze's current Privacy Policy (April 2026) explicitly states Wyze "sells" and "shares" personal information under state privacy laws for advertising purposes, using cookies, SDKs, device identifiers, and web beacons (<a href="https://www.wyze.com/policies/privacy-policy" target="_blank" rel="noopener noreferrer">wyze.com privacy policy</a>). Biometric and facial data are excluded from that sharing.
+            </li>
+            <li>
+              <strong>Wyze encryption:</strong> AES-128 for streams and TLS in transit. Wyze holds the keys — this is not end-to-end encryption, despite how it is sometimes described in secondary reporting (<a href="https://forums.wyze.com/t/end-to-end-encryption-e2ee/81562" target="_blank" rel="noopener noreferrer">Wyze forum, E2EE request</a>).
+            </li>
+            <li>
+              <strong>SourceBox Sentry:</strong> Claims in the SourceBox column are implemented in our public source —{" "}
+              <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/src/storage/database.rs" target="_blank" rel="noopener noreferrer">encryption</a>,{" "}
+              <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/src/streaming/motion_detector.rs" target="_blank" rel="noopener noreferrer">motion detection</a>, and{" "}
+              <a href="https://github.com/SourceBox-LLC/OpenSentry-Command" target="_blank" rel="noopener noreferrer">Command Center</a>.
+            </li>
+          </ul>
+
+          <p className="security-disclaimer">
+            <strong>A note on the limits of this comparison.</strong>{" "}
+            Ring, Nest, and Wyze ship polished consumer hardware,
+            mature mobile apps, and professional monitoring integrations.
+            SourceBox Sentry does not — yet. We compete on <em>data posture</em>,
+            not on feature parity. If 24/7 continuous cloud DVR with mobile
+            motion-clip search is your top requirement, one of the incumbents
+            will serve you better today.
+          </p>
+        </section>
+
         {/* ── Your data, your control ────────────────────────────── */}
         <section className="security-section">
           <h2>Deleting your data</h2>

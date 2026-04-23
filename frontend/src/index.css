@@ -1515,6 +1515,77 @@ body {
     color: var(--text-secondary);
 }
 
+/* Comparison table — narrower cells so 5 columns fit without horizontal
+   scroll on desktop, with horizontal scroll falling back on mobile. */
+.security-compare {
+    overflow-x: auto;
+    margin: 1.25rem 0 1.5rem;
+}
+
+.security-compare table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    min-width: 720px;
+}
+
+.security-compare th,
+.security-compare td {
+    padding: 0.65rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    vertical-align: top;
+}
+
+.security-compare thead th {
+    color: var(--text-primary);
+    font-weight: 600;
+    border-bottom-color: rgba(255, 255, 255, 0.15);
+    position: sticky;
+    top: 0;
+    background: var(--bg-primary, #0b0c0f);
+}
+
+.security-compare tbody th {
+    color: var(--text-primary);
+    font-weight: 500;
+    width: 18%;
+    min-width: 140px;
+}
+
+.security-compare tbody td {
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+/* Subtle colour cues — green = posture we'd claim is user-favourable,
+   amber = mixed / qualified, red = user-unfavourable. Kept muted so the
+   table reads as factual rather than marketing-adversarial. */
+.security-compare td.yes {
+    border-left: 2px solid rgba(34, 197, 94, 0.55);
+    padding-left: 0.6rem;
+}
+
+.security-compare td.partial {
+    border-left: 2px solid rgba(245, 158, 11, 0.55);
+    padding-left: 0.6rem;
+}
+
+.security-compare td.no {
+    border-left: 2px solid rgba(239, 68, 68, 0.55);
+    padding-left: 0.6rem;
+}
+
+.security-disclaimer {
+    margin-top: 1.5rem;
+    padding: 0.85rem 1rem;
+    background: rgba(255, 255, 255, 0.04);
+    border-left: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
 /* Legal Pages */
 .legal-container {
     max-width: 800px;
