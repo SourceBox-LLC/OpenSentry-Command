@@ -343,6 +343,36 @@ async def push_segment(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
+    # Plan-cap enforcement. When the org is over its camera cap (downgrade
+    # or cancellation), `enforce_camera_cap` has marked the over-cap
+    # cameras as `disabled_by_plan`. Reject their uploads with HTTP 402
+    # (Payment Required) and a `plan_limit_hit` body so the CloudNode can
+    # surface the reason in its TUI instead of silently filling the log
+    # with non-retryable push failures.
+    if camera.disabled_by_plan:
+        from app.core.plans import (
+            get_plan_limits_for_org,
+            get_plan_display_name,
+        )
+        limits = get_plan_limits_for_org(db, node.org_id)
+        plan_name = get_plan_display_name(limits.get("_plan", "free_org"))
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": "Camera suspended by plan limit",
+                "plan_limit_hit": {
+                    "plan": plan_name,
+                    "max_cameras": limits["max_cameras"],
+                    "skipped": [camera.name],
+                    "detail": (
+                        f"Camera '{camera.name}' is over the "
+                        f"{plan_name} plan limit ({limits['max_cameras']} cameras). "
+                        f"Upgrade to resume streaming."
+                    ),
+                },
+            },
+        )
+
     if not _RE_SEGMENT_FILENAME.match(filename):
         raise HTTPException(status_code=400, detail="Invalid segment filename")
 

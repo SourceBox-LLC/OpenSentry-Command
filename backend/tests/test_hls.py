@@ -147,6 +147,83 @@ def test_push_segment_rejects_oversize(unauthenticated_client, db, monkeypatch):
     assert "too large" in resp.json()["detail"].lower()
 
 
+# ── Plan-cap enforcement ─────────────────────────────────────────────
+#
+# When an org downgrades (or cancels) and ends up over its camera cap,
+# `enforce_camera_cap` flips `Camera.disabled_by_plan = True` on the
+# over-cap rows. Push-segment must then reject their uploads with
+# HTTP 402 + a structured `plan_limit_hit` body so the CloudNode can
+# surface the reason in its TUI instead of silently retrying.
+
+
+def test_push_segment_rejects_disabled_by_plan_camera(
+    unauthenticated_client, db
+):
+    """A camera flagged ``disabled_by_plan`` must return HTTP 402 with a
+    ``plan_limit_hit`` body — not 200, not a silent drop."""
+    raw_key, cam_id = _seed_node_with_camera(db)
+
+    # Simulate the webhook / register path having flagged this camera.
+    cam = db.query(Camera).filter_by(camera_id=cam_id).one()
+    cam.disabled_by_plan = True
+    db.commit()
+
+    resp = unauthenticated_client.post(
+        f"/api/cameras/{cam_id}/push-segment?filename=segment_00001.ts",
+        content=b"\x47" + b"\x00" * 187,  # one TS packet
+        headers={"X-Node-API-Key": raw_key},
+    )
+    assert resp.status_code == 402, resp.text
+    body = resp.json()
+    # FastAPI nests HTTPException.detail under the `detail` key.
+    hit = body["detail"]["plan_limit_hit"]
+    assert "plan" in hit and "max_cameras" in hit
+    assert hit["skipped"] == ["HlsTestCam"]
+    assert "Upgrade" in hit["detail"]
+
+
+def test_push_segment_allows_enabled_camera_on_same_org(
+    unauthenticated_client, db
+):
+    """Defensive sanity: a sibling camera on the same node that is NOT
+    flagged still streams. Proves the gate is per-camera, not per-node
+    or per-org."""
+    raw_key, cam_enabled_id = _seed_node_with_camera(db)
+
+    # Add a second camera on the same node, flag only the second.
+    node = (
+        db.query(CameraNode)
+        .filter_by(api_key_hash=hashlib.sha256(raw_key.encode()).hexdigest())
+        .one()
+    )
+    blocked_id = "cam_hls_" + uuid.uuid4().hex[:8]
+    db.add(
+        Camera(
+            camera_id=blocked_id,
+            org_id=node.org_id,
+            node_id=node.id,
+            name="Blocked Cam",
+            status="online",
+            disabled_by_plan=True,
+        )
+    )
+    db.commit()
+
+    ok = unauthenticated_client.post(
+        f"/api/cameras/{cam_enabled_id}/push-segment?filename=segment_00001.ts",
+        content=b"\x47" + b"\x00" * 187,
+        headers={"X-Node-API-Key": raw_key},
+    )
+    assert ok.status_code == 200, ok.text
+
+    blocked = unauthenticated_client.post(
+        f"/api/cameras/{blocked_id}/push-segment?filename=segment_00001.ts",
+        content=b"\x47" + b"\x00" * 187,
+        headers={"X-Node-API-Key": raw_key},
+    )
+    assert blocked.status_code == 402, blocked.text
+
+
 # ── Cache eviction ───────────────────────────────────────────────────
 
 

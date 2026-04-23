@@ -128,6 +128,82 @@ def get_plan_display_name(plan: str) -> str:
     return names.get(plan, "Free")
 
 
+def enforce_camera_cap(db, org_id: str) -> dict:
+    """Enforce the org's current camera cap by flipping ``Camera.disabled_by_plan``.
+
+    Keeps the oldest ``max_cameras`` cameras (by ``created_at`` ascending — the
+    ones the org has had the longest) enabled, flags the rest as
+    ``disabled_by_plan=True``. On upgrade (cap raised above current count) all
+    flags are cleared. Idempotent: safe to call on every registration and
+    subscription webhook with no state change when nothing needs to flip.
+
+    Why oldest-first:
+      - Deterministic, no user input required.
+      - Preserves long-running cameras that almost certainly have history /
+        recordings the operator cares about.
+      - Newer cameras the operator just plugged in are easier to replace
+        (you remember setting them up this week) than a year-old camera.
+
+    The flag is consulted by ``POST /push-segment`` which rejects uploads
+    with HTTP 402 + ``plan_limit_hit`` body when set. Enforcement is *only*
+    at upload time — we don't delete rows, so on upgrade the disabled
+    cameras light back up immediately with all their metadata intact.
+
+    Returns a dict:
+      {
+          "plan": "free",                 # wire slug
+          "max_cameras": 2,
+          "disabled": ["cam_03", ...],    # camera_ids newly or still disabled
+          "enabled": ["cam_01", ...],     # camera_ids newly or still enabled
+          "changed": True,                # whether any row flipped
+      }
+
+    The caller commits.
+    """
+    from app.models.models import Camera  # local import — plans.py is
+    # depended on by many modules, keep the import graph flat.
+
+    plan_slug = resolve_org_plan(db, org_id)
+    limits = get_plan_limits(plan_slug)
+    cap = int(limits["max_cameras"])
+
+    # Ordered by created_at ASC; None last (shouldn't happen in practice
+    # since `created_at` has a default, but be defensive).
+    cameras = (
+        db.query(Camera)
+        .filter_by(org_id=org_id)
+        .order_by(Camera.created_at.asc().nulls_last(), Camera.id.asc())
+        .all()
+    )
+
+    keep_ids = {c.camera_id for c in cameras[:cap]}
+    disable_ids = [c.camera_id for c in cameras[cap:]]
+
+    changed = False
+    enabled: list[str] = []
+    disabled: list[str] = []
+    for cam in cameras:
+        should_disable = cam.camera_id not in keep_ids
+        if bool(cam.disabled_by_plan) != should_disable:
+            cam.disabled_by_plan = should_disable
+            changed = True
+        (disabled if should_disable else enabled).append(cam.camera_id)
+
+    if changed:
+        logger.info(
+            "enforce_camera_cap: org=%s plan=%s cap=%d enabled=%d disabled=%d",
+            org_id, plan_slug, cap, len(enabled), len(disabled),
+        )
+
+    return {
+        "plan": wire_plan_slug(plan_slug),
+        "max_cameras": cap,
+        "enabled": enabled,
+        "disabled": disable_ids,
+        "changed": changed,
+    }
+
+
 def wire_plan_slug(plan: str) -> str:
     """Canonical plan string for the CloudNode wire protocol.
 

@@ -42,6 +42,15 @@ class Camera(Base):
     audio_codec = Column(String(50), nullable=True)  # e.g., "mp4a.40.2"
     codec_detected_at = Column(DateTime, nullable=True)
 
+    # Set by `app.core.plans.enforce_camera_cap` when the owning org's plan
+    # cap would otherwise be exceeded. The oldest `max_cameras` cameras
+    # (by `created_at`) keep `disabled_by_plan = False`; the rest are
+    # flagged, and `POST /push-segment` rejects their uploads with
+    # HTTP 402 + `plan_limit_hit` so the CloudNode can surface the
+    # reason in its TUI. Flag is cleared on upgrade and on re-registration.
+    # Default False so fresh installs and unaffected rows behave normally.
+    disabled_by_plan = Column(Boolean, nullable=False, default=False, server_default="0")
+
     group = relationship("CameraGroup", back_populates="cameras")
     node = relationship("CameraNode", back_populates="cameras")
 
@@ -71,6 +80,10 @@ class Camera(Base):
             "status": eff,
             "last_error": err,
             "last_seen": self.last_seen.isoformat() if self.last_seen else None,
+            # `true` when plan enforcement has suspended this camera.
+            # Push-segment returns 402 while this is set; frontend shows a
+            # locked-by-plan badge and an upgrade CTA.
+            "disabled_by_plan": bool(self.disabled_by_plan),
         }
 
 

@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import (
+    enforce_camera_cap,
     get_plan_limits,
     get_plan_limits_for_org,
     get_plan_display_name,
@@ -292,6 +293,13 @@ async def register_node(
                 from app.api.hls import cleanup_camera_cache
                 cleanup_camera_cache(stale_cam.camera_id)
                 db.delete(stale_cam)
+
+        # Plan-cap safety net. Webhooks are the primary driver of
+        # `disabled_by_plan`, but orgs that missed a webhook event (delivery
+        # failure, handler shipped after the downgrade) would otherwise have
+        # stale flags forever. Re-evaluating on every register is cheap and
+        # idempotent — the helper is a no-op when state already matches.
+        enforce_camera_cap(db, org_id)
 
         db.commit()
         logger.info("Node %s re-registered successfully with %d cameras", data.node_id, len(camera_mapping))

@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.core.clerk import clerk
 from app.core.database import get_db
 from app.core.limiter import limiter
+from app.core.plans import enforce_camera_cap
 from app.models.models import Setting, CameraNode, Camera, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,16 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             set_org_member_limit(org_id, limit)
             # Persist plan in DB so API-key-authenticated endpoints can look it up
             Setting.set(db, org_id, "org_plan", plan_slug)
+            # Re-evaluate camera cap — a plan change (up or down) may flip
+            # rows in either direction. Flushing the Setting first ensures
+            # `resolve_org_plan` inside enforce_camera_cap reads the new value.
+            db.flush()
+            result = enforce_camera_cap(db, org_id)
+            if result["changed"]:
+                logger.info(
+                    "Org %s plan change: disabled=%d enabled=%d",
+                    org_id, len(result["disabled"]), len(result["enabled"]),
+                )
             logger.info("Org %s subscription active on plan '%s'", org_id, plan_slug)
 
     # ── Payment failure ─────────────────────────────────────────────
@@ -103,6 +114,16 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             set_org_member_limit(org_id, PLAN_MEMBER_LIMITS["free_org"])
             Setting.set(db, org_id, "org_plan", "free_org")
             Setting.set(db, org_id, "payment_past_due", "false")
+            # Suspend over-cap cameras now that the org is back on free tier.
+            # Rows are preserved (not deleted) so a re-subscribe immediately
+            # re-enables them without any reconfiguration.
+            db.flush()
+            result = enforce_camera_cap(db, org_id)
+            if result["changed"]:
+                logger.info(
+                    "Org %s cancellation: disabled %d over-cap camera(s)",
+                    org_id, len(result["disabled"]),
+                )
             logger.info("Org %s subscription canceled — reverted to free limits", org_id)
 
     # ── Free trial ending soon ──────────────────────────────────────
