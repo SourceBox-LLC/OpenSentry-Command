@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom"
 
-const LAST_UPDATED = "April 9, 2026"
+const LAST_UPDATED = "April 23, 2026"
 const CONTACT_EMAIL = "legal@sourcebox.dev"
 
 function TermsContent() {
@@ -329,6 +329,13 @@ function PrivacyContent() {
         "us," or "our") collects, uses, and protects your information when
         you use the SourceBox Sentry Command Center service ("Service").
       </p>
+      <p>
+        A plain-language, engineer-facing walkthrough of the same data flows
+        (with links to the exact files in our public source code that
+        implement each behavior) is available at{" "}
+        <Link to="/security">/security</Link>. This Policy is the legally
+        binding version; where a detail differs, the language here governs.
+      </p>
 
       <h2>1. Information We Collect</h2>
 
@@ -344,12 +351,30 @@ function PrivacyContent() {
       <p>
         Live video segments captured by your CloudNode cameras are pushed
         directly to the Command Center backend, where they are held in an
-        in-memory cache only long enough to be served to authorized viewers
-        in your organization. Recordings and snapshots stay on your local
-        CloudNode device. We do not access, analyze, view, or share your
-        video content except as strictly necessary to provide the Service
-        (e.g., serving HLS streams to authenticated users in your
-        organization).
+        in-memory cache (approximately the most recent 60 seconds per
+        camera) only long enough to be served to authorized viewers in
+        your organization. Live segments are not written to persistent
+        disk, object storage, or any long-term storage on our servers.
+      </p>
+      <p>
+        Recordings and snapshots (if you enable them) are stored on your
+        local CloudNode device in an encrypted SQLite database. Recording
+        and snapshot blobs are sealed with AES-256-GCM at rest using a key
+        derived from the host device's operating-system machine identifier,
+        and the Service never ingests or retains copies of these files.
+      </p>
+      <p>
+        Motion detection runs entirely on the CloudNode device using local
+        video analysis. No raw video frames, object-detection thumbnails,
+        or machine-learning embeddings are transmitted to the Service or
+        to any third-party machine-learning provider. Only motion event
+        metadata (camera identifier, timestamp, scene-change score) is
+        transmitted to the Service.
+      </p>
+      <p>
+        We do not access, analyze, view, or share your video content except
+        as strictly necessary to provide the Service (e.g., serving HLS
+        streams to authenticated users in your organization).
       </p>
 
       <h3>Usage and Log Data</h3>
@@ -391,12 +416,14 @@ function PrivacyContent() {
       <h2>3. Data Storage and Security</h2>
       <p>We implement the following security measures:</p>
       <ul>
-        <li>All API keys are stored as SHA-256 hashes; plaintext keys are never retained</li>
+        <li>Service-side API keys (CloudNode keys and MCP integration keys) are stored as SHA-256 hashes; plaintext keys are never retained after issuance</li>
         <li>Live video segments are kept in an isolated in-memory cache per organization and never written to a third-party object store</li>
-        <li>All connections use HTTPS with HSTS enforcement</li>
+        <li>On the CloudNode device, the cloud-facing API key, recording segment blobs, and snapshot image blobs are encrypted at rest with AES-256-GCM using a key derived from the host's operating-system machine identifier</li>
+        <li>All connections between your browser, CloudNode devices, and the Service use HTTPS with HSTS enforcement; there is no disable-TLS code path</li>
         <li>Authentication is handled by Clerk with industry-standard JWT verification</li>
-        <li>Organization data is isolated at the database level using org_id scoping</li>
-        <li>Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy) are applied to all responses</li>
+        <li>Organization data is isolated at the database level using org_id scoping on every query</li>
+        <li>Rate limits apply per tenant (CloudNode key, organization, or client IP) to mitigate abuse</li>
+        <li>Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Strict-Transport-Security) are applied to all responses</li>
       </ul>
       <p>
         While we take reasonable measures to protect your data, no method
@@ -407,29 +434,50 @@ function PrivacyContent() {
       <h2>4. Data Sharing</h2>
       <p>
         We do not sell, rent, or trade your personal information or video
-        data. We share information only with the following categories of
-        third parties, solely as necessary to provide the Service:
+        data. We do not use analytics providers, advertising networks,
+        retargeting services, or data brokers. We share information only
+        with the following categories of third parties, solely as necessary
+        to provide the Service:
       </p>
       <ul>
-        <li><strong>Authentication:</strong> Clerk (account management, session handling)</li>
-        <li><strong>Payment processing:</strong> Stripe via Clerk (subscription billing)</li>
-        <li><strong>Hosting:</strong> Fly.io (application hosting)</li>
-        <li><strong>Legal requirements:</strong> When required by law, regulation, subpoena, or legal process</li>
-        <li><strong>Safety:</strong> To protect the rights, property, or safety of our users or the public</li>
+        <li><strong>Authentication and billing:</strong> Clerk (account management, organization membership, subscription management, session handling)</li>
+        <li><strong>Payment processing:</strong> Stripe via Clerk (subscription billing and tax calculation). Payment card data is handled by Stripe and is never transmitted to or stored on our servers</li>
+        <li><strong>Hosting:</strong> Fly.io (application hosting for the Command Center). Live video segments held in application memory are never persisted to Fly.io's disk-backed volumes</li>
+        <li><strong>Error monitoring (optional):</strong> Sentry, only when the operator has configured the <code>SENTRY_DSN</code> environment variable. When enabled, Sentry receives application exception traces and a 10% sample of performance traces. Sentry does not receive video content, recording metadata, or end-user identifiers beyond what is present in exception stack traces. When <code>SENTRY_DSN</code> is unset, no data is sent to Sentry</li>
+        <li><strong>Legal requirements:</strong> When required by law, regulation, subpoena, or other legal process. See Section 5 for our posture on legal process</li>
+        <li><strong>Safety:</strong> To protect the rights, property, or safety of our users or the public, where disclosure is narrowly necessary</li>
       </ul>
       <p>
         Each third-party provider operates under their own privacy policy
         and data processing terms. We encourage you to review their policies.
       </p>
 
+      <h3>Law enforcement and legal process</h3>
+      <p>
+        We maintain no standing data-sharing arrangements with law
+        enforcement agencies and do not participate in programs that grant
+        warrantless access to customer accounts. When we receive a valid
+        legal request, we respond only to the scope it mandates.
+      </p>
+      <p>
+        The only video-related data that resides on our servers is the
+        ephemeral in-memory live cache described in Section 1; we do not
+        retain copies of your recordings or snapshots. Requests for such
+        recordings or snapshots must be directed to the controller of the
+        CloudNode device on which that footage is stored. Where not
+        prohibited by law, we will notify the affected organization
+        administrator of legal requests so the organization may contest
+        them directly.
+      </p>
+
       <h2>5. Data Retention</h2>
       <ul>
-        <li>Live video segments are held in memory only as long as needed for playback (typically the last ~15 segments per camera) and are evicted automatically</li>
-        <li>Recordings and snapshots are stored locally on your CloudNode device, not on our servers</li>
-        <li>Stream access logs, MCP activity logs, and audit logs are retained for 90 days, then automatically deleted</li>
+        <li>Live video segments are held in application memory only as long as needed for playback (approximately the most recent 60 one-second segments per camera) and are evicted automatically; segments are not persisted to disk on our servers</li>
+        <li>Recordings and snapshots are stored in encrypted form locally on your CloudNode device, not on our servers, and are subject to the retention and disk-quota settings you configure on that device</li>
+        <li>Stream access logs, MCP activity logs, motion event metadata, notification records, and audit logs are retained for 90 days, then automatically deleted by a scheduled cleanup task</li>
         <li>Account data is retained as long as your account is active</li>
-        <li>Upon account or organization deletion, all associated data is permanently deleted</li>
-        <li>You can delete all your data at any time using the Full Reset feature in Settings</li>
+        <li>Upon organization deletion, all associated nodes, cameras, camera groups, MCP keys, stream access logs, MCP activity logs, motion events, notifications, audit logs, and settings are permanently deleted in a single database transaction</li>
+        <li>You can delete all organization data at any time using the Full Reset feature in Settings, or by deleting your organization through Clerk</li>
       </ul>
 
       <h2>6. Your Rights</h2>
