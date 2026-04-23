@@ -409,8 +409,29 @@ HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are intentionally unlimited �
 
 `POST /api/webhooks/clerk` handles Clerk subscription events:
 - Verifies signature with Svix when `CLERK_WEBHOOK_SECRET` is set; accepts unsigned JSON otherwise (dev mode)
-- On `subscription.created` / `updated` with a paid plan → sets org member limit appropriately
-- On `subscription.deleted` / `cancelled` → resets to free tier
+- On `subscription.{created,updated,active}` — writes `Setting(org_plan)`, updates the Clerk org member limit, and runs `enforce_camera_cap` so a plan change (in either direction) flips the `Camera.disabled_by_plan` flags to match the new cap.
+- On `subscription.pastDue` / `subscriptionItem.pastDue` — writes `Setting(payment_past_due="true")` and a timestamped `payment_past_due_at`. No camera enforcement at this stage; see the grace-period note below.
+- On `paymentAttempt.updated` with `status="paid"` — clears both past-due settings and re-runs `enforce_camera_cap`, so cameras suspended during a grace-expired past-due window light back up.
+- On `subscriptionItem.{canceled,ended}` — reverts to `free_org`, resets member limit, and re-runs `enforce_camera_cap`. Camera rows are preserved (not deleted) so re-subscribe instantly restores streaming.
+- On `organization.deleted` — full wipe.
+
+## Plan Enforcement
+
+`app/core/plans.py` owns plan-cap policy. Two entry points:
+
+- `resolve_org_plan(db, org_id)` — nominal plan (what Clerk says the org pays for). Fast-path reads `Setting(org_plan)`; falls back to a throttled `clerk.organizations.get_billing_subscription` call for free/missing orgs. Used for the status-bar badge CloudNode shows the operator.
+- `effective_plan_for_caps(db, org_id)` — plan to use for *cap enforcement*. Returns `resolve_org_plan` unless the org has been `payment_past_due` for more than `PAYMENT_GRACE_DAYS` (7), in which case it returns `"free_org"`. Used inside `enforce_camera_cap`; keeps the two concerns separate so brief card failures don't punish paying users but long-unpaid accounts don't keep getting Pro service.
+
+`enforce_camera_cap(db, org_id)` — idempotent. Orders the org's cameras by `created_at ASC`, keeps the oldest N (N = effective plan's `max_cameras`), flags the rest as `disabled_by_plan=True`. Oldest-first is deterministic and preserves long-running cameras with history. On upgrade, flags clear in the same call.
+
+**Triggers** for `enforce_camera_cap`:
+1. Webhook: subscription lifecycle events (create/update/cancel/paid).
+2. Register (`POST /api/nodes/register`): safety net for any missed webhook. Idempotent so cost is just one indexed query in the steady state.
+3. Heartbeat (`POST /api/nodes/heartbeat`): gated on `payment_past_due=="true"`. Drives the time-based grace-expiration transition since no webhook fires for that clock tick.
+
+**Push-segment gate** (`POST /api/cameras/{id}/push-segment`): when `camera.disabled_by_plan` is set, returns **HTTP 402** with a structured `plan_limit_hit` body (plan display name, cap, camera name, upgrade copy). CloudNode treats 402 as non-retryable and surfaces the suspension in its TUI.
+
+**Heartbeat response** also carries `disabled_cameras: list[str]` scoped to the calling node, so CloudNode can skip the upload task entirely for suspended cameras (no 402 flood) and mark those rows `suspended (plan)` in its live dashboard.
 
 ## Background Loops
 

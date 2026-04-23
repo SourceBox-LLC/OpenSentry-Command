@@ -89,19 +89,41 @@ function TermsContent() {
 
       <h2>6. Subscription Plans and Payment</h2>
       <p>
-        The Service offers Free, Pro, and Business subscription tiers. Paid
-        plans are billed monthly through our payment processor. Upgrades
+        The Service offers Free, Pro, and Business subscription tiers with
+        per-tier limits on cameras, nodes, and features. Paid plans are billed
+        monthly through our payment processor (Stripe, via Clerk). Upgrades
         take effect immediately; downgrades take effect at the end of the
-        current billing period. You retain access to paid features until the
-        end of your billing cycle after cancellation.
+        current billing period.
       </p>
       <p>
-        If a payment fails, your account will enter a grace period during
-        which the charge will be retried. During this period, your ability
-        to create new resources (nodes, API keys) will be restricted. If
-        payment cannot be collected, your account may be downgraded to the
-        Free plan and resources exceeding Free plan limits may become
-        inaccessible.
+        <strong>Camera-cap enforcement on downgrade or cancellation.</strong>{" "}
+        If, after a downgrade, your organization has more cameras registered
+        than your new plan allows, we retain the oldest cameras (by creation
+        date) up to your new cap and mark the rest as <em>suspended</em>.
+        Suspended cameras stop streaming to the Command Center — the
+        CloudNode surfaces a <q>Suspended — Plan Limit</q> badge and an
+        upgrade prompt on each affected camera tile. The camera records
+        themselves are preserved, so upgrading back to a higher tier
+        immediately restores streaming with no reconfiguration.
+      </p>
+      <p>
+        <strong>Failed payments and the grace period.</strong> If a charge
+        fails, your account enters a <strong>7-day grace period</strong>{" "}
+        during which the charge is retried automatically. During grace you
+        retain full access to your paid plan, except that creation of new
+        MCP API keys is blocked. If the card is not recovered within 7 days
+        of the first failure, we apply Free-tier camera caps using the
+        oldest-first rule above until payment succeeds — at which point
+        suspended cameras resume streaming within one heartbeat cycle
+        (~30 seconds). Nothing is deleted during this process.
+      </p>
+      <p>
+        <strong>Re-subscription.</strong> Resuming a cancelled subscription
+        (or upgrading back from Free) re-enables all previously-suspended
+        cameras and nodes automatically. Local recordings, snapshots, and
+        camera metadata persist on your CloudNode device throughout this
+        cycle — we never delete your local data as part of billing
+        enforcement.
       </p>
 
       <h2>7. Acceptable Use</h2>

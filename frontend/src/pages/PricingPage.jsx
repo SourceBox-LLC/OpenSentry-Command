@@ -63,15 +63,19 @@ function PricingPage() {
         <div className="pricing-faq-grid">
           <div className="pricing-faq-item">
             <h3>Can I upgrade or downgrade anytime?</h3>
-            <p>Yes. Changes take effect immediately. If you downgrade, you keep access until the end of your billing period.</p>
+            <p>Yes. Upgrades take effect immediately. Downgrades apply at the end of the current billing period — we won't bill you again for the paid tier after that.</p>
           </div>
           <div className="pricing-faq-item">
-            <h3>What happens if I hit my camera limit?</h3>
-            <p>Your existing cameras keep working. New cameras from your node just won't be added until you upgrade or remove one.</p>
+            <h3>What happens to my extra cameras if I downgrade?</h3>
+            <p>We keep the oldest cameras (by creation date) up to your new plan's cap, and mark the rest as <em>suspended</em>. Suspended cameras stop streaming to the cloud but their settings are preserved — upgrading back restores streaming within 30 seconds with no reconfiguration.</p>
+          </div>
+          <div className="pricing-faq-item">
+            <h3>What if my payment fails?</h3>
+            <p>Your account enters a 7-day grace period during which the charge is retried automatically. Your cameras keep streaming throughout. After 7 days without a successful payment, cameras beyond the Free-tier limit are suspended. Updating your card resumes streaming immediately.</p>
           </div>
           <div className="pricing-faq-item">
             <h3>Is the CloudNode software free?</h3>
-            <p>Yes, always. CloudNode is open source and runs on your own hardware. You only pay for the Command Center cloud service.</p>
+            <p>Yes, always. CloudNode is open source (GPL-3) and runs on your own hardware. You only pay for the Command Center cloud service.</p>
           </div>
           <div className="pricing-faq-item">
             <h3>Do you offer annual billing?</h3>
