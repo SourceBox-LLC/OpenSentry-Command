@@ -2,7 +2,12 @@
 
 from datetime import datetime, timedelta, timezone
 
-from app.core.plans import enforce_camera_cap, wire_plan_slug
+from app.core.plans import (
+    PAYMENT_GRACE_DAYS,
+    effective_plan_for_caps,
+    enforce_camera_cap,
+    wire_plan_slug,
+)
 from app.models.models import Camera, CameraNode, Setting
 from tests.conftest import TestSession
 
@@ -194,5 +199,105 @@ def test_enforce_cap_treats_missing_plan_as_free():
         assert result["changed"] is True
         assert result["max_cameras"] == 2
         assert len(result["disabled"]) == 2
+    finally:
+        db.close()
+
+
+# ── Past-due grace period ──────────────────────────────────────────────
+
+
+def _set_past_due(db, org_id: str, days_ago: float):
+    """Flag an org as past-due with the timestamp set ``days_ago`` days in
+    the past (float for sub-day precision)."""
+    Setting.set(db, org_id, "payment_past_due", "true")
+    past_due_at = (
+        datetime.now(tz=timezone.utc) - timedelta(days=days_ago)
+    ).isoformat()
+    Setting.set(db, org_id, "payment_past_due_at", past_due_at)
+    db.flush()
+
+
+def test_effective_plan_within_grace_keeps_nominal():
+    """An org that just went past-due yesterday keeps its paid plan for
+    cap purposes — the banner + MCP block are enough deterrent for a
+    brief card failure. Tightening caps too aggressively would punish
+    people who are already trying to fix their payment info."""
+    db = TestSession()
+    try:
+        Setting.set(db, "org_grace_within", "org_plan", "pro")
+        _set_past_due(db, "org_grace_within", days_ago=1)
+        db.commit()
+        assert effective_plan_for_caps(db, "org_grace_within") == "pro"
+    finally:
+        db.close()
+
+
+def test_effective_plan_after_grace_rebases_to_free():
+    """After the grace window expires, the effective plan drops to
+    ``free_org`` so enforce_camera_cap tightens the caps. Matches the
+    cancellation path without needing a separate webhook trigger."""
+    db = TestSession()
+    try:
+        Setting.set(db, "org_grace_over", "org_plan", "pro")
+        _set_past_due(db, "org_grace_over", days_ago=PAYMENT_GRACE_DAYS + 1)
+        db.commit()
+        assert effective_plan_for_caps(db, "org_grace_over") == "free_org"
+    finally:
+        db.close()
+
+
+def test_effective_plan_not_past_due_returns_nominal():
+    """Happy path — no past-due flag, the nominal plan wins."""
+    db = TestSession()
+    try:
+        Setting.set(db, "org_happy", "org_plan", "pro")
+        db.commit()
+        assert effective_plan_for_caps(db, "org_happy") == "pro"
+    finally:
+        db.close()
+
+
+def test_effective_plan_past_due_without_timestamp_keeps_nominal():
+    """Defensive: an incomplete webhook that set the bool but not the
+    timestamp must NOT tighten caps — we can't tell how long it's been
+    past-due, and silently suspending cameras on a bad webhook payload
+    would be worse than letting the leak persist briefly. The banner
+    + MCP block still fire on the bool alone."""
+    db = TestSession()
+    try:
+        Setting.set(db, "org_pd_no_ts", "org_plan", "pro")
+        Setting.set(db, "org_pd_no_ts", "payment_past_due", "true")
+        # Deliberately no payment_past_due_at.
+        db.commit()
+        assert effective_plan_for_caps(db, "org_pd_no_ts") == "pro"
+    finally:
+        db.close()
+
+
+def test_enforce_cap_suspends_cameras_when_grace_expires():
+    """End-to-end: a Pro org with 5 cameras that went past-due 8 days
+    ago must get 3 cameras suspended — same as if they had cancelled."""
+    db = TestSession()
+    try:
+        cams = _seed_org_and_cameras(db, "org_grace_enforce", count=5, plan="pro")
+        _set_past_due(db, "org_grace_enforce", days_ago=PAYMENT_GRACE_DAYS + 0.5)
+        db.commit()
+
+        result = enforce_camera_cap(db, "org_grace_enforce")
+        db.commit()
+
+        assert result["changed"] is True
+        assert result["max_cameras"] == 2  # free tier cap
+        assert len(result["disabled"]) == 3
+
+        # Oldest 2 keep streaming, newest 3 get flagged.
+        db.expire_all()
+        rows = {
+            c.camera_id: c.disabled_by_plan
+            for c in db.query(Camera).filter_by(org_id="org_grace_enforce").all()
+        }
+        assert rows[cams[0].camera_id] is False
+        assert rows[cams[1].camera_id] is False
+        assert all(rows[c.camera_id] is True for c in cams[2:])
     finally:
         db.close()

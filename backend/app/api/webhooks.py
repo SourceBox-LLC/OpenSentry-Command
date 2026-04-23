@@ -99,8 +99,21 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
         org_id = data.get("payer", {}).get("organization_id")
         payment_status = data.get("status")
         if org_id and payment_status == "paid":
-            # Payment succeeded — clear past-due flag
+            # Payment succeeded — clear past-due flag and also the
+            # timestamp so a future past-due event starts a fresh grace
+            # window rather than counting from whenever the old one began.
             Setting.set(db, org_id, "payment_past_due", "false")
+            Setting.set(db, org_id, "payment_past_due_at", "")
+            # Re-run enforcement so any cameras that got suspended when
+            # the grace window expired come back online immediately.
+            # effective_plan_for_caps now returns the nominal plan again.
+            db.flush()
+            result = enforce_camera_cap(db, org_id)
+            if result["changed"]:
+                logger.info(
+                    "Org %s payment restored: re-enabled %d camera(s)",
+                    org_id, len(result["enabled"]),
+                )
             logger.info("Org %s payment succeeded — past-due cleared", org_id)
         elif org_id and payment_status == "failed":
             logger.warning("Org %s payment attempt failed", org_id)

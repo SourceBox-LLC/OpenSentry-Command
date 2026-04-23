@@ -427,6 +427,25 @@ async def node_heartbeat(
 
     db.commit()
 
+    # Past-due grace sweep. Webhooks cover plan-change events, but the
+    # *time-based* transition from "in grace" to "past grace" has no
+    # corresponding webhook — we have to check periodically. Heartbeats
+    # are a natural fit: ~30s per node and only runs the helper when the
+    # org is actually past-due, so the happy path pays zero cost. The
+    # helper is idempotent so once the flags stabilize, subsequent
+    # heartbeats are UPDATE-0-rows.
+    if Setting.get(db, node.org_id, "payment_past_due", "false") == "true":
+        from app.core.plans import enforce_camera_cap
+        try:
+            enforce_camera_cap(db, node.org_id)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.warning(
+                "Heartbeat past-due sweep failed for org %s", node.org_id,
+                exc_info=True,
+            )
+
     # Plan for the CloudNode status-bar badge. Read directly from the
     # Setting cache (populated by the Clerk webhook + register's full
     # resolve_org_plan call) rather than calling resolve_org_plan here —

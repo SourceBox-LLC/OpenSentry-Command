@@ -9,8 +9,19 @@ Plan slugs must match the keys defined in the Clerk Dashboard:
 
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
+
+# Grace window after a failed payment before we tighten the caps.  Matches
+# the industry norm (7 days) and lines up with Clerk's default Stripe dunning
+# schedule — by day 7 the card has been retried 3–4 times, so an org still
+# past-due at that point is unlikely to recover without action. The ToS /
+# pricing page both reference this number; if you change it, update those
+# too. The grace window is a *soft* cap — banners and API 402s on MCP fire
+# immediately; we only rebase cameras to the free tier when the grace
+# expires.
+PAYMENT_GRACE_DAYS = 7
 
 PLAN_LIMITS = {
     "free_org": {
@@ -128,6 +139,72 @@ def get_plan_display_name(plan: str) -> str:
     return names.get(plan, "Free")
 
 
+def effective_plan_for_caps(db, org_id: str) -> str:
+    """Return the plan slug to use for *cap enforcement*, accounting for
+    the past-due grace period.
+
+    Semantics:
+      - Nominal plan (what Clerk says the org pays for) comes from
+        `resolve_org_plan` — fast-path Setting read, falls back to Clerk.
+      - If the org is currently past-due AND `payment_past_due_at` is older
+        than ``PAYMENT_GRACE_DAYS``, return ``"free_org"`` so the enforcement
+        tightens camera caps as if the subscription had already been
+        cancelled. The row itself isn't touched — a successful payment
+        re-enables everything immediately by flipping `payment_past_due`
+        back to "false" and re-running `enforce_camera_cap`.
+
+    Only affects camera-cap enforcement.  ``require_active_billing`` still
+    gates MCP creation *immediately* on past-due (no grace) because issuing
+    fresh credentials to an org with a failing card is a different risk
+    than letting their existing cameras keep streaming for a week.
+
+    Use this everywhere that `enforce_camera_cap` is called.  Do NOT use
+    it for the TUI status-bar badge — operators want to see their *paid*
+    plan there, not a silent downgrade during a brief card failure.
+    """
+    from app.models.models import Setting
+
+    nominal = resolve_org_plan(db, org_id)
+
+    past_due = Setting.get(db, org_id, "payment_past_due", "false") == "true"
+    if not past_due:
+        return nominal
+
+    past_due_at = Setting.get(db, org_id, "payment_past_due_at", "")
+    if not past_due_at:
+        # Flag is set but no timestamp — conservative: assume grace hasn't
+        # expired yet, since we can't tell how long it's been past-due.
+        # Operator-visible banner still fires; MCP still blocked.
+        return nominal
+
+    # Timestamps from Clerk come in ISO 8601 (with or without a Z suffix).
+    # If we can't parse it, don't tighten — surfacing a bug loudly is
+    # better than silently suspending cameras on a parse error.
+    try:
+        dt = datetime.fromisoformat(past_due_at.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning(
+            "effective_plan_for_caps: unparseable payment_past_due_at %r for org %s — "
+            "keeping nominal plan",
+            past_due_at, org_id,
+        )
+        return nominal
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    age = datetime.now(tz=timezone.utc) - dt
+    if age > timedelta(days=PAYMENT_GRACE_DAYS):
+        logger.info(
+            "effective_plan_for_caps: org %s past-due for %s (> %d days) — "
+            "tightening caps to free tier",
+            org_id, age, PAYMENT_GRACE_DAYS,
+        )
+        return "free_org"
+
+    return nominal
+
+
 def enforce_camera_cap(db, org_id: str) -> dict:
     """Enforce the org's current camera cap by flipping ``Camera.disabled_by_plan``.
 
@@ -163,7 +240,10 @@ def enforce_camera_cap(db, org_id: str) -> dict:
     from app.models.models import Camera  # local import — plans.py is
     # depended on by many modules, keep the import graph flat.
 
-    plan_slug = resolve_org_plan(db, org_id)
+    # Use the *effective* plan — after PAYMENT_GRACE_DAYS past-due, this
+    # returns "free_org" even if the nominal plan is Pro/Business, so the
+    # cap tightens automatically without requiring a cancellation webhook.
+    plan_slug = effective_plan_for_caps(db, org_id)
     limits = get_plan_limits(plan_slug)
     cap = int(limits["max_cameras"])
 
