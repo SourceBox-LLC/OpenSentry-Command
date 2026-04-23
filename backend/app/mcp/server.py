@@ -117,9 +117,13 @@ def compute_allowed_tools(scope_mode: str | None, scope_tools: list[str] | None)
 
 # Plan-based rate limits (calls per minute per API key)
 # Keys must match Clerk plan slugs stored in the DB by the webhook handler.
+# ``business`` kept as a transitional alias for ``pro_plus`` so a user whose
+# JWT was minted before the Clerk-side rename still hits the paid rate limit
+# instead of being blocked as unrecognized.
 RATE_LIMITS = {
     "pro": 30,
-    "business": 120,
+    "pro_plus": 120,
+    "business": 120,  # transitional alias — remove after rollover
 }
 DEFAULT_RATE_LIMIT = 0  # Block unrecognized plans (MCP requires Pro+)
 
@@ -285,7 +289,7 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         limit = RATE_LIMITS.get(plan)
         if limit is None:
             db.close()
-            raise ToolError("MCP requires a Pro or Business plan. Upgrade at /pricing.")
+            raise ToolError("MCP requires a Pro or Pro Plus plan. Upgrade at /pricing.")
         allowed, remaining = _rate_limiter.check(key_hash, limit)
         if not allowed:
             db.close()

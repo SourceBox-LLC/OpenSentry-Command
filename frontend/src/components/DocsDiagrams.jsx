@@ -877,7 +877,7 @@ export function DashboardIaDiagram() {
       ariaLabel="Dashboard information architecture tree: Live, Settings, Admin, Incidents."
       viewBox="0 0 1000 460"
       aspectRatio="1000/460"
-      caption="The dashboard splits into four top-level sections. Admin-only branches are gated on the Pro / Business plan."
+      caption="The dashboard splits into four top-level sections. Admin-only branches are gated on the Pro / Pro Plus plan."
     >
       <Defs id={id} />
 

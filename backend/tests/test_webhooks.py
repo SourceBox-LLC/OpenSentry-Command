@@ -73,16 +73,16 @@ def test_subscription_created_sets_org_plan_to_pro(webhook_client, db):
     assert Setting.get(db, TEST_ORG_ID, "org_plan") == "pro"
 
 
-def test_subscription_updated_flips_plan_pro_to_business(webhook_client, db):
+def test_subscription_updated_flips_plan_pro_to_pro_plus(webhook_client, db):
     """Upgrade path: the new slug overwrites the cached one."""
     Setting.set(db, TEST_ORG_ID, "org_plan", "pro")
 
     resp = _signed_post(webhook_client, "subscription.updated", {
         "payer": {"organization_id": TEST_ORG_ID},
-        "items": [{"status": "active", "plan": {"slug": "business"}}],
+        "items": [{"status": "active", "plan": {"slug": "pro_plus"}}],
     })
     assert resp.status_code == 200
-    assert Setting.get(db, TEST_ORG_ID, "org_plan") == "business"
+    assert Setting.get(db, TEST_ORG_ID, "org_plan") == "pro_plus"
 
 
 def test_subscription_active_also_sets_plan(webhook_client, db):
@@ -111,7 +111,7 @@ def test_subscription_item_canceled_reverts_to_free_org(webhook_client, db):
 
 def test_subscription_item_ended_also_reverts(webhook_client, db):
     """`subscriptionItem.ended` should behave like canceled."""
-    Setting.set(db, TEST_ORG_ID, "org_plan", "business")
+    Setting.set(db, TEST_ORG_ID, "org_plan", "pro_plus")
 
     resp = _signed_post(webhook_client, "subscriptionItem.ended", {
         "payer": {"organization_id": TEST_ORG_ID},

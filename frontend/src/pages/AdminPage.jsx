@@ -203,7 +203,7 @@ function AdminPage() {
           <h2>Admin Dashboard</h2>
           <p>
             The Admin Dashboard with stream access logs and usage analytics
-            is available on the <strong>Pro</strong> and <strong>Business</strong> plans.
+            is available on the <strong>Pro</strong> and <strong>Pro Plus</strong> plans.
           </p>
           <div className="upgrade-actions">
             <Link to="/pricing" className="btn btn-primary">

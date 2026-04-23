@@ -626,7 +626,7 @@ function SettingsPage() {
                   Manage Plan
                 </Link>
               )}
-              {planInfo.plan === "business" && (
+              {(planInfo.plan === "pro_plus" || planInfo.plan === "business") && (
                 <Link to="/pricing" className="btn btn-secondary btn-small">
                   Manage Plan
                 </Link>
@@ -675,7 +675,7 @@ function SettingsPage() {
         {planInfo && !planInfo.features?.includes("admin") ? (
           <div className="danger-locked">
             <div className="locked-icon">🔒</div>
-            <p>Danger zone actions require a <strong>Pro</strong> or <strong>Business</strong> plan.</p>
+            <p>Danger zone actions require a <strong>Pro</strong> or <strong>Pro Plus</strong> plan.</p>
             <button
               className="btn btn-primary btn-small"
               onClick={() => setUpgradeFeature("danger-zone")}

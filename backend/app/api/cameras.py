@@ -539,7 +539,7 @@ async def wipe_stream_logs(
     if "admin" not in user.features:
         raise HTTPException(
             status_code=403,
-            detail="Danger zone requires a Pro or Business plan.",
+            detail="Danger zone requires a Pro or Pro Plus plan.",
         )
     from app.models import StreamAccessLog
 
@@ -577,7 +577,7 @@ async def full_reset(
     if "admin" not in user.features:
         raise HTTPException(
             status_code=403,
-            detail="Danger zone requires a Pro or Business plan.",
+            detail="Danger zone requires a Pro or Pro Plus plan.",
         )
     from app.models import StreamAccessLog, CameraNode
     from app.api.hls import cleanup_camera_cache

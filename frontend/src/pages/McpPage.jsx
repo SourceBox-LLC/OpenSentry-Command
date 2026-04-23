@@ -442,7 +442,7 @@ function McpPage() {
             <button className="mcp-upgrade-btn" onClick={() => setShowUpgrade(true)}>
               Unlock MCP Integration
             </button>
-            <span className="mcp-upgrade-hint">Available on Pro and Business plans</span>
+            <span className="mcp-upgrade-hint">Available on Pro and Pro Plus plans</span>
           </div>
           <div className="mcp-locked-tools">
             <h3><span>{TOOLS.length}</span> tools included with Pro</h3>

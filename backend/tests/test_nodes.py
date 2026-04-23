@@ -492,10 +492,10 @@ def test_heartbeat_plan_updates_when_setting_changes(admin_client):
 
     node_id, api_key, _ = _create_and_register(admin_client)
 
-    # Simulate the Clerk webhook promoting this org to Business.
+    # Simulate the Clerk webhook promoting this org to Pro Plus.
     session = TestSession()
     try:
-        Setting.set(session, "org_test123", "org_plan", "business")
+        Setting.set(session, "org_test123", "org_plan", "pro_plus")
         session.commit()
     finally:
         session.close()
@@ -506,7 +506,7 @@ def test_heartbeat_plan_updates_when_setting_changes(admin_client):
         json={"node_id": node_id},
     )
     assert hb.status_code == 200
-    assert hb.json().get("plan") == "business"
+    assert hb.json().get("plan") == "pro_plus"
 
 
 def test_heartbeat_reports_disabled_cameras(admin_client):

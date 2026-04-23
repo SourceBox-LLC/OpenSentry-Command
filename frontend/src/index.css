@@ -1305,7 +1305,7 @@ body {
     text-shadow: 0 0 8px rgba(129, 140, 248, 0.4);
 }
 
-.nav-plan-business {
+.nav-plan-pro-plus {
     background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(236, 72, 153, 0.25));
     color: #c084fc;
     border: 1px solid rgba(192, 132, 252, 0.3);
@@ -1333,7 +1333,7 @@ body {
     border-color: rgba(129, 140, 248, 0.2);
 }
 
-.pro-status-business {
+.pro-status-pro-plus {
     background: linear-gradient(135deg, rgba(168, 85, 247, 0.06), rgba(236, 72, 153, 0.06));
     border-color: rgba(192, 132, 252, 0.2);
 }
@@ -1355,7 +1355,7 @@ body {
     text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
-.pro-status-business .pro-status-badge {
+.pro-status-pro-plus .pro-status-badge {
     background: linear-gradient(135deg, #c084fc, #a855f7);
 }
 
@@ -1678,7 +1678,7 @@ body {
     border: 1px solid rgba(129, 140, 248, 0.3);
 }
 
-.plan-badge-business {
+.plan-badge-pro-plus {
     background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.15));
     color: #c084fc;
     border: 1px solid rgba(192, 132, 252, 0.3);
@@ -2207,7 +2207,7 @@ body {
     box-shadow: 0 0 20px rgba(129, 140, 248, 0.06);
 }
 
-.plan-card:has(.plan-badge-business) {
+.plan-card:has(.plan-badge-pro-plus) {
     border-color: rgba(192, 132, 252, 0.25);
     box-shadow: 0 0 20px rgba(192, 132, 252, 0.06);
 }
@@ -2250,7 +2250,7 @@ body {
     color: #60a5fa;
 }
 
-.plan-badge-business {
+.plan-badge-pro-plus {
     background: rgba(168, 85, 247, 0.15);
     color: #c084fc;
 }

@@ -22,7 +22,7 @@ def test_wire_plan_slug_strips_org_suffix():
 def test_wire_plan_slug_passes_through_clean_slugs():
     """Paid plan slugs have no suffix and must pass through untouched."""
     assert wire_plan_slug("pro") == "pro"
-    assert wire_plan_slug("business") == "business"
+    assert wire_plan_slug("pro_plus") == "pro_plus"
 
 
 def test_wire_plan_slug_lowercases_and_trims():

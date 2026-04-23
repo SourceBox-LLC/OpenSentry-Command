@@ -89,7 +89,7 @@ function TermsContent() {
 
       <h2>6. Subscription Plans and Payment</h2>
       <p>
-        The Service offers Free, Pro, and Business subscription tiers with
+        The Service offers Free, Pro, and Pro Plus subscription tiers with
         per-tier limits on cameras, nodes, and features. Paid plans are billed
         monthly through our payment processor (Stripe, via Clerk). Upgrades
         take effect immediately; downgrades take effect at the end of the

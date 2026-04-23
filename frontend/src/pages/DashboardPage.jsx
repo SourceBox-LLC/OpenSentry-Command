@@ -196,10 +196,16 @@ function DashboardPage() {
         )
       })()}
 
-      {planInfo && planInfo.features?.includes("admin") && (
-        <div className={`pro-status-bar pro-status-${planInfo.plan}`}>
+      {planInfo && planInfo.features?.includes("admin") && (() => {
+        // Pro Plus accepts both the new "pro_plus" slug and the transitional
+        // "business" alias. Map both to the same CSS class so the badge
+        // styling is consistent regardless of which slug the JWT carries.
+        const isProPlus = planInfo.plan === "pro_plus" || planInfo.plan === "business"
+        const planClass = isProPlus ? "pro-plus" : "pro"
+        return (
+        <div className={`pro-status-bar pro-status-${planClass}`}>
           <div className="pro-status-left">
-            <span className="pro-status-badge">{planInfo.plan === "business" ? "BUSINESS" : "PRO"}</span>
+            <span className="pro-status-badge">{isProPlus ? "PRO PLUS" : "PRO"}</span>
             <span className="pro-status-text">
               {planInfo.usage.cameras} / {planInfo.limits.max_cameras >= 999 ? "\u221E" : planInfo.limits.max_cameras} cameras
               {" \u00B7 "}
@@ -210,7 +216,8 @@ function DashboardPage() {
           </div>
           <Link to="/settings" className="pro-status-link">Manage Plan</Link>
         </div>
-      )}
+        )
+      })()}
 
       <div className="stats-grid">
         <div className="stat-card">

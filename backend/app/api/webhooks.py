@@ -15,17 +15,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
 # Member limits per plan — must match Clerk Dashboard plan keys.
+# ``business`` kept as a transitional alias for ``pro_plus`` so a webhook
+# delivered mid-rename (with the old slug) still applies the correct seat cap.
 PLAN_MEMBER_LIMITS = {
     "free_org": 2,
     "pro": 10,
-    "business": 20,
+    "pro_plus": 20,
+    "business": 20,  # transitional alias — remove after rollover
 }
 
 # Paid plan slugs. Seeing a subscription.updated with one of these means the
 # payment card is active (Clerk wouldn't mark the subscription live otherwise),
 # so we can clear any past-due flag we were holding. Kept local to this module
 # rather than imported from plans.py to keep webhook semantics self-contained.
-PAID_PLAN_SLUGS_WEBHOOK = frozenset({"pro", "business"})
+# ``business`` kept as a transitional alias — see PLAN_MEMBER_LIMITS comment.
+PAID_PLAN_SLUGS_WEBHOOK = frozenset({"pro", "pro_plus", "business"})
 
 
 def set_org_member_limit(org_id: str, limit: int):

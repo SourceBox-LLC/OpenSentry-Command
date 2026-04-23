@@ -190,8 +190,8 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 | GET | `/api/settings` | User | All settings |
 | GET | `/api/settings/recording` | User | Recording settings |
 | POST | `/api/settings/recording` | Admin | Update recording settings |
-| POST | `/api/settings/danger/wipe-logs` | Admin | Permanently delete all stream + MCP + audit logs (Pro/Business only) |
-| POST | `/api/settings/danger/full-reset` | Admin | Wipe all nodes, cameras, logs, and settings for the org (Pro/Business only) |
+| POST | `/api/settings/danger/wipe-logs` | Admin | Permanently delete all stream + MCP + audit logs (Pro/Pro Plus only) |
+| POST | `/api/settings/danger/full-reset` | Admin | Wipe all nodes, cameras, logs, and settings for the org (Pro/Pro Plus only) |
 
 ### Audit
 
@@ -234,7 +234,7 @@ Agents author incidents via the MCP write tools below; admins review them from t
 
 ### MCP (for AI clients)
 
-Streamable HTTP MCP server exposing **22 tools** (16 read + 6 write). Requires a Pro or Business plan + an API key generated from the dashboard. Each key has a scope (`all` / `readonly` / `custom`) enforced server-side by a middleware layer — agents never see or can invoke tools the key isn't scoped for.
+Streamable HTTP MCP server exposing **22 tools** (16 read + 6 write). Requires a Pro or Pro Plus plan + an API key generated from the dashboard. Each key has a scope (`all` / `readonly` / `custom`) enforced server-side by a middleware layer — agents never see or can invoke tools the key isn't scoped for.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -441,7 +441,7 @@ You're at the plan's node limit. `GET /api/nodes/plan` returns `{ nodes_used, no
 
 ### MCP tools don't show up in my agent
 
-- Make sure the agent is on Pro or Business — MCP access is plan-gated at the organization layer (see `app.core.auth` / `get_mcp_plan_info`).
+- Make sure the agent is on Pro or Pro Plus — MCP access is plan-gated at the organization layer (see `app.core.auth` / `get_mcp_plan_info`).
 - The installer scripts only patch configs for clients that already exist on the machine. If you installed Cursor *after* running `mcp-setup.sh`, re-run the installer.
 - `GET /api/mcp/activity/stream` is the fastest way to confirm the agent is hitting your backend at all — if you see calls but `403`s, the key's `scope_mode` doesn't cover the tool the agent invoked.
 

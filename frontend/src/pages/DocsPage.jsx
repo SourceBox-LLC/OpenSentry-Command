@@ -664,11 +664,11 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
               <li><strong>Recording Settings</strong> — Toggle continuous 24/7 or scheduled recording and define the time window. See the <a href="#recording">Recording</a> section below.</li>
               <li><strong>Organization</strong> — Invite members, manage roles (Admin vs Member), view resource usage relative to plan caps.</li>
               <li><strong>Subscription</strong> — Current plan, usage bars for cameras and nodes, and an upgrade/downgrade flow.</li>
-              <li><strong>Danger Zone</strong> — Wipe stream logs or perform a full organization reset. Pro/Business only and each action requires a typed confirmation.</li>
+              <li><strong>Danger Zone</strong> — Wipe stream logs or perform a full organization reset. Pro/Pro Plus only and each action requires a typed confirmation.</li>
             </ul>
 
             <h3>Admin dashboard</h3>
-            <p>Pro and Business plans unlock a separate Admin dashboard for auditing and analytics:</p>
+            <p>Pro and Pro Plus plans unlock a separate Admin dashboard for auditing and analytics:</p>
             <ul>
               <li><strong>Stream Access Logs</strong> — Who watched which camera, from which IP, at what time. One row per user × camera × ~5-minute window.</li>
               <li><strong>Usage Statistics</strong> — Views by camera, by user, and by day. Useful to see which feeds matter and which are dormant.</li>
@@ -700,7 +700,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
                 losing context.</li>
             </ul>
             <p className="docs-subtle">
-              Requires MCP access (Pro or Business) and an MCP API key. See
+              Requires MCP access (Pro or Pro Plus) and an MCP API key. See
               the <a href="#mcp">MCP Integration</a> section for setup.
             </p>
           </section>
@@ -834,7 +834,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
             <div className="docs-callout docs-callout-info">
               <p>
                 <span className="docs-callout-icon">✨</span>
-                <span>MCP integration requires a <strong>Pro</strong> or <strong>Business</strong> plan.</span>
+                <span>MCP integration requires a <strong>Pro</strong> or <strong>Pro Plus</strong> plan.</span>
               </p>
             </div>
             <p>
@@ -1081,7 +1081,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
                     <th>Feature</th>
                     <th>Free</th>
                     <th>Pro</th>
-                    <th>Business</th>
+                    <th>Pro Plus</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1105,8 +1105,8 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
             <ul>
               <li><strong>Camera limits</strong> — When a node registers and you're at your camera cap, additional cameras are skipped.</li>
               <li><strong>Node limits</strong> — Creating a node beyond your limit shows an upgrade prompt.</li>
-              <li><strong>Feature gates</strong> — Admin dashboard, danger zone, and MCP require Pro or Business.</li>
-              <li><strong>MCP rate limits</strong> — Tool calls are rate limited per API key: 30/min on Pro, 120/min on Business. Exceeding the limit returns an error until the window resets.</li>
+              <li><strong>Feature gates</strong> — Admin dashboard, danger zone, and MCP require Pro or Pro Plus.</li>
+              <li><strong>MCP rate limits</strong> — Tool calls are rate limited per API key: 30/min on Pro, 120/min on Pro Plus. Exceeding the limit returns an error until the window resets.</li>
             </ul>
 
             <p>Manage your subscription from <strong>Settings &gt; Subscription</strong> or the <Link to="/pricing">Pricing</Link> page.</p>
@@ -1266,13 +1266,13 @@ brew install ffmpeg            # macOS`}</code>
             <ul>
               <li>Double-check the <code>Authorization: Bearer osc_...</code> header — keys start with the <code>osc_</code> prefix</li>
               <li>Confirm the key is still active in <Link to="/mcp">MCP Control Center</Link></li>
-              <li>Your plan must be Pro or Business — Free accounts cannot use MCP</li>
+              <li>Your plan must be Pro or Pro Plus — Free accounts cannot use MCP</li>
               <li>If you rotated the key, update the AI client config to match</li>
             </ul>
 
             <h3>MCP tool calls return 429</h3>
             <p>
-              You've hit the rate limit (30 calls/min on Pro, 120 calls/min on Business). Wait
+              You've hit the rate limit (30 calls/min on Pro, 120 calls/min on Pro Plus). Wait
               a minute and retry, or upgrade. Rate limits are per API key — splitting an agent
               across multiple keys distributes the budget.
             </p>
@@ -1384,7 +1384,7 @@ brew install ffmpeg            # macOS`}</code>
 
             <h3>Do you offer an SLA?</h3>
             <p>
-              Not on Free or Pro. Business plan customers get best-effort priority support.
+              Not on Free or Pro. Pro Plus plan customers get best-effort priority support.
               For enterprise agreements with an SLA, email us via the GitHub org page.
             </p>
 
@@ -1440,7 +1440,7 @@ brew install ffmpeg            # macOS`}</code>
               <li><strong>401</strong> — missing or invalid auth header</li>
               <li><strong>403</strong> — authenticated but not authorized (wrong org, insufficient role, plan gate)</li>
               <li><strong>404</strong> — resource not found in the caller's org</li>
-              <li><strong>429</strong> — rate-limit exceeded. Applies to both REST routes (per-route limits, see <a href="#api-rate-limits">API Rate Limits</a>) and MCP tool calls (per-key budget on Pro/Business). The response body includes an <code>error: "rate_limit_exceeded"</code> field, the matched <code>limit</code>, and a <code>retry_after_seconds</code> hint; clients should honour the <code>Retry-After</code> header.</li>
+              <li><strong>429</strong> — rate-limit exceeded. Applies to both REST routes (per-route limits, see <a href="#api-rate-limits">API Rate Limits</a>) and MCP tool calls (per-key budget on Pro/Pro Plus). The response body includes an <code>error: "rate_limit_exceeded"</code> field, the matched <code>limit</code>, and a <code>retry_after_seconds</code> hint; clients should honour the <code>Retry-After</code> header.</li>
               <li><strong>5xx</strong> — server error; <code>request_id</code> in the body is what to include in bug reports</li>
             </ul>
 
@@ -1604,7 +1604,7 @@ brew install ffmpeg            # macOS`}</code>
                 <tbody>
                   <tr><td>Free</td><td>— (MCP not available)</td></tr>
                   <tr><td>Pro</td><td>30</td></tr>
-                  <tr><td>Business</td><td>120</td></tr>
+                  <tr><td>Pro Plus</td><td>120</td></tr>
                 </tbody>
               </table>
             </div>

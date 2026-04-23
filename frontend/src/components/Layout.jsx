@@ -13,7 +13,11 @@ function Layout() {
   const planFeatures = planInfo?.features || []
   const planName = planInfo?.plan || null
   const hasAdminFeature = planFeatures.includes("admin")
-  const isPro = planName === "pro" || planName === "business"
+  // ``business`` is the pre-rename Clerk slug, still valid as a transitional
+  // alias in the backend — accept it here so users with a stale JWT still see
+  // their paid badge while the token refreshes.
+  const isProPlus = planName === "pro_plus" || planName === "business"
+  const isPro = planName === "pro" || isProPlus
 
   const isActive = (path) => location.pathname === path ? "nav-link active" : "nav-link"
 
@@ -42,8 +46,8 @@ function Layout() {
                       createOrganizationMode="modal"
                     />
                     {isPro && (
-                      <span className={`nav-plan-badge nav-plan-${planName}`}>
-                        {planName === "business" ? "BIZ" : "PRO"}
+                      <span className={`nav-plan-badge nav-plan-${isProPlus ? "pro-plus" : planName}`}>
+                        {isProPlus ? "PLUS" : "PRO"}
                       </span>
                     )}
                   </div>

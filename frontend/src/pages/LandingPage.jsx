@@ -504,7 +504,7 @@ function LandingPage() {
               <div className="landing-mcp-badge">Model Context Protocol</div>
               <h3>Control cameras with natural language</h3>
               <p>
-                Pro and Business users can generate an MCP API key and connect any
+                Pro and Pro Plus users can generate an MCP API key and connect any
                 compatible AI tool — Claude Code, Cursor, or custom agents — directly
                 to their organization's cameras, nodes, and system data.
               </p>

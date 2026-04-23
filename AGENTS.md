@@ -252,8 +252,8 @@ Validation constants (also in `models.py`):
 - `GET /settings/recording` — recording settings (view)
 - `POST /settings/recording` — update recording settings (admin)
 - `GET /audit-logs` — audit logs (admin)
-- `POST /settings/danger/wipe-logs` — permanently delete all stream + MCP + audit logs (admin + Pro/Business)
-- `POST /settings/danger/full-reset` — wipe all nodes/cameras/logs/settings for the org (admin + Pro/Business)
+- `POST /settings/danger/wipe-logs` — permanently delete all stream + MCP + audit logs (admin + Pro/Pro Plus)
+- `POST /settings/danger/full-reset` — wipe all nodes/cameras/logs/settings for the org (admin + Pro/Pro Plus)
 
 **nodes.py** (prefix `/api/nodes`):
 - `POST /validate` — validate node_id + API key pair, used by CloudNode setup wizard (10/min)

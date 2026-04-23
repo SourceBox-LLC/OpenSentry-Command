@@ -34,20 +34,28 @@ const UPGRADE_MESSAGES = {
 }
 
 const PLAN_COMPARISON = [
-  { label: "Cameras", free: "2", pro: "10", business: "50" },
-  { label: "Nodes", free: "1", pro: "5", business: "Unlimited" },
-  { label: "Admin Dashboard", free: false, pro: true, business: true },
-  { label: "Stream Analytics", free: false, pro: true, business: true },
-  { label: "Danger Zone Tools", free: false, pro: true, business: true },
-  { label: "MCP Integration", free: false, pro: true, business: true },
-  { label: "Priority Support", free: false, pro: false, business: true },
+  { label: "Cameras", free: "2", pro: "10", proPlus: "50" },
+  { label: "Nodes", free: "1", pro: "5", proPlus: "Unlimited" },
+  { label: "Admin Dashboard", free: false, pro: true, proPlus: true },
+  { label: "Stream Analytics", free: false, pro: true, proPlus: true },
+  { label: "Danger Zone Tools", free: false, pro: true, proPlus: true },
+  { label: "MCP Integration", free: false, pro: true, proPlus: true },
+  { label: "Priority Support", free: false, pro: false, proPlus: true },
 ]
+
+// ``business`` is the pre-rename Clerk slug kept as a transitional alias in
+// the backend — treat it as Pro Plus in the UI so a user with a stale JWT
+// sees the right tier while their token refreshes.
+const isProPlus = (slug) => slug === "pro_plus" || slug === "business"
 
 function UpgradeModal({ isOpen, onClose, feature, currentPlan }) {
   if (!isOpen) return null
 
   const msg = UPGRADE_MESSAGES[feature] || UPGRADE_MESSAGES.nodes
-  const planName = currentPlan === "free_org" ? "Free" : currentPlan === "pro" ? "Pro" : "Business"
+  const planName =
+    currentPlan === "free_org" ? "Free" :
+    currentPlan === "pro" ? "Pro" :
+    isProPlus(currentPlan) ? "Pro Plus" : "Free"
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -74,7 +82,7 @@ function UpgradeModal({ isOpen, onClose, feature, currentPlan }) {
                   <th></th>
                   <th className={currentPlan === "free_org" ? "current-col" : ""}>Free</th>
                   <th className={currentPlan === "pro" ? "current-col" : "highlight-col"}>Pro</th>
-                  <th className={currentPlan === "business" ? "current-col" : ""}>Business</th>
+                  <th className={isProPlus(currentPlan) ? "current-col" : ""}>Pro Plus</th>
                 </tr>
               </thead>
               <tbody>
@@ -87,8 +95,8 @@ function UpgradeModal({ isOpen, onClose, feature, currentPlan }) {
                     <td className={currentPlan === "pro" ? "current-col" : "highlight-col"}>
                       {typeof row.pro === "boolean" ? (row.pro ? "✓" : "—") : row.pro}
                     </td>
-                    <td className={currentPlan === "business" ? "current-col" : ""}>
-                      {typeof row.business === "boolean" ? (row.business ? "✓" : "—") : row.business}
+                    <td className={isProPlus(currentPlan) ? "current-col" : ""}>
+                      {typeof row.proPlus === "boolean" ? (row.proPlus ? "✓" : "—") : row.proPlus}
                     </td>
                   </tr>
                 ))}
