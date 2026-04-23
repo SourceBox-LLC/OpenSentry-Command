@@ -1969,3 +1969,205 @@
     gap: 2rem;
   }
 }
+
+/* ── Privacy section ──────────────────────────────────────────────
+   Placed between the features grid and the architecture section.
+   Distinct gradient so it visually breaks the alternating rhythm —
+   this is the "read this one" section. */
+.landing-section-privacy {
+  padding: 6rem 0;
+  background:
+    radial-gradient(1200px 400px at 10% 10%, rgba(59, 130, 246, 0.10), transparent 60%),
+    radial-gradient(900px 400px at 90% 90%, rgba(34, 197, 94, 0.08), transparent 60%),
+    var(--bg-primary, #0b0c0f);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.landing-privacy-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 3.5rem;
+  align-items: center;
+}
+
+.landing-privacy-eyebrow {
+  display: inline-block;
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-green, #22c55e);
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.landing-privacy-title {
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+}
+
+.landing-privacy-lede {
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.landing-privacy-points {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+}
+
+.landing-privacy-points li {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.landing-privacy-points li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--accent-green, #22c55e);
+  font-weight: 700;
+}
+
+.landing-privacy-points li strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.landing-privacy-ctas {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.landing-privacy-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1.35rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.landing-privacy-cta.primary {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #000;
+}
+
+.landing-privacy-cta.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(34, 197, 94, 0.3);
+}
+
+.landing-privacy-cta.secondary {
+  background: transparent;
+  border: 1px solid var(--border-light, rgba(255, 255, 255, 0.15));
+  color: var(--text-primary);
+}
+
+.landing-privacy-cta.secondary:hover {
+  background: var(--bg-card, rgba(255, 255, 255, 0.04));
+  border-color: var(--accent-green, #22c55e);
+}
+
+/* Side-by-side comparison cards — us green-tinted, them muted red —
+   so the visual differentiator is obvious at a glance without any copy. */
+.landing-privacy-visual {
+  display: flex;
+  justify-content: center;
+}
+
+.landing-privacy-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 520px;
+}
+
+.landing-privacy-card {
+  background: var(--bg-card, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 1.25rem 1rem;
+}
+
+.landing-privacy-card.us {
+  border-color: rgba(34, 197, 94, 0.4);
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0.02));
+}
+
+.landing-privacy-card.them {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.05), rgba(239, 68, 68, 0.01));
+}
+
+.landing-privacy-card-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.landing-privacy-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.landing-privacy-card li {
+  padding: 0.4rem 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  line-height: 1.4;
+}
+
+.landing-privacy-card .chk {
+  flex-shrink: 0;
+  width: 1.1rem;
+  font-weight: 700;
+}
+
+.landing-privacy-card .chk.yes {
+  color: var(--accent-green, #22c55e);
+}
+
+.landing-privacy-card .chk.no {
+  color: #ef4444;
+}
+
+@media (max-width: 900px) {
+  .landing-privacy-grid {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .landing-privacy-compare {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .landing-privacy-compare {
+    grid-template-columns: 1fr;
+  }
+}

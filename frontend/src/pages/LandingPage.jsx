@@ -101,10 +101,11 @@ function LandingPage() {
             </div>
             <div className="landing-feature-card">
               <div className="landing-feature-icon">🔒</div>
-              <h3>Fully Encrypted</h3>
+              <h3>Encrypted End to End to Disk</h3>
               <p>
-                HTTPS web UI with Clerk multi-tenant authentication. HLS segments are
-                served same-origin behind your JWT — no third-party storage in the live video path.
+                HTTPS from camera to browser. Recordings on the CloudNode are sealed at
+                rest with AES-256-GCM using a machine-id-derived key — a stolen drive
+                is unreadable elsewhere.
               </p>
             </div>
             <div className="landing-feature-card">
@@ -147,6 +148,66 @@ function LandingPage() {
                 Model Context Protocol. See what cameras see and control everything through natural language.
               </p>
               <span className="landing-feature-badge">PRO</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Privacy-first — positioned after the features grid so a scanning
+          visitor sees it right after "why us". Breaks the alt/non-alt rhythm
+          on purpose; the colour treatment signals "read this one". */}
+      <section id="privacy" className="landing-section-privacy">
+        <div className="landing-container">
+          <div className="landing-privacy-grid">
+            <div className="landing-privacy-copy">
+              <span className="landing-privacy-eyebrow">Privacy by design</span>
+              <h2 className="landing-privacy-title">
+                Your footage never leaves your network for AI.
+              </h2>
+              <p className="landing-privacy-lede">
+                Consumer cameras ship frames to cloud services so they can run
+                person, vehicle, and face detection. We don't — motion analysis
+                runs on your CloudNode using FFmpeg, and the cloud only ever
+                holds a rolling 60-second live buffer in memory. Your recordings
+                stay on hardware you own, encrypted at rest.
+              </p>
+              <ul className="landing-privacy-points">
+                <li><strong>Motion detection runs locally.</strong> No ML API calls, no frames uploaded, no cloud vision service.</li>
+                <li><strong>Recordings are encrypted at rest.</strong> AES-256-GCM with a key derived from your device's OS machine ID.</li>
+                <li><strong>No analytics, no ad networks, no data brokers.</strong> Verifiable in our source with a single grep.</li>
+                <li><strong>We don't hold your video.</strong> If law enforcement asks for footage, they have to ask you — we don't have it to hand over.</li>
+              </ul>
+              <div className="landing-privacy-ctas">
+                <Link to="/security" className="landing-privacy-cta primary">
+                  How we compare →
+                </Link>
+                <Link to="/legal/privacy" className="landing-privacy-cta secondary">
+                  Read the Privacy Policy
+                </Link>
+              </div>
+            </div>
+
+            <div className="landing-privacy-visual" aria-hidden="true">
+              <div className="landing-privacy-compare">
+                <div className="landing-privacy-card us">
+                  <div className="landing-privacy-card-label">SourceBox Sentry</div>
+                  <ul>
+                    <li><span className="chk yes">✓</span> Motion runs on-device</li>
+                    <li><span className="chk yes">✓</span> Recordings encrypted at rest</li>
+                    <li><span className="chk yes">✓</span> No analytics or trackers</li>
+                    <li><span className="chk yes">✓</span> Open source (AGPL / GPL)</li>
+                  </ul>
+                </div>
+                <div className="landing-privacy-card them">
+                  <div className="landing-privacy-card-label">Ring · Nest · Wyze</div>
+                  <ul>
+                    <li><span className="chk no">✗</span> Cloud ML on your video</li>
+                    <li><span className="chk no">✗</span> Vendor holds the keys</li>
+                    <li><span className="chk no">✗</span> Ad-sharing disclosed (Wyze)</li>
+                    <li><span className="chk no">✗</span> Proprietary firmware</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </div>
