@@ -10,7 +10,12 @@ from app.core.codec import sanitize_video_codec
 from app.core.database import get_db
 from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
-from app.core.plans import get_plan_limits, get_plan_limits_for_org, get_plan_display_name
+from app.core.plans import (
+    get_plan_limits,
+    get_plan_limits_for_org,
+    get_plan_display_name,
+    wire_plan_slug,
+)
 from app.core.versions import check_node_version
 from app.models.models import CameraNode, Camera, Setting
 from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
@@ -307,6 +312,11 @@ async def register_node(
             "status": "updated",
             "message": "Node re-registered successfully",
             "cameras": camera_mapping,
+            # Advisory plan string for the CloudNode status-bar badge. Stays
+            # in sync with the org's Clerk subscription because `limits` was
+            # resolved via resolve_org_plan() a few lines up. Enforcement
+            # stays server-side; see wire_plan_slug() doc comment.
+            "plan": wire_plan_slug(limits.get("_plan", "free_org")),
         }
         if skipped_cameras:
             plan_name = get_plan_display_name(limits.get("_plan", "free_org"))
@@ -409,7 +419,19 @@ async def node_heartbeat(
 
     db.commit()
 
-    response = {"success": True, "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat()}
+    # Plan for the CloudNode status-bar badge. Read directly from the
+    # Setting cache (populated by the Clerk webhook + register's full
+    # resolve_org_plan call) rather than calling resolve_org_plan here —
+    # heartbeats fire every ~30s per node, and resolve_org_plan talks to
+    # Clerk for free/missing plans. The Setting is authoritative within a
+    # few seconds of a plan change and advisory on the node anyway.
+    cached_plan = Setting.get(db, node.org_id, "org_plan", "free_org") or "free_org"
+
+    response = {
+        "success": True,
+        "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
+        "plan": wire_plan_slug(cached_plan),
+    }
     if version_check["update_available"]:
         response["update_available"] = version_check["update_available"]
     return response

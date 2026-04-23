@@ -429,3 +429,81 @@ def test_to_dict_exposes_node_version(admin_client):
     entry = next(n for n in listing if n["node_id"] == node_id)
     assert entry["node_version"] == "0.1.0"
     assert entry["version_checked_at"]
+
+
+# ── Plan field on register / heartbeat ───────────────────────────────
+#
+# The CloudNode renders this as a pill badge in its status bar (e.g.
+# ``[ PRO ]``). The field is advisory — enforcement stays server-side.
+# See `wire_plan_slug()` and the doc comment on
+# `api.types.RegisterResponse.plan` in the cloudnode repo for the full
+# contract.
+
+
+def test_register_response_includes_plan(admin_client):
+    """Register response must include ``plan`` so the node can surface a
+    pill badge on first registration (before the first heartbeat)."""
+    _, _, resp = _create_and_register(admin_client)
+    assert resp.status_code == 200
+    # With no cached Setting and Clerk unreachable in tests, the org
+    # falls back to the free tier — wired as ``"free"`` (no _org suffix).
+    assert resp.json().get("plan") == "free"
+
+
+def test_register_response_plan_reflects_paid_tier(admin_client):
+    """A Setting-stored paid plan must flow through to the register
+    response so an operator who upgraded before installing the node
+    sees the right badge immediately."""
+    from app.models.models import Setting
+    from tests.conftest import TestSession
+
+    session = TestSession()
+    try:
+        Setting.set(session, "org_test123", "org_plan", "pro")
+        session.commit()
+    finally:
+        session.close()
+
+    _, _, resp = _create_and_register(admin_client)
+    assert resp.status_code == 200
+    assert resp.json().get("plan") == "pro"
+
+
+def test_heartbeat_response_includes_plan(admin_client):
+    """Heartbeats must also carry ``plan`` so an operator who upgrades
+    or downgrades mid-session sees the badge update without having to
+    re-register the node."""
+    node_id, api_key, _ = _create_and_register(admin_client)
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id},
+    )
+    assert hb.status_code == 200
+    assert hb.json().get("plan") == "free"
+
+
+def test_heartbeat_plan_updates_when_setting_changes(admin_client):
+    """If the Clerk webhook upgrades an org, the next heartbeat must
+    reflect the new plan — no node restart required."""
+    from app.models.models import Setting
+    from tests.conftest import TestSession
+
+    node_id, api_key, _ = _create_and_register(admin_client)
+
+    # Simulate the Clerk webhook promoting this org to Business.
+    session = TestSession()
+    try:
+        Setting.set(session, "org_test123", "org_plan", "business")
+        session.commit()
+    finally:
+        session.close()
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id},
+    )
+    assert hb.status_code == 200
+    assert hb.json().get("plan") == "business"
