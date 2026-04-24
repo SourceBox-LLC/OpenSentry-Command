@@ -219,6 +219,47 @@ function DashboardPage() {
         )
       })()}
 
+      {planInfo && typeof planInfo.usage?.viewer_hours_limit === "number" && (() => {
+        // Viewer-hour usage panel — the real tier differentiator. Shown to
+        // every org admin. Progress-bar colour ramps amber at 80% and red
+        // at 100% so the signal is visually clear before we actually start
+        // blocking segments.
+        const used = planInfo.usage.viewer_hours_used || 0
+        const limit = planInfo.usage.viewer_hours_limit
+        const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0
+        const state = pct >= 100 ? "full" : pct >= 80 ? "warn" : "ok"
+        return (
+          <div className={`usage-panel usage-${state}`} role="status" aria-live="polite">
+            <div className="usage-panel-head">
+              <div>
+                <div className="usage-panel-title">Viewer hours this month</div>
+                <div className="usage-panel-subtitle">
+                  Live video playback counts against your monthly cap. Recordings on your node do not.
+                </div>
+              </div>
+              <div className="usage-panel-count">
+                <strong>{used.toFixed(1)}</strong>
+                <span className="usage-panel-slash">/</span>
+                <span>{limit}h</span>
+              </div>
+            </div>
+            <div className="usage-panel-bar">
+              <div className="usage-panel-fill" style={{ width: `${pct}%` }} />
+            </div>
+            {state === "warn" && (
+              <div className="usage-panel-hint">
+                Approaching your monthly cap — consider upgrading to keep streaming uninterrupted.
+              </div>
+            )}
+            {state === "full" && (
+              <div className="usage-panel-hint">
+                Monthly cap reached. Live playback resumes on the 1st of next month, or upgrade for more viewing time.
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-label">Active Cameras</div>

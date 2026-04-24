@@ -9,12 +9,13 @@ function PricingPage() {
       <div className="pricing-hero">
         <div className="pricing-badge">PRICING</div>
         <h1 className="pricing-title">
-          Security that scales<br />
-          <span className="pricing-title-accent">with you</span>
+          Connect as many cameras as you need.<br />
+          <span className="pricing-title-accent">Pay for how much you actually watch.</span>
         </h1>
         <p className="pricing-subtitle">
-          Start free with 2 cameras. Upgrade when you need more coverage,
-          team access, and admin tools.
+          Your monthly viewer-hours are the real tier differentiator — not
+          how many cameras you plug in. Recording to your CloudNode is
+          always local and never counts against your cap.
         </p>
       </div>
 
@@ -23,37 +24,37 @@ function PricingPage() {
       </div>
 
       <div className="pricing-features">
-        <h2 className="pricing-features-title">Every plan includes</h2>
+        <h2 className="pricing-features-title">How usage-based pricing works</h2>
         <div className="pricing-features-grid">
           <div className="pricing-feature-item">
-            <div className="pricing-feature-icon">📡</div>
-            <h3>Live Streaming</h3>
-            <p>Real-time HLS video from all your cameras with low latency</p>
+            <div className="pricing-feature-icon">⏱️</div>
+            <h3>Viewer-hours, not cameras</h3>
+            <p>Every second of live video played to an authenticated viewer counts. A camera you never watch costs nothing against your cap.</p>
           </div>
           <div className="pricing-feature-item">
-            <div className="pricing-feature-icon">📸</div>
-            <h3>Snapshots</h3>
-            <p>On-demand camera snapshots saved directly to your node</p>
+            <div className="pricing-feature-icon">💾</div>
+            <h3>Recordings don't count</h3>
+            <p>Local recording to your CloudNode's encrypted SQLite is unlimited and free. Only cloud-served live playback is metered.</p>
           </div>
           <div className="pricing-feature-item">
-            <div className="pricing-feature-icon">🔴</div>
-            <h3>Recording</h3>
-            <p>Start and stop recording on any camera with one click</p>
+            <div className="pricing-feature-icon">📊</div>
+            <h3>Live usage display</h3>
+            <p>See exactly how many hours you've used this month on the dashboard. No surprises, no overage billing — we cap, we don't charge extra.</p>
           </div>
           <div className="pricing-feature-item">
             <div className="pricing-feature-icon">🔐</div>
-            <h3>Encrypted in Transit</h3>
-            <p>All streams protected with TLS and JWT-authenticated access — no third-party object store in the live path</p>
+            <h3>Encrypted end to end to disk</h3>
+            <p>TLS in flight, AES-256-GCM on the CloudNode at rest. A stolen drive is unreadable elsewhere.</p>
           </div>
           <div className="pricing-feature-item">
-            <div className="pricing-feature-icon">☁️</div>
-            <h3>Cloud Streaming</h3>
-            <p>Live segments cached in the Command Center for fast same-origin playback anywhere</p>
+            <div className="pricing-feature-icon">🚫</div>
+            <h3>No analytics, no trackers</h3>
+            <p>No Mixpanel, no Segment, no ad networks, no data brokers. Verifiable with a grep of our open source.</p>
           </div>
           <div className="pricing-feature-item">
             <div className="pricing-feature-icon">🖥️</div>
-            <h3>Self-Hosted Nodes</h3>
-            <p>Run CloudNode on any Linux, macOS, or Windows machine</p>
+            <h3>Runs on your hardware</h3>
+            <p>CloudNode (GPL-3) installs on any Linux, macOS, or Windows machine. Use a Pi, a NUC, or an old laptop.</p>
           </div>
         </div>
       </div>
@@ -62,24 +63,32 @@ function PricingPage() {
         <h2 className="pricing-faq-title">Common questions</h2>
         <div className="pricing-faq-grid">
           <div className="pricing-faq-item">
-            <h3>Can I upgrade or downgrade anytime?</h3>
-            <p>Yes. Upgrades take effect immediately. Downgrades apply at the end of the current billing period — we won't bill you again for the paid tier after that.</p>
+            <h3>What counts as a "viewer-hour"?</h3>
+            <p>One viewer-hour = one hour of live video played to an authenticated browser session. Background tabs that keep pulling segments count; idle cameras with no one watching don't. Recordings stored on your CloudNode are unlimited and free — they never count against your cap.</p>
           </div>
           <div className="pricing-faq-item">
-            <h3>What happens to my extra cameras if I downgrade?</h3>
-            <p>We keep the oldest cameras (by creation date) up to your new plan's cap, and mark the rest as <em>suspended</em>. Suspended cameras stop streaming to the cloud but their settings are preserved — upgrading back restores streaming within 30 seconds with no reconfiguration.</p>
+            <h3>What happens when I hit my viewer-hour cap?</h3>
+            <p>Live playback pauses with an upgrade prompt until the next calendar month begins. Your cameras keep recording locally, your motion events still fire, and your CloudNode keeps running. You just can't stream video live to the dashboard until your cap resets or you upgrade.</p>
+          </div>
+          <div className="pricing-faq-item">
+            <h3>Can I upgrade or downgrade anytime?</h3>
+            <p>Yes. Upgrades take effect immediately. Downgrades apply at the end of the current billing period. Annual plans save roughly 17% versus the monthly price.</p>
+          </div>
+          <div className="pricing-faq-item">
+            <h3>Do you bill for overage?</h3>
+            <p>No. Your monthly bill is exactly the plan price, always. When you hit a cap we pause the metered feature (live playback or MCP calls) rather than surprise-charge you.</p>
           </div>
           <div className="pricing-faq-item">
             <h3>What if my payment fails?</h3>
-            <p>Your account enters a 7-day grace period during which the charge is retried automatically. Your cameras keep streaming throughout. After 7 days without a successful payment, cameras beyond the Free-tier limit are suspended. Updating your card resumes streaming immediately.</p>
+            <p>Your account enters a 7-day grace period during which the charge is retried automatically. Your cameras keep streaming throughout. After 7 days without a successful payment, cameras beyond the Free-tier limit are suspended and you're rebased to Free-tier viewer-hours. Updating your card resumes everything immediately.</p>
+          </div>
+          <div className="pricing-faq-item">
+            <h3>Why are camera counts still capped?</h3>
+            <p>They're abuse rails, not product tiers. Every connected camera continuously pushes segments to our cache even when idle, which drives our backend load. The caps (5 / 25 / 200) are well above what any realistic customer needs. If you legitimately need more, email us and we'll raise yours.</p>
           </div>
           <div className="pricing-faq-item">
             <h3>Is the CloudNode software free?</h3>
-            <p>Yes, always. CloudNode is open source (GPL-3) and runs on your own hardware. You only pay for the Command Center cloud service.</p>
-          </div>
-          <div className="pricing-faq-item">
-            <h3>Do you offer annual billing?</h3>
-            <p>Not yet, but it's coming soon with a discount. All plans are currently billed monthly.</p>
+            <p>Yes, always. CloudNode is open source (GPL-3) and runs on your own hardware. You only pay for the Command Center cloud service — and you can self-host that too (AGPL-3) if you want to skip us entirely.</p>
           </div>
         </div>
       </div>

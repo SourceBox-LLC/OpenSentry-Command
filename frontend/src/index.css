@@ -2666,6 +2666,315 @@ body {
     border-color: rgba(245, 158, 11, 0.3);
 }
 
+/* Viewer-hour usage panel — lives on the admin Dashboard and shows the
+   current month's cumulative live-playback consumption against the plan
+   cap. Colour ramps (ok → warn → full) so the signal is obvious before
+   cap enforcement actually bites. */
+.usage-panel {
+    background: var(--bg-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    margin-bottom: 1rem;
+}
+
+.usage-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.usage-panel-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.usage-panel-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    margin-top: 0.2rem;
+}
+
+.usage-panel-count {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.usage-panel-count strong {
+    font-size: 1.5rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.usage-panel-slash {
+    color: var(--text-muted);
+    margin: 0 0.2rem;
+}
+
+.usage-panel-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.usage-panel-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+    background: #22c55e;
+}
+
+.usage-panel.usage-warn .usage-panel-fill {
+    background: #f59e0b;
+}
+
+.usage-panel.usage-full .usage-panel-fill {
+    background: #ef4444;
+}
+
+.usage-panel.usage-warn {
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.usage-panel.usage-full {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.usage-panel-hint {
+    margin-top: 0.6rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.usage-panel.usage-full .usage-panel-hint {
+    color: #fecaca;
+}
+
+/* ── Webhook settings section ─────────────────────────────────────── */
+.webhook-upgrade-pitch {
+    margin-top: 1rem;
+    padding: 1rem 1.15rem;
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 10px;
+}
+
+.webhook-upgrade-pitch .btn {
+    margin-top: 0.75rem;
+}
+
+.webhook-secret-banner {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    margin-bottom: 1rem;
+}
+
+.webhook-secret-banner-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.webhook-secret-banner p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.webhook-secret-value {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+
+.webhook-secret-value code {
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 0.8rem;
+    word-break: break-all;
+    color: var(--text-primary);
+    background: transparent;
+    padding: 0;
+}
+
+.webhook-form {
+    background: var(--bg-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    margin-bottom: 1rem;
+}
+
+.webhook-form .form-row {
+    margin-bottom: 0.75rem;
+}
+
+.webhook-form label {
+    display: block;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 0.3rem;
+}
+
+.webhook-form input[type="text"],
+.webhook-form input[type="url"] {
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.webhook-events-fieldset {
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0;
+}
+
+.webhook-events-fieldset legend {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    padding: 0 0.4rem;
+}
+
+.webhook-event-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.5rem;
+}
+
+.webhook-event-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.webhook-form .form-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.webhook-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.webhook-item {
+    background: var(--bg-card, rgba(255, 255, 255, 0.04));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    padding: 0.9rem 1.1rem;
+}
+
+.webhook-item-disabled {
+    opacity: 0.65;
+}
+
+.webhook-item-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.webhook-item-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.webhook-item-actions {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.webhook-item-url {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+    overflow-x: auto;
+}
+
+.webhook-item-url code {
+    word-break: break-all;
+    background: transparent;
+    padding: 0;
+    color: var(--text-secondary);
+}
+
+.webhook-item-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.webhook-pill {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.webhook-pill-paused {
+    background: rgba(156, 163, 175, 0.15);
+    color: #9ca3af;
+}
+
+.webhook-pill-failing {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+}
+
+.webhook-status-ok {
+    color: #34d399;
+}
+
+.webhook-status-bad {
+    color: #fca5a5;
+}
+
+.empty-state-small {
+    padding: 1rem 1.15rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: 1rem;
+}
+
 .plan-limit-text {
     font-size: 0.85rem;
     color: var(--text-secondary);

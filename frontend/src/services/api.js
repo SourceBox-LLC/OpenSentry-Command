@@ -280,3 +280,34 @@ export async function clearAllNotifications(getToken) {
     method: "POST",
   })
 }
+
+// ── Outbound webhooks (Pro Plus) ─────────────────────────────────────
+export async function listOutboundWebhooks(getToken) {
+  return fetchWithAuth("/api/webhooks-outbound", getToken)
+}
+
+export async function createOutboundWebhook(getToken, { name, url, events }) {
+  return fetchWithAuth("/api/webhooks-outbound", getToken, {
+    method: "POST",
+    body: JSON.stringify({ name, url, events: events || [] }),
+  })
+}
+
+export async function updateOutboundWebhook(getToken, id, patch) {
+  return fetchWithAuth(`/api/webhooks-outbound/${id}`, getToken, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function deleteOutboundWebhook(getToken, id) {
+  return fetchWithAuth(`/api/webhooks-outbound/${id}`, getToken, {
+    method: "DELETE",
+  })
+}
+
+export async function testOutboundWebhook(getToken, id) {
+  return fetchWithAuth(`/api/webhooks-outbound/${id}/test`, getToken, {
+    method: "POST",
+  })
+}
