@@ -23,6 +23,150 @@ function PricingPage() {
         <PricingTable for="organization" />
       </div>
 
+      {/* Detailed plan comparison — the Clerk PricingTable above only
+          shows what the operator has configured as each plan's feature
+          list in the Clerk dashboard. This block is the source of truth
+          for what each tier actually buys, organised so a scanning
+          visitor can find their use case without reading the whole page.
+          If you change a number here, also change it in /docs#plans and
+          in backend/app/core/plans.py::PLAN_LIMITS. */}
+      <div className="pricing-detail">
+        <h2 className="pricing-detail-title">What each plan buys you</h2>
+        <p className="pricing-detail-intro">
+          Below is the complete, per-tier breakdown. Everything on this
+          page is enforced in code — our open-source repos are the source
+          of truth, and the numbers match exactly.
+        </p>
+
+        <div className="pricing-detail-grid">
+
+          {/* Free — designed to be usable long-term for home users,
+              not a hobbled trial. The "for who" lines are important;
+              they let visitors self-identify without reading numbers. */}
+          <div className="pricing-detail-card pricing-detail-free">
+            <div className="pricing-detail-card-head">
+              <h3>Free</h3>
+              <div className="pricing-detail-price">$0<span>/mo</span></div>
+              <p className="pricing-detail-for">For home users with a few cameras they check occasionally.</p>
+            </div>
+
+            <div className="pricing-detail-section">
+              <div className="pricing-detail-section-label">Usage</div>
+              <ul>
+                <li><strong>30 viewer-hours / month</strong> of live playback</li>
+                <li>Up to <strong>5 cameras</strong> across <strong>2 CloudNodes</strong></li>
+                <li><strong>2 team seats</strong></li>
+                <li>10 concurrent live-dashboard connections</li>
+              </ul>
+            </div>
+
+            <div className="pricing-detail-section">
+              <div className="pricing-detail-section-label">Included</div>
+              <ul>
+                <li>Live HLS streaming + snapshots</li>
+                <li>Local recording to your CloudNode (unlimited, unmetered)</li>
+                <li>On-device motion detection + alerts</li>
+                <li>Encrypted recordings + API key (AES-256-GCM)</li>
+                <li>Camera groups</li>
+                <li>30-day log retention</li>
+              </ul>
+            </div>
+
+            <div className="pricing-detail-section">
+              <div className="pricing-detail-section-label">Not included</div>
+              <ul className="pricing-detail-missing">
+                <li>Admin dashboard + stream analytics</li>
+                <li>MCP integration (AI access)</li>
+                <li>Outbound webhooks</li>
+                <li>Priority support</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Pro — the conversion target. Highlighted visually so
+              a first-time visitor's eye naturally lands here. The
+              "adds over Free" framing makes the upgrade story obvious. */}
+          <div className="pricing-detail-card pricing-detail-pro pricing-detail-featured">
+            <div className="pricing-detail-featured-badge">Most popular</div>
+            <div className="pricing-detail-card-head">
+              <h3>Pro</h3>
+              <div className="pricing-detail-price">
+                $12<span>/mo</span>
+                <div className="pricing-detail-annual">or $10/mo billed annually ($120/yr)</div>
+              </div>
+              <p className="pricing-detail-for">For small businesses, prosumer setups, and anyone who wants AI access.</p>
+            </div>
+
+            <div className="pricing-detail-section">
+              <div className="pricing-detail-section-label">Usage</div>
+              <ul>
+                <li><strong>300 viewer-hours / month</strong> — 10× Free</li>
+                <li>Up to <strong>25 cameras</strong> across <strong>10 CloudNodes</strong></li>
+                <li><strong>10 team seats</strong></li>
+                <li>30 concurrent live-dashboard connections</li>
+              </ul>
+            </div>
+
+            <div className="pricing-detail-section">
+              <div className="pricing-detail-section-label">Everything in Free, plus</div>
+              <ul>
+                <li><strong>Admin dashboard</strong> — stream access logs, usage analytics</li>
+                <li><strong>MCP integration</strong> — connect Claude, Cursor, or custom agents</li>
+                <li><strong>MCP rate limit:</strong> 30 calls/min · 5,000 calls/day per key</li>
+                <li><strong>Danger-zone tools</strong> — log wipe, full-reset, key rotation</li>
+                <li>90-day log retention</li>
+                <li>Email support</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Pro Plus — positioned against integration-heavy use cases
+              (multi-site, MSPs, compliance-driven ops). Outbound webhooks
+              are the headline feature; scale is secondary. */}
+          <div className="pricing-detail-card pricing-detail-pro-plus">
+            <div className="pricing-detail-card-head">
+              <h3>Pro Plus</h3>
+              <div className="pricing-detail-price">
+                $29<span>/mo</span>
+                <div className="pricing-detail-annual">or $25/mo billed annually ($300/yr)</div>
+              </div>
+              <p className="pricing-detail-for">For multi-site operators, MSPs, and anyone pushing events into their own stack.</p>
+            </div>
+
+            <div className="pricing-detail-section">
+              <div className="pricing-detail-section-label">Usage</div>
+              <ul>
+                <li><strong>1,500 viewer-hours / month</strong> — 5× Pro</li>
+                <li>Up to <strong>200 cameras</strong> across <strong>unlimited CloudNodes</strong></li>
+                <li><strong>20 team seats</strong></li>
+                <li>100 concurrent live-dashboard connections</li>
+              </ul>
+            </div>
+
+            <div className="pricing-detail-section">
+              <div className="pricing-detail-section-label">Everything in Pro, plus</div>
+              <ul>
+                <li><strong>Outbound webhooks</strong> — push motion / camera / node events to your own HTTPS endpoint (PagerDuty, Zapier, ticketing, home automation)</li>
+                <li>HMAC-SHA256 signed deliveries with automatic retry + auto-disable</li>
+                <li><strong>MCP rate limit:</strong> 120 calls/min · 30,000 calls/day per key (4× Pro)</li>
+                <li><strong>365-day log retention</strong> — full year of audit history</li>
+                <li><strong>Priority support</strong> — 24-hour first-response SLA</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <p className="pricing-detail-footnote">
+          Need higher caps? If you legitimately need more than 200 cameras
+          or 1,500 viewer-hours per month, email{" "}
+          <a href="https://github.com/SourceBox-LLC" target="_blank" rel="noopener noreferrer">
+            SourceBox LLC
+          </a>{" "}
+          — we'd rather raise your bucket than lose a real customer to an
+          arbitrary ceiling.
+        </p>
+      </div>
+
       <div className="pricing-features">
         <h2 className="pricing-features-title">How usage-based pricing works</h2>
         <div className="pricing-features-grid">
