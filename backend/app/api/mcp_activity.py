@@ -33,15 +33,17 @@ async def stream_activity(user: AuthUser = Depends(require_admin)):
     SSE endpoint — streams MCP tool call events in real-time.
     Each event is a JSON-encoded McpEvent.
     """
+    from app.core.plans import get_plan_limits
     org_id = user.org_id
-    queue = tracker.subscribe(org_id)
+    cap = get_plan_limits(user.plan).get("max_sse_subscribers", MAX_SSE_SUBSCRIBERS_PER_ORG)
+    queue = tracker.subscribe(org_id, cap)
     if queue is None:
         raise HTTPException(
             status_code=429,
             detail=(
-                f"Too many open MCP activity streams for this org "
-                f"(cap: {MAX_SSE_SUBSCRIBERS_PER_ORG}). Close unused "
-                f"tabs and retry."
+                f"Too many open MCP activity streams for this org (cap: "
+                f"{cap} on your current plan). Close unused tabs and retry, "
+                f"or upgrade for a higher cap."
             ),
         )
 

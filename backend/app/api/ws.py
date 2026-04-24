@@ -489,6 +489,21 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
             "timestamp": ts.isoformat(),
         })
 
+        # Fan out to any Pro Plus outbound webhook endpoints the org has
+        # configured. Free/Pro orgs have no rows in webhook_endpoints so
+        # this is a fast path of "SELECT returned zero → return".
+        try:
+            from app.api.webhooks_outbound import dispatch_event
+            dispatch_event(db, org_id, "motion", {
+                "camera_id": camera_id,
+                "node_id": node_id,
+                "score": score_int,
+                "segment_seq": seq,
+                "timestamp": ts.isoformat(),
+            })
+        except Exception:
+            logger.exception("[Webhooks] motion dispatch failed for cam=%s", camera_id)
+
         # Also emit an inbox notification so the user can see motion
         # history in the bell panel.  Resolve the camera name for a
         # friendlier title — fall back to the camera_id if not found.

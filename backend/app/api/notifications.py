@@ -75,8 +75,10 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 # subscriber, scoped by org.  Each event also carries the audience so
 # the stream generator can filter per subscriber.
 
-# Cap per-org SSE connections; see the matching comment in motion.py.
-MAX_SSE_SUBSCRIBERS_PER_ORG = 50
+# Per-org SSE subscriber cap. Tiered — see the matching comment in motion.py.
+# This module-level constant is the fallback; route handlers pass the
+# plan-specific cap from ``app.core.plans.PLAN_LIMITS``.
+MAX_SSE_SUBSCRIBERS_PER_ORG = 100  # fallback — Pro Plus default
 
 
 class NotificationBroadcaster:
@@ -109,25 +111,31 @@ class NotificationBroadcaster:
                 except (ValueError, KeyError):
                     pass
 
-    def subscribe(self, org_id: str, is_admin: bool) -> Optional[asyncio.Queue]:
+    def subscribe(
+        self,
+        org_id: str,
+        is_admin: bool,
+        cap: int = MAX_SSE_SUBSCRIBERS_PER_ORG,
+    ) -> Optional[asyncio.Queue]:
         """Add a new SSE subscription for an org.
 
-        Returns the queue on success, or ``None`` when this org is
-        already at the per-org subscriber cap — the route handler
-        translates that into a 429.
+        ``cap`` is the per-tier subscriber cap the caller looked up (see
+        PLAN_LIMITS). Returns the queue on success, or ``None`` when this
+        org is already at the cap — the route handler translates that into
+        a 429.
         """
         existing = self._subscribers.setdefault(org_id, [])
-        if len(existing) >= MAX_SSE_SUBSCRIBERS_PER_ORG:
+        if len(existing) >= cap:
             logger.warning(
-                "[Notifications] SSE cap hit for org %s (%d) — rejecting",
-                org_id, len(existing),
+                "[Notifications] SSE cap hit for org %s (%d/%d) — rejecting",
+                org_id, len(existing), cap,
             )
             return None
         q: asyncio.Queue = asyncio.Queue(maxsize=100)
         existing.append((q, is_admin))
         logger.info(
-            "[Notifications] SSE subscriber added for org %s (admin=%s, total=%d)",
-            org_id, is_admin, len(existing),
+            "[Notifications] SSE subscriber added for org %s (admin=%s, %d/%d)",
+            org_id, is_admin, len(existing), cap,
         )
         return q
 
@@ -272,38 +280,41 @@ def emit_camera_transition(
     """Emit a camera online↔offline transition notification.
 
     Audience is ``"all"`` — every org member cares when a camera drops.
-    Debounced per-(camera, direction) to survive flaps.
+    Debounced per-(camera, direction) to survive flaps. Also dispatches
+    to any configured outbound webhook endpoints so Pro Plus customers
+    can route camera-health events into their ticketing / PagerDuty.
     """
     if new_status not in ("online", "offline"):
         return None
     if not _should_emit_transition("camera", camera_id, new_status):
         return None
 
-    if new_status == "online":
-        return create_notification(
-            org_id=org_id,
-            kind="camera_online",
-            title=f"{display_name} is online",
-            body="Camera is streaming again.",
-            severity="info",
-            audience="all",
-            link=f"/dashboard?camera={camera_id}",
-            camera_id=camera_id,
-            node_id=node_id,
-            db=db,
-        )
-    return create_notification(
+    kind = "camera_online" if new_status == "online" else "camera_offline"
+    notif = create_notification(
         org_id=org_id,
-        kind="camera_offline",
-        title=f"{display_name} went offline",
-        body="No heartbeat received in over 90 seconds.",
-        severity="warning",
+        kind=kind,
+        title=f"{display_name} is online" if new_status == "online" else f"{display_name} went offline",
+        body="Camera is streaming again." if new_status == "online" else "No heartbeat received in over 90 seconds.",
+        severity="info" if new_status == "online" else "warning",
         audience="all",
         link=f"/dashboard?camera={camera_id}",
         camera_id=camera_id,
         node_id=node_id,
         db=db,
     )
+
+    try:
+        from app.api.webhooks_outbound import dispatch_event
+        dispatch_event(db, org_id, kind, {
+            "camera_id": camera_id,
+            "node_id": node_id,
+            "display_name": display_name,
+            "status": new_status,
+        })
+    except Exception:
+        logger.exception("[Webhooks] camera transition dispatch failed for cam=%s", camera_id)
+
+    return notif
 
 
 def emit_node_transition(
@@ -317,36 +328,38 @@ def emit_node_transition(
     """Emit a node online↔offline transition notification.
 
     Audience is ``"admin"`` — node health is an operator concern; regular
-    viewers don't need to know about CloudNode uplink status.
+    viewers don't need to know about CloudNode uplink status. Also
+    dispatches to configured outbound webhooks (Pro Plus).
     """
     if new_status not in ("online", "offline"):
         return None
     if not _should_emit_transition("node", node_id, new_status):
         return None
 
-    if new_status == "online":
-        return create_notification(
-            org_id=org_id,
-            kind="node_online",
-            title=f"Node '{display_name}' is online",
-            body="CloudNode is connected and reporting.",
-            severity="info",
-            audience="admin",
-            link="/admin",
-            node_id=node_id,
-            db=db,
-        )
-    return create_notification(
+    kind = "node_online" if new_status == "online" else "node_offline"
+    notif = create_notification(
         org_id=org_id,
-        kind="node_offline",
-        title=f"Node '{display_name}' went offline",
-        body="No heartbeat received in over 90 seconds.",
-        severity="warning",
+        kind=kind,
+        title=f"Node '{display_name}' is online" if new_status == "online" else f"Node '{display_name}' went offline",
+        body="CloudNode is connected and reporting." if new_status == "online" else "No heartbeat received in over 90 seconds.",
+        severity="info" if new_status == "online" else "warning",
         audience="admin",
         link="/admin",
         node_id=node_id,
         db=db,
     )
+
+    try:
+        from app.api.webhooks_outbound import dispatch_event
+        dispatch_event(db, org_id, kind, {
+            "node_id": node_id,
+            "display_name": display_name,
+            "status": new_status,
+        })
+    except Exception:
+        logger.exception("[Webhooks] node transition dispatch failed for node=%s", node_id)
+
+    return notif
 
 
 # ── Read-state helpers ─────────────────────────────────────────────
@@ -519,16 +532,18 @@ async def stream_notifications(user: AuthUser = Depends(require_view)):
     NotificationBroadcaster.notify) so non-admins never even receive
     admin-only events on the wire.
     """
+    from app.core.plans import get_plan_limits
     org_id = user.org_id
     is_admin = user.is_admin
-    queue = notification_broadcaster.subscribe(org_id, is_admin)
+    cap = get_plan_limits(user.plan).get("max_sse_subscribers", MAX_SSE_SUBSCRIBERS_PER_ORG)
+    queue = notification_broadcaster.subscribe(org_id, is_admin, cap)
     if queue is None:
         raise HTTPException(
             status_code=429,
             detail=(
-                f"Too many open notification streams for this org "
-                f"(cap: {MAX_SSE_SUBSCRIBERS_PER_ORG}). Close unused "
-                f"tabs and retry."
+                f"Too many open notification streams for this org (cap: "
+                f"{cap} on your current plan). Close unused tabs and retry, "
+                f"or upgrade for a higher cap."
             ),
         )
 

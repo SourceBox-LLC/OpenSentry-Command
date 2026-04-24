@@ -112,29 +112,34 @@ def test_enforce_cap_is_noop_when_under_cap():
 
 
 def test_enforce_cap_disables_oldest_first_on_free_plan():
-    """Free org with 5 cameras over the 2-cap: the two OLDEST keep streaming;
-    the other three flip to disabled. Oldest-first is deterministic and
-    preserves long-lived cameras the operator cares about most."""
+    """Free org with 8 cameras over the 5-cap: the 5 OLDEST keep streaming;
+    the other 3 flip to disabled. Oldest-first is deterministic and preserves
+    long-lived cameras the operator cares about most.
+
+    (Hardware caps are now abuse rails rather than product-tier differentiators,
+    but the oldest-first eviction behaviour still needs to hold when a
+    legitimate limit *is* exceeded.)"""
     db = TestSession()
     try:
-        cams = _seed_org_and_cameras(db, "org_over", count=5, plan="free_org")
+        cams = _seed_org_and_cameras(db, "org_over", count=8, plan="free_org")
         result = enforce_camera_cap(db, "org_over")
         db.commit()
 
         assert result["changed"] is True
-        assert result["max_cameras"] == 2
-        assert len(result["enabled"]) == 2
+        assert result["max_cameras"] == 5
+        assert len(result["enabled"]) == 5
         assert len(result["disabled"]) == 3
 
-        # The 2 kept must be the 2 oldest (by created_at).
-        kept = {c.camera_id for c in cams[:2]}
+        # The 5 kept must be the 5 oldest (by created_at).
+        kept = {c.camera_id for c in cams[:5]}
         assert set(result["enabled"]) == kept
 
         db.expire_all()
         rows = {c.camera_id: c.disabled_by_plan for c in db.query(Camera).filter_by(org_id="org_over").all()}
-        assert rows[cams[0].camera_id] is False
-        assert rows[cams[1].camera_id] is False
-        assert all(rows[c.camera_id] is True for c in cams[2:])
+        for c in cams[:5]:
+            assert rows[c.camera_id] is False
+        for c in cams[5:]:
+            assert rows[c.camera_id] is True
     finally:
         db.close()
 
@@ -144,14 +149,17 @@ def test_enforce_cap_clears_flags_on_upgrade():
     raises the cap above the current count: all disabled flags must clear."""
     db = TestSession()
     try:
-        cams = _seed_org_and_cameras(db, "org_upgrade", count=5, plan="free_org")
+        # 8 cameras puts us over Free's 5-cap so the initial enforce
+        # disables rows, giving the upgrade a real state transition to
+        # reverse.
+        cams = _seed_org_and_cameras(db, "org_upgrade", count=8, plan="free_org")
         enforce_camera_cap(db, "org_upgrade")
         db.commit()
 
         disabled_before = [c for c in cams if db.get(Camera, c.id).disabled_by_plan]
         assert len(disabled_before) == 3, "free cap should have disabled 3"
 
-        # Upgrade to Pro (10-camera cap) and re-enforce.
+        # Upgrade to Pro (25-camera cap) and re-enforce.
         Setting.set(db, "org_upgrade", "org_plan", "pro")
         db.commit()
         result = enforce_camera_cap(db, "org_upgrade")
@@ -159,7 +167,7 @@ def test_enforce_cap_clears_flags_on_upgrade():
 
         assert result["changed"] is True
         assert result["disabled"] == []
-        assert len(result["enabled"]) == 5
+        assert len(result["enabled"]) == 8
 
         db.expire_all()
         rows = db.query(Camera).filter_by(org_id="org_upgrade").all()
@@ -174,7 +182,9 @@ def test_enforce_cap_is_idempotent():
     heartbeat-triggered registration; it must be cheap when nothing moves."""
     db = TestSession()
     try:
-        _seed_org_and_cameras(db, "org_idem", count=5, plan="free_org")
+        # 8 on Free forces a real state transition on the first call so the
+        # "nothing flips on the second call" invariant has something to prove.
+        _seed_org_and_cameras(db, "org_idem", count=8, plan="free_org")
         first = enforce_camera_cap(db, "org_idem")
         db.commit()
         assert first["changed"] is True
@@ -191,13 +201,13 @@ def test_enforce_cap_treats_missing_plan_as_free():
     most restrictive default — not the most permissive."""
     db = TestSession()
     try:
-        _seed_org_and_cameras(db, "org_nosetting", count=4, plan=None)
+        # 7 cameras on the free 5-cap → 2 must be disabled.
+        _seed_org_and_cameras(db, "org_nosetting", count=7, plan=None)
         result = enforce_camera_cap(db, "org_nosetting")
         db.commit()
 
-        # Free cap is 2 → 2 of 4 disabled.
         assert result["changed"] is True
-        assert result["max_cameras"] == 2
+        assert result["max_cameras"] == 5
         assert len(result["disabled"]) == 2
     finally:
         db.close()
@@ -275,11 +285,12 @@ def test_effective_plan_past_due_without_timestamp_keeps_nominal():
 
 
 def test_enforce_cap_suspends_cameras_when_grace_expires():
-    """End-to-end: a Pro org with 5 cameras that went past-due 8 days
-    ago must get 3 cameras suspended — same as if they had cancelled."""
+    """End-to-end: a Pro org with 8 cameras that went past-due
+    PAYMENT_GRACE_DAYS + some ago must get cameras beyond the free-tier
+    cap suspended — same as if they had cancelled."""
     db = TestSession()
     try:
-        cams = _seed_org_and_cameras(db, "org_grace_enforce", count=5, plan="pro")
+        cams = _seed_org_and_cameras(db, "org_grace_enforce", count=8, plan="pro")
         _set_past_due(db, "org_grace_enforce", days_ago=PAYMENT_GRACE_DAYS + 0.5)
         db.commit()
 
@@ -287,17 +298,19 @@ def test_enforce_cap_suspends_cameras_when_grace_expires():
         db.commit()
 
         assert result["changed"] is True
-        assert result["max_cameras"] == 2  # free tier cap
+        # Free tier cap is 5 → 3 of 8 cameras must be suspended.
+        assert result["max_cameras"] == 5
         assert len(result["disabled"]) == 3
 
-        # Oldest 2 keep streaming, newest 3 get flagged.
+        # Oldest 5 keep streaming, newest 3 get flagged.
         db.expire_all()
         rows = {
             c.camera_id: c.disabled_by_plan
             for c in db.query(Camera).filter_by(org_id="org_grace_enforce").all()
         }
-        assert rows[cams[0].camera_id] is False
-        assert rows[cams[1].camera_id] is False
-        assert all(rows[c.camera_id] is True for c in cams[2:])
+        for c in cams[:5]:
+            assert rows[c.camera_id] is False
+        for c in cams[5:]:
+            assert rows[c.camera_id] is True
     finally:
         db.close()

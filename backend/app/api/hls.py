@@ -1,16 +1,19 @@
 import hashlib
 import re
+import threading
 import time
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.core.config import settings
 from app.core.auth import get_current_user
 from app.core.limiter import limiter
 from app.models import Camera, CameraNode, StreamAccessLog
+from app.models.models import OrgMonthlyUsage
 
 router = APIRouter(prefix="/api/cameras/{camera_id}", tags=["streaming"])
 logger = logging.getLogger(__name__)
@@ -74,6 +77,127 @@ _first_stream_get_logged: set[str] = set()
 _ACCESS_LOG_INTERVAL = 300.0  # 5 minutes
 _last_access_logged: dict[tuple[str, str], float] = {}
 _ACCESS_LOG_MAX_ENTRIES = 10000
+
+# ── Viewer-hour usage tracking ──────────────────────────────────────
+# Each cached HLS segment we serve is ~1 second of video, so we increment a
+# per-org counter by 1 for every successful segment delivery. The hot path
+# touches only an in-memory dict protected by a lock; a periodic flush task
+# (see ``flush_viewer_usage``) is what actually writes to the DB, so we
+# never pay SQLite latency on every segment request.
+#
+# The cached DB total is also held in memory so cap-enforcement reads are
+# O(1) instead of a per-request SELECT; the flush task keeps it fresh.
+_viewer_usage_lock = threading.Lock()
+_pending_viewer_seconds: dict[tuple[str, str], int] = {}  # (org_id, ym) → pending
+_cached_viewer_seconds: dict[tuple[str, str], int] = {}   # (org_id, ym) → DB total
+
+
+def _current_year_month() -> str:
+    """UTC-month bucket key — ``YYYY-MM``. Caches get reset when a new
+    month starts simply by the key changing; nothing to evict explicitly."""
+    return datetime.now(tz=timezone.utc).strftime("%Y-%m")
+
+
+def record_viewer_second(org_id: str) -> None:
+    """Increment the in-memory viewer-second counter for an org. O(1) under
+    the lock — safe to call on every successful segment serve."""
+    key = (org_id, _current_year_month())
+    with _viewer_usage_lock:
+        _pending_viewer_seconds[key] = _pending_viewer_seconds.get(key, 0) + 1
+
+
+def get_viewer_seconds_used(org_id: str) -> int:
+    """Return the current month's total viewer-seconds for an org
+    (cached DB total + pending in-memory delta).
+
+    Used by the cap-enforcement check in the segment route and by the
+    ``/api/nodes/plan`` response so the dashboard can show live usage.
+    """
+    key = (org_id, _current_year_month())
+    with _viewer_usage_lock:
+        cached = _cached_viewer_seconds.get(key, 0)
+        pending = _pending_viewer_seconds.get(key, 0)
+    return cached + pending
+
+
+def _warm_cached_viewer_seconds(org_id: str) -> int:
+    """Populate the cache for ``org_id`` from the DB if we don't have it
+    yet, then return the authoritative total. Called on the first segment
+    of the month for each org so the cap check has real data."""
+    ym = _current_year_month()
+    key = (org_id, ym)
+    with _viewer_usage_lock:
+        if key in _cached_viewer_seconds:
+            return _cached_viewer_seconds[key] + _pending_viewer_seconds.get(key, 0)
+
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(OrgMonthlyUsage)
+            .filter_by(org_id=org_id, year_month=ym)
+            .first()
+        )
+        seconds = int(row.viewer_seconds) if row else 0
+    except Exception:
+        logger.exception("[ViewerUsage] Failed to warm cache for %s", org_id)
+        seconds = 0
+    finally:
+        db.close()
+
+    with _viewer_usage_lock:
+        _cached_viewer_seconds[key] = seconds
+        return seconds + _pending_viewer_seconds.get(key, 0)
+
+
+def flush_viewer_usage() -> int:
+    """Flush pending in-memory viewer-seconds to the DB with UPSERTs. Called
+    by a background task every ~60s. Returns the number of (org, month)
+    rows touched so the caller can log activity.
+
+    Stale pending counts from previous months are flushed too so the
+    caller's cross-month accounting is accurate — the key is
+    ``(org_id, year_month)`` so a segment served at 23:59:59 on the last
+    day of a month increments that month's row, not the next one.
+    """
+    with _viewer_usage_lock:
+        if not _pending_viewer_seconds:
+            return 0
+        snapshot = dict(_pending_viewer_seconds)
+        _pending_viewer_seconds.clear()
+
+    db = SessionLocal()
+    try:
+        for (org_id, ym), delta in snapshot.items():
+            if delta <= 0:
+                continue
+            row = (
+                db.query(OrgMonthlyUsage)
+                .filter_by(org_id=org_id, year_month=ym)
+                .first()
+            )
+            if row:
+                row.viewer_seconds = int(row.viewer_seconds or 0) + delta
+            else:
+                row = OrgMonthlyUsage(
+                    org_id=org_id,
+                    year_month=ym,
+                    viewer_seconds=delta,
+                )
+                db.add(row)
+            # Update the in-memory cache so the next read sees the new DB total.
+            with _viewer_usage_lock:
+                _cached_viewer_seconds[(org_id, ym)] = int(row.viewer_seconds)
+        db.commit()
+        return len(snapshot)
+    except Exception:
+        logger.exception("[ViewerUsage] Flush failed — pending increments lost")
+        # Pending increments are already cleared; a cross-flush window
+        # where a handful of segments go uncounted is an acceptable loss
+        # compared to accumulating indefinitely through a DB outage.
+        db.rollback()
+        return 0
+    finally:
+        db.close()
 
 
 # ── Cache management ─────────────────────────────────────────────────
@@ -291,7 +415,14 @@ async def get_hls_segment(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Serve an HLS segment from the in-memory cache."""
+    """Serve an HLS segment from the in-memory cache.
+
+    Also enforces the monthly viewer-hours cap for the org's plan. Each
+    served segment is ~1 second of video, so we check the running counter
+    against ``PLAN_LIMITS[plan]["max_viewer_hours_per_month"]`` before
+    returning bytes. The cap-enforcement read hits the in-memory counter,
+    not the DB, so it's O(1) on the hot path.
+    """
     camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -299,10 +430,32 @@ async def get_hls_segment(
     if not _RE_SEGMENT_FILENAME.match(filename):
         raise HTTPException(status_code=400, detail="Invalid segment filename")
 
+    # Check the monthly viewer-hour cap before serving. Warm the cache on the
+    # first segment we see for this org (same call amortizes one DB read per
+    # org per process lifetime).
+    from app.core.plans import get_plan_limits
+    limits = get_plan_limits(user.plan)
+    max_hours = limits.get("max_viewer_hours_per_month")
+    if max_hours is not None and max_hours > 0:
+        used_seconds = _warm_cached_viewer_seconds(user.org_id)
+        if used_seconds >= max_hours * 3600:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"Monthly viewer-hour cap reached ({max_hours}h on your "
+                    f"current plan). Live playback will resume on the 1st of "
+                    f"next month, or upgrade your plan for more viewing time."
+                ),
+                headers={"Retry-After": "3600"},
+            )
+
     cam_cache = _segment_cache.get(camera_id)
     if cam_cache:
         entry = cam_cache.get(filename)
         if entry:
+            # Count this segment against the org's monthly viewer-second budget.
+            # Only count on successful serves — a 404 or cap-block never charges.
+            record_viewer_second(user.org_id)
             return Response(
                 content=entry[0],
                 media_type="video/mp2t",

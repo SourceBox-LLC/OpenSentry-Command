@@ -17,7 +17,7 @@ from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
 from app.core.migrations import sync_schema, sanitize_existing_codecs
 from app.core.sentry import init_sentry
-from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
+from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications, webhooks_outbound
 from app.mcp.server import mcp
 # Import models so every table registers on Base.metadata before create_all/sync_schema.
 from app.models import models  # noqa: F401
@@ -50,11 +50,13 @@ async def lifespan(app):
     """Application lifespan: startup and shutdown hooks."""
     cleanup_task = asyncio.create_task(_log_cleanup_loop())
     offline_sweep_task = asyncio.create_task(_offline_sweep_loop())
+    viewer_usage_task = asyncio.create_task(_viewer_usage_flush_loop())
     print(f"[App] SourceBox Sentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
     async with mcp_app.lifespan(app):
         yield
     cleanup_task.cancel()
     offline_sweep_task.cancel()
+    viewer_usage_task.cancel()
     print("[System] Shutdown complete")
 
 
@@ -181,6 +183,7 @@ app.include_router(mcp_activity.router)
 app.include_router(incidents.router)
 app.include_router(motion.router)
 app.include_router(notifications.router)
+app.include_router(webhooks_outbound.router)
 
 # Mount MCP server at /mcp
 app.mount("/mcp", mcp_app)
@@ -204,29 +207,85 @@ OFFLINE_HEARTBEAT_TIMEOUT_SECONDS = 90
 
 
 async def _log_cleanup_loop():
-    """Background task: delete old logs and free segment caches
-    for cameras that have been offline."""
-    from app.models.models import StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Camera, Notification
+    """Background task: delete old logs per-org using the caller's plan's
+    retention setting, and free segment caches for cameras that have been
+    offline.
+
+    Retention is tiered (Free 30d / Pro 90d / Pro Plus 365d) so cleanup has
+    to iterate orgs instead of running one global cutoff query. Orgs without
+    a resolvable plan fall back to ``LOG_RETENTION_DAYS`` so an org we can't
+    look up isn't silently kept forever.
+    """
+    from app.models.models import (
+        StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Camera, Notification, Setting,
+    )
+    from app.core.plans import get_plan_limits, resolve_org_plan
 
     while True:
         await asyncio.sleep(LOG_CLEANUP_INTERVAL_HOURS * 3600)
 
-        # ── Log retention cleanup ──────────────────────────────────
+        # ── Log retention cleanup (per-org, tiered) ───────────────
         try:
-            cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=LOG_RETENTION_DAYS)
             db = SessionLocal()
             try:
-                stream_count = db.query(StreamAccessLog).filter(StreamAccessLog.accessed_at < cutoff).delete()
-                mcp_count = db.query(McpActivityLog).filter(McpActivityLog.timestamp < cutoff).delete()
-                audit_count = db.query(AuditLog).filter(AuditLog.timestamp < cutoff).delete()
-                motion_count = db.query(MotionEvent).filter(MotionEvent.timestamp < cutoff).delete()
-                notif_count = db.query(Notification).filter(Notification.created_at < cutoff).delete()
+                now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+                # One query collects every org_id we're holding logs for.
+                # UNION across the log tables — small set, runs once a day.
+                from sqlalchemy import union, select
+                org_rows = (
+                    db.execute(
+                        select(StreamAccessLog.org_id).distinct()
+                        .union(select(McpActivityLog.org_id).distinct())
+                        .union(select(AuditLog.org_id).distinct())
+                        .union(select(MotionEvent.org_id).distinct())
+                        .union(select(Notification.org_id).distinct())
+                    ).all()
+                )
+                org_ids = {row[0] for row in org_rows if row[0]}
+
+                totals = {"stream": 0, "mcp": 0, "audit": 0, "motion": 0, "notif": 0}
+                for org_id in org_ids:
+                    try:
+                        plan = resolve_org_plan(db, org_id)
+                    except Exception:
+                        plan = "free_org"
+                    retention_days = get_plan_limits(plan).get(
+                        "log_retention_days", LOG_RETENTION_DAYS,
+                    )
+                    cutoff = now - timedelta(days=retention_days)
+
+                    totals["stream"] += (
+                        db.query(StreamAccessLog)
+                        .filter(StreamAccessLog.org_id == org_id, StreamAccessLog.accessed_at < cutoff)
+                        .delete(synchronize_session=False)
+                    )
+                    totals["mcp"] += (
+                        db.query(McpActivityLog)
+                        .filter(McpActivityLog.org_id == org_id, McpActivityLog.timestamp < cutoff)
+                        .delete(synchronize_session=False)
+                    )
+                    totals["audit"] += (
+                        db.query(AuditLog)
+                        .filter(AuditLog.org_id == org_id, AuditLog.timestamp < cutoff)
+                        .delete(synchronize_session=False)
+                    )
+                    totals["motion"] += (
+                        db.query(MotionEvent)
+                        .filter(MotionEvent.org_id == org_id, MotionEvent.timestamp < cutoff)
+                        .delete(synchronize_session=False)
+                    )
+                    totals["notif"] += (
+                        db.query(Notification)
+                        .filter(Notification.org_id == org_id, Notification.created_at < cutoff)
+                        .delete(synchronize_session=False)
+                    )
                 db.commit()
-                total = stream_count + mcp_count + audit_count + motion_count + notif_count
+                total = sum(totals.values())
                 if total > 0:
                     logger.info(
-                        "[Cleanup] Deleted %d old logs (stream=%d, mcp=%d, audit=%d, motion=%d, notif=%d, retention=%dd)",
-                        total, stream_count, mcp_count, audit_count, motion_count, notif_count, LOG_RETENTION_DAYS,
+                        "[Cleanup] Deleted %d old logs across %d orgs (stream=%d mcp=%d audit=%d motion=%d notif=%d)",
+                        total, len(org_ids),
+                        totals["stream"], totals["mcp"], totals["audit"], totals["motion"], totals["notif"],
                     )
             finally:
                 db.close()
@@ -340,6 +399,26 @@ def run_offline_sweep(db, *, heartbeat_timeout_seconds: int = OFFLINE_HEARTBEAT_
         "nodes_flipped": len(node_transitions),
         "cameras_flipped": len(camera_transitions),
     }
+
+
+async def _viewer_usage_flush_loop():
+    """Background task — flush per-org viewer-second counters to the DB.
+
+    Runs every 60 seconds. Batching keeps the hot HLS-serve path O(1) in
+    memory and amortizes writes to one UPSERT per active org per minute
+    rather than one per segment.
+    """
+    # Imported lazily so test environments that don't import app.api.hls
+    # at all don't pay the module-import cost.
+    while True:
+        await asyncio.sleep(60)
+        try:
+            from app.api.hls import flush_viewer_usage
+            # flush_viewer_usage does its own DB session + error handling;
+            # we only care whether anything was written so we can log it.
+            await asyncio.to_thread(flush_viewer_usage)
+        except Exception:
+            logger.exception("[ViewerUsage] Flush loop tick failed")
 
 
 async def _offline_sweep_loop():

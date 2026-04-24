@@ -63,11 +63,9 @@ class McpEvent:
         return {k: v for k, v in asdict(self).items() if v is not None}
 
 
-# Cap per-org SSE connections; see the matching comment in api/motion.py.
-# Activity SSE is admin-only (MCP dashboard), so the bar is already higher
-# than end-user streams — but we still enforce the same cap so a
-# compromised admin key can't be used to exhaust connections.
-MAX_SSE_SUBSCRIBERS_PER_ORG = 50
+# Per-org SSE subscriber cap. Tiered — see the matching comment in api/motion.py.
+# Route handler passes the plan-specific cap from PLAN_LIMITS.
+MAX_SSE_SUBSCRIBERS_PER_ORG = 100  # fallback — Pro Plus default
 
 
 class McpActivityTracker:
@@ -129,25 +127,26 @@ class McpActivityTracker:
                     except (ValueError, KeyError):
                         pass
 
-    def subscribe(self, org_id: str) -> Optional[asyncio.Queue]:
+    def subscribe(self, org_id: str, cap: int = MAX_SSE_SUBSCRIBERS_PER_ORG) -> Optional[asyncio.Queue]:
         """Create a new SSE subscription for an org.
 
-        Returns the queue on success, or ``None`` when the org is already
-        at the SSE subscriber cap — the route handler translates that
-        into a 429 so the client doesn't hang on an endless fake stream.
+        ``cap`` is the per-tier subscriber cap the caller looked up (see
+        PLAN_LIMITS). Returns the queue on success, or ``None`` when the
+        org is already at the cap — the route handler translates that into
+        a 429 so the client doesn't hang on an endless fake stream.
         """
         with self._lock:
             existing = self._subscribers.setdefault(org_id, [])
-            if len(existing) >= MAX_SSE_SUBSCRIBERS_PER_ORG:
+            if len(existing) >= cap:
                 logger.warning(
-                    "[Activity] SSE cap hit for org %s (%d) — rejecting",
-                    org_id, len(existing),
+                    "[Activity] SSE cap hit for org %s (%d/%d) — rejecting",
+                    org_id, len(existing), cap,
                 )
                 return None
             q: asyncio.Queue = asyncio.Queue(maxsize=100)
             existing.append(q)
-        logger.info("[Activity] New SSE subscriber for org %s (total: %d)",
-                     org_id, len(existing))
+        logger.info("[Activity] New SSE subscriber for org %s (%d/%d)",
+                     org_id, len(existing), cap)
         return q
 
     def unsubscribe(self, org_id: str, q: asyncio.Queue):

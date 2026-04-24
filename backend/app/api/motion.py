@@ -26,12 +26,15 @@ router = APIRouter(prefix="/api/motion", tags=["motion"])
 # Lightweight pub/sub that forwards motion events to SSE subscribers.
 # Called by ws.py after persisting each motion event to the DB.
 
-# Cap per-org SSE connections. A single authenticated member could
-# otherwise open thousands of long-lived streams from a scripted loop
-# and exhaust server memory. 50 is well above legitimate dashboard use
-# (a few admins × a few tabs × a few devices) and small enough that an
-# abuser can't meaningfully DOS us with one org's credentials.
-MAX_SSE_SUBSCRIBERS_PER_ORG = 50
+# Per-org SSE subscriber cap. Tiered — the route handler looks up the
+# caller's plan and passes the per-tier cap (defined in
+# ``app.core.plans.PLAN_LIMITS[plan]["max_sse_subscribers"]``) into
+# ``subscribe``. This fallback only matters for code paths that haven't
+# yet been wired to pass the cap through (e.g. future admin tooling); the
+# public SSE routes always pass the tier cap. A single authenticated
+# member otherwise could open thousands of long-lived streams from a
+# scripted loop and exhaust server memory.
+MAX_SSE_SUBSCRIBERS_PER_ORG = 100  # fallback — Pro Plus default
 
 
 class MotionBroadcaster:
@@ -57,23 +60,24 @@ class MotionBroadcaster:
                 except (ValueError, KeyError):
                     pass
 
-    def subscribe(self, org_id: str) -> Optional[asyncio.Queue]:
+    def subscribe(self, org_id: str, cap: int = MAX_SSE_SUBSCRIBERS_PER_ORG) -> Optional[asyncio.Queue]:
         """Add a new SSE subscription for an org.
 
-        Returns the queue on success, or ``None`` when this org is already
-        at the per-org cap (the route handler turns that into a 429).
+        ``cap`` is the per-tier subscriber cap the caller looked up (see
+        PLAN_LIMITS). Returns the queue on success, or ``None`` when this
+        org is already at the cap (the route handler turns that into a 429).
         """
         existing = self._subscribers.setdefault(org_id, [])
-        if len(existing) >= MAX_SSE_SUBSCRIBERS_PER_ORG:
+        if len(existing) >= cap:
             logger.warning(
-                "[Motion] SSE cap hit for org %s (%d) — rejecting",
-                org_id, len(existing),
+                "[Motion] SSE cap hit for org %s (%d/%d) — rejecting",
+                org_id, len(existing), cap,
             )
             return None
         q: asyncio.Queue = asyncio.Queue(maxsize=100)
         existing.append(q)
-        logger.info("[Motion] SSE subscriber added for org %s (total: %d)",
-                    org_id, len(existing))
+        logger.info("[Motion] SSE subscriber added for org %s (%d/%d)",
+                    org_id, len(existing), cap)
         return q
 
     def unsubscribe(self, org_id: str, q: asyncio.Queue):
@@ -174,15 +178,17 @@ async def stream_motion_events(user: AuthUser = Depends(require_view)):
     SSE endpoint — streams motion detection events in real-time.
     Used by the dashboard to show instant motion notifications.
     """
+    from app.core.plans import get_plan_limits
     org_id = user.org_id
-    queue = motion_broadcaster.subscribe(org_id)
+    cap = get_plan_limits(user.plan).get("max_sse_subscribers", MAX_SSE_SUBSCRIBERS_PER_ORG)
+    queue = motion_broadcaster.subscribe(org_id, cap)
     if queue is None:
         raise HTTPException(
             status_code=429,
             detail=(
-                f"Too many open motion streams for this org "
-                f"(cap: {MAX_SSE_SUBSCRIBERS_PER_ORG}). Close unused "
-                f"dashboard tabs and retry."
+                f"Too many open motion streams for this org (cap: {cap} on "
+                f"your current plan). Close unused dashboard tabs and retry, "
+                f"or upgrade for a higher cap."
             ),
         )
 

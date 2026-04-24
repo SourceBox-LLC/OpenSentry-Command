@@ -31,24 +31,49 @@ logger = logging.getLogger(__name__)
 PAYMENT_GRACE_DAYS = 7
 
 PLAN_LIMITS = {
+    # Hardware caps are sized as ABUSE RAILS rather than product differentiators.
+    # Almost no legitimate customer will hit these — the binding constraint for
+    # upgrade decisions is `max_viewer_hours_per_month` below, because that is
+    # what actually drives our egress cost. If a legitimate customer needs more
+    # than the Pro Plus cap, contact us and we'll bump it manually.
+    #
+    # Usage caps (viewer-hours, MCP calls) are the real tier axis. See the
+    # `viewer_hours` aggregator in app.api.hls and the daily cap in
+    # app.mcp.server for enforcement.
     "free_org": {
-        "max_cameras": 2,
-        "max_nodes": 1,
+        "max_cameras": 5,
+        "max_nodes": 2,
+        "max_seats": 2,
+        "max_viewer_hours_per_month": 30,
+        "max_sse_subscribers": 10,
+        "log_retention_days": 30,
     },
     "pro": {
-        "max_cameras": 10,
-        "max_nodes": 5,
+        "max_cameras": 25,
+        "max_nodes": 10,
+        "max_seats": 10,
+        "max_viewer_hours_per_month": 300,
+        "max_sse_subscribers": 30,
+        "log_retention_days": 90,
     },
     "pro_plus": {
-        "max_cameras": 50,
+        "max_cameras": 200,
         "max_nodes": 999,  # effectively unlimited
+        "max_seats": 20,
+        "max_viewer_hours_per_month": 1500,
+        "max_sse_subscribers": 100,
+        "log_retention_days": 365,
     },
     # Transitional alias for the pre-rename "business" slug — see module
     # docstring. Points at the same limits so a stale JWT (or a Setting
     # row not yet refreshed from Clerk) still resolves to the correct caps.
     "business": {
-        "max_cameras": 50,
+        "max_cameras": 200,
         "max_nodes": 999,
+        "max_seats": 20,
+        "max_viewer_hours_per_month": 1500,
+        "max_sse_subscribers": 100,
+        "log_retention_days": 365,
     },
 }
 

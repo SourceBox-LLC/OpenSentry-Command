@@ -569,3 +569,117 @@ class UserNotificationState(Base):
     )
 
 
+class WebhookEndpoint(Base):
+    """Outbound webhook destination for motion / camera / node events.
+
+    Pro Plus-only feature — the MCP+REST API give agents read access, but
+    customers with existing ticketing, PagerDuty, Zapier, or home automation
+    systems want *push* delivery the moment something happens, keyed against
+    their own HTTPS endpoint rather than polling. This row is the
+    subscription; deliveries happen in ``app.api.webhooks_outbound``.
+
+    Each event we POST carries an ``X-SourceBox-Signature`` header holding
+    an HMAC-SHA256 of the raw request body using ``signing_secret`` as the
+    key, so the receiving endpoint can verify the payload actually came
+    from us and wasn't injected by an attacker who learned the URL. The
+    secret is generated once at create-time and shown to the user once —
+    same pattern as the CloudNode and MCP API keys.
+
+    ``events`` is a comma-separated list of event types the endpoint wants
+    ("motion", "camera_online", "camera_offline", "node_online",
+    "node_offline"). Empty ⇒ all events. Kept as a string because SQLite
+    doesn't have first-class array types and the list is short enough that
+    a LIKE filter on delivery is fine.
+    """
+
+    __tablename__ = "webhook_endpoints"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    url = Column(String(500), nullable=False)
+    # HMAC signing secret for X-SourceBox-Signature. Stored as plaintext
+    # (not a hash) because we need to sign outbound requests with it;
+    # treat the value as a credential and never log it.
+    signing_secret = Column(String(128), nullable=False)
+    events = Column(String(500), nullable=False, default="")  # CSV or empty-string
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+    )
+    # Delivery telemetry — bumped by the background deliverer so the UI can
+    # show "last delivered", "consecutive failures", etc. without needing a
+    # separate delivery-log table for every ping.
+    last_delivery_at = Column(DateTime, nullable=True)
+    last_delivery_status = Column(Integer, nullable=True)
+    last_delivery_error = Column(String(500), nullable=True)
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+
+    def to_dict(self, include_secret: bool = False) -> dict:
+        events_list = [e.strip() for e in (self.events or "").split(",") if e.strip()]
+        d = {
+            "id": self.id,
+            "name": self.name,
+            "url": self.url,
+            "events": events_list,
+            "enabled": self.enabled,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "last_delivery_at": self.last_delivery_at.isoformat() if self.last_delivery_at else None,
+            "last_delivery_status": self.last_delivery_status,
+            "last_delivery_error": self.last_delivery_error,
+            "consecutive_failures": self.consecutive_failures,
+        }
+        if include_secret:
+            # Only returned at create time — store-once, show-once.
+            d["signing_secret"] = self.signing_secret
+        return d
+
+
+class OrgMonthlyUsage(Base):
+    """Per-org viewer-seconds counter, bucketed by calendar month (UTC).
+
+    Used to enforce per-tier monthly viewer-hour caps (see
+    ``PLAN_LIMITS[plan]["max_viewer_hours_per_month"]``). Each cached HLS
+    segment served to an authenticated viewer is ~1 second of video, so
+    the counter increments by 1 per successful segment delivery.
+
+    Writes happen out-of-band from the request path: a process-local
+    in-memory accumulator (see ``app.api.hls.flush_viewer_usage``) flushes
+    pending increments every ~60 seconds with a single UPSERT per org, so
+    the hot HLS-serve path never touches the DB. Cap-enforcement reads the
+    cached total + the pending in-memory delta before serving, so an org
+    that's currently blowing past its cap gets blocked on the next segment.
+
+    ``year_month`` is stored as a ``YYYY-MM`` string for clean
+    human-readable debugging and trivial month-rollover queries. The
+    ``(org_id, year_month)`` uniqueness guarantee is what makes the
+    background UPSERT safe.
+    """
+
+    __tablename__ = "org_monthly_usage"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    year_month = Column(String(7), nullable=False)  # "YYYY-MM"
+    viewer_seconds = Column(Integer, nullable=False, default=0)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "year_month", name="uq_org_monthly_usage"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "org_id": self.org_id,
+            "year_month": self.year_month,
+            "viewer_seconds": self.viewer_seconds,
+            "viewer_hours": round(self.viewer_seconds / 3600.0, 2),
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+

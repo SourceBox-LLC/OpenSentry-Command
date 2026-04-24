@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 
-# Member limits per plan — must match Clerk Dashboard plan keys.
-# ``business`` kept as a transitional alias for ``pro_plus`` so a webhook
-# delivered mid-rename (with the old slug) still applies the correct seat cap.
+# Member limits per plan — must match Clerk Dashboard plan keys and
+# PLAN_LIMITS.max_seats in app.core.plans. Source of truth is plans.py; this
+# dict mirrors it here because the webhook handler calls into Clerk's SDK
+# which wants the integer directly. ``business`` kept as a transitional alias.
 PLAN_MEMBER_LIMITS = {
     "free_org": 2,
     "pro": 10,

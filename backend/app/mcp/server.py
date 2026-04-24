@@ -115,50 +115,74 @@ def compute_allowed_tools(scope_mode: str | None, scope_tools: list[str] | None)
 # Per-key rate limiter — sliding window (calls per minute)
 # ---------------------------------------------------------------------------
 
-# Plan-based rate limits (calls per minute per API key)
-# Keys must match Clerk plan slugs stored in the DB by the webhook handler.
-# ``business`` kept as a transitional alias for ``pro_plus`` so a user whose
-# JWT was minted before the Clerk-side rename still hits the paid rate limit
-# instead of being blocked as unrecognized.
+# Plan-based rate limits per API key:
+#   - minute_limit: protects against short-burst spam (e.g. runaway retry loops)
+#   - daily_limit:  protects against runaway automations overnight (e.g. an
+#                   agent stuck in a loop burning through your Clerk API spend
+#                   and your DB throughput for 8 hours while you sleep)
+# ``business`` kept as a transitional alias for ``pro_plus`` — remove after
+# the Clerk-side rename has fully rolled over.
 RATE_LIMITS = {
-    "pro": 30,
-    "pro_plus": 120,
-    "business": 120,  # transitional alias — remove after rollover
+    "pro":      {"minute": 30,  "daily": 5_000},
+    "pro_plus": {"minute": 120, "daily": 30_000},
+    "business": {"minute": 120, "daily": 30_000},  # transitional alias
 }
-DEFAULT_RATE_LIMIT = 0  # Block unrecognized plans (MCP requires Pro+)
+DEFAULT_RATE_LIMIT = None  # Block unrecognized plans (MCP requires Pro+)
 
 
 class _RateLimiter:
-    """Thread-safe sliding-window rate limiter keyed by API key hash."""
+    """Thread-safe sliding-window rate limiter keyed by API key hash.
+
+    Tracks two windows in parallel per key: a 60-second minute window and a
+    24-hour daily window. A request is only allowed when both windows have
+    headroom; the failure message tells the caller which window they tripped.
+    """
 
     def __init__(self):
-        # {key_hash: deque of timestamps}
-        self._windows: dict[str, collections.deque] = {}
+        # {key_hash: deque of timestamps} — two separate maps so the purges
+        # stay cheap (the minute deque stays small, the daily deque is bigger
+        # but we only touch it on a request, not in a background sweep).
+        self._minute: dict[str, collections.deque] = {}
+        self._daily: dict[str, collections.deque] = {}
         self._lock = threading.Lock()
 
-    def check(self, key_hash: str, limit: int, window: int = 60) -> tuple[bool, int]:
-        """
-        Check if a request is allowed.
-        Returns (allowed, remaining_calls).
+    def check(
+        self,
+        key_hash: str,
+        minute_limit: int,
+        daily_limit: int,
+    ) -> tuple[bool, int, str]:
+        """Check if a request is allowed.
+
+        Returns ``(allowed, remaining_minute, breach_reason)``. ``breach_reason``
+        is ``""`` on success, ``"minute"`` when the per-minute cap tripped,
+        or ``"daily"`` when the 24h cap tripped — the caller uses this to
+        craft an accurate error message.
         """
         now = time.time()
-        cutoff = now - window
+        minute_cutoff = now - 60.0
+        daily_cutoff = now - 86_400.0
 
         with self._lock:
-            if key_hash not in self._windows:
-                self._windows[key_hash] = collections.deque()
+            minute_dq = self._minute.setdefault(key_hash, collections.deque())
+            daily_dq = self._daily.setdefault(key_hash, collections.deque())
 
-            dq = self._windows[key_hash]
+            while minute_dq and minute_dq[0] < minute_cutoff:
+                minute_dq.popleft()
+            while daily_dq and daily_dq[0] < daily_cutoff:
+                daily_dq.popleft()
 
-            # Purge old entries
-            while dq and dq[0] < cutoff:
-                dq.popleft()
+            # Check the tightest window first so the caller gets the most
+            # actionable hint (e.g. "you're spamming" vs "you've been looping
+            # for hours").
+            if len(minute_dq) >= minute_limit:
+                return False, 0, "minute"
+            if len(daily_dq) >= daily_limit:
+                return False, 0, "daily"
 
-            if len(dq) >= limit:
-                return False, 0
-
-            dq.append(now)
-            return True, limit - len(dq)
+            minute_dq.append(now)
+            daily_dq.append(now)
+            return True, minute_limit - len(minute_dq), ""
 
 
 _rate_limiter = _RateLimiter()
@@ -286,17 +310,33 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         # still get checked against the live Clerk subscription state.
         from app.core.plans import resolve_org_plan
         plan = resolve_org_plan(db, mcp_key.org_id)
-        limit = RATE_LIMITS.get(plan)
-        if limit is None:
+        limits = RATE_LIMITS.get(plan)
+        if limits is None:
             db.close()
             raise ToolError("MCP requires a Pro or Pro Plus plan. Upgrade at /pricing.")
-        allowed, remaining = _rate_limiter.check(key_hash, limit)
+        allowed, _remaining, breach = _rate_limiter.check(
+            key_hash,
+            minute_limit=limits["minute"],
+            daily_limit=limits["daily"],
+        )
         if not allowed:
             db.close()
-            raise ToolError(
-                f"Rate limit exceeded: {limit} calls/min allowed on {plan.title()} plan. "
-                "Try again shortly."
-            )
+            plan_name = "Pro Plus" if plan in ("pro_plus", "business") else plan.title()
+            if breach == "minute":
+                raise ToolError(
+                    f"Rate limit exceeded: {limits['minute']} calls/min allowed "
+                    f"on the {plan_name} plan. Try again shortly."
+                )
+            else:
+                # Daily cap — almost always means a runaway automation loop;
+                # tell the caller explicitly so they know to check their agent
+                # rather than just retry.
+                raise ToolError(
+                    f"Daily cap reached: {limits['daily']} calls/24h on the "
+                    f"{plan_name} plan. This usually means an agent is stuck "
+                    f"in a loop. The cap resets 24h after the first call. "
+                    f"Upgrade your plan for a higher ceiling."
+                )
 
         # Touch last_used_at
         mcp_key.last_used_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)

@@ -544,6 +544,14 @@ async def get_plan_info(
                 # effective_plan_for_caps (keep nominal plan until resolved).
                 pass
 
+    # Live viewer-hour usage so the dashboard can show "X of Y hours used
+    # this month". The counter is maintained by the HLS segment route
+    # (see ``app.api.hls.record_viewer_second``); we read the in-memory
+    # aggregate here rather than a per-request DB query.
+    from app.api.hls import get_viewer_seconds_used
+    viewer_seconds_used = get_viewer_seconds_used(user.org_id)
+    max_viewer_hours = limits.get("max_viewer_hours_per_month")
+
     return {
         "plan": user.plan,
         "plan_name": get_plan_display_name(user.plan),
@@ -552,6 +560,8 @@ async def get_plan_info(
         "usage": {
             "nodes": current_nodes,
             "cameras": current_cameras,
+            "viewer_hours_used": round(viewer_seconds_used / 3600.0, 2),
+            "viewer_hours_limit": max_viewer_hours,
         },
         "payment_past_due": payment_past_due,
         "grace_days_remaining": grace_days_remaining,
