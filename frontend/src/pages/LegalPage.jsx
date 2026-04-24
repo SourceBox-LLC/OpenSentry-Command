@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom"
 
-const LAST_UPDATED = "April 23, 2026"
+const LAST_UPDATED = "April 24, 2026"
 const CONTACT_EMAIL = "legal@sourcebox.dev"
 
 function TermsContent() {
@@ -89,11 +89,31 @@ function TermsContent() {
 
       <h2>6. Subscription Plans and Payment</h2>
       <p>
-        The Service offers Free, Pro, and Pro Plus subscription tiers with
-        per-tier limits on cameras, nodes, and features. Paid plans are billed
-        monthly through our payment processor (Stripe, via Clerk). Upgrades
-        take effect immediately; downgrades take effect at the end of the
-        current billing period.
+        The Service offers Free, Pro, and Pro Plus subscription tiers.
+        Paid plans are billed monthly or annually at your election through
+        our payment processor (Stripe, via Clerk). Upgrades take effect
+        immediately; downgrades take effect at the end of the current
+        billing period.
+      </p>
+      <p>
+        <strong>Usage-based tier structure.</strong> The binding constraint
+        for each tier is a monthly <strong>viewer-hour cap</strong>, which
+        meters the number of hours of live HLS video we serve to
+        authenticated viewers in your organization (30 hours on Free, 300
+        on Pro, 1,500 on Pro Plus). Recordings stored locally on your
+        CloudNode device and motion-event metadata do not count against
+        this cap. When the cap is reached, live-video playback pauses
+        with an upgrade prompt until the 1st of the next calendar month;
+        cameras continue recording locally, motion detection continues
+        to fire, and MCP integrations continue to function. Hardware
+        counts (cameras, nodes, seats) are enforced as generous safety
+        limits rather than primary tier differentiators.
+      </p>
+      <p>
+        <strong>No overage billing.</strong> Your monthly bill is the plan
+        price you selected. When a metered limit is reached (viewer-hours,
+        MCP calls, outbound webhook fan-out) we pause the metered feature
+        rather than apply automatic overage charges.
       </p>
       <p>
         <strong>Camera-cap enforcement on downgrade or cancellation.</strong>{" "}
@@ -381,12 +401,16 @@ function PrivacyContent() {
       <p>We collect operational data to provide and secure the Service:</p>
       <ul>
         <li>Stream access logs (who viewed which camera, when, and IP address)</li>
+        <li>Per-organization monthly viewer-second aggregates used to enforce the viewer-hour cap for your plan</li>
         <li>MCP tool call activity (tool name, API key used, timestamps, and duration)</li>
+        <li>Outbound webhook delivery telemetry (last attempt timestamp, HTTP status code, consecutive-failure counter) for organizations that have configured outbound webhooks on the Pro Plus plan</li>
         <li>Node registration and heartbeat data (hostname, local IP, camera status)</li>
         <li>Audit logs for administrative actions</li>
       </ul>
       <p>
-        All log data is automatically deleted after 90 days.
+        Log retention is tiered by plan: 30 days on the Free tier, 90 days
+        on Pro, and 365 days on Pro Plus. Expired records are permanently
+        deleted by a scheduled daily cleanup task.
       </p>
 
       <h3>Codec and Device Information</h3>
@@ -474,9 +498,11 @@ function PrivacyContent() {
       <ul>
         <li>Live video segments are held in application memory only as long as needed for playback (approximately the most recent 60 one-second segments per camera) and are evicted automatically; segments are not persisted to disk on our servers</li>
         <li>Recordings and snapshots are stored in encrypted form locally on your CloudNode device, not on our servers, and are subject to the retention and disk-quota settings you configure on that device</li>
-        <li>Stream access logs, MCP activity logs, motion event metadata, notification records, and audit logs are retained for 90 days, then automatically deleted by a scheduled cleanup task</li>
+        <li>Stream access logs, MCP activity logs, motion event metadata, notification records, and audit logs are retained according to the organization's plan: 30 days on the Free tier, 90 days on Pro, and 365 days on Pro Plus. Expired records are permanently deleted by a scheduled daily cleanup task</li>
+        <li>Per-organization monthly viewer-second aggregates are retained indefinitely in a single aggregate row per calendar month so historical usage can be displayed in the dashboard; this row contains no personally identifiable information</li>
+        <li>Outbound webhook configurations (URL, signing secret, event filter, delivery telemetry) are retained for as long as the organization holds the endpoint; deleting an endpoint removes the row immediately with no soft-delete retention</li>
         <li>Account data is retained as long as your account is active</li>
-        <li>Upon organization deletion, all associated nodes, cameras, camera groups, MCP keys, stream access logs, MCP activity logs, motion events, notifications, audit logs, and settings are permanently deleted in a single database transaction</li>
+        <li>Upon organization deletion, all associated nodes, cameras, camera groups, MCP keys, outbound webhook endpoints, stream access logs, MCP activity logs, motion events, notifications, audit logs, monthly usage rows, and settings are permanently deleted in a single database transaction</li>
         <li>You can delete all organization data at any time using the Full Reset feature in Settings, or by deleting your organization through Clerk</li>
       </ul>
 

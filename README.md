@@ -167,7 +167,7 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 | GET | `/api/nodes/{node_id}` | Admin | Get node details |
 | DELETE | `/api/nodes/{node_id}` | Admin | Delete node (cascades cameras + segment caches) |
 | POST | `/api/nodes/{node_id}/rotate-key` | Admin | Rotate API key (5/min) |
-| GET | `/api/nodes/plan` | User | Current plan, node usage, and limits |
+| GET | `/api/nodes/plan` | User | Current plan, camera/node/viewer-hour usage, tier limits, grace-period countdown |
 | GET | `/api/nodes/ws-status` | Admin | Which org nodes are currently WebSocket-connected |
 | POST | `/api/nodes/validate` | None | Validate a `(node_id, api_key)` pair (used by CloudNode setup wizard, 10/min) |
 | POST | `/api/nodes/register` | Node | CloudNode registration (10/min) |
@@ -231,6 +231,18 @@ Agents author incidents via the MCP write tools below; admins review them from t
 | GET | `/api/notifications/unread-count` | User | Unread badge count (capped at 99) |
 | POST | `/api/notifications/mark-viewed` | User | Mark the whole inbox viewed |
 | GET | `/api/notifications/stream` | User | SSE stream for live bell updates |
+
+### Outbound Webhooks (Pro Plus)
+
+Push events (motion, camera/node online/offline, test) to a customer-controlled HTTPS endpoint. Every delivery is signed with HMAC-SHA256 in `X-SourceBox-Signature`; 4xx not retried, 5xx/network retried at 0s/1s/5s/30s; auto-disables after 20 consecutive failures. See the `/docs#outbound-webhooks` page for the full payload format and verification recipe.
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/webhooks-outbound` | Admin | List endpoints for the org (or `upgrade_required=true` for non-Pro-Plus orgs) |
+| POST | `/api/webhooks-outbound` | Admin | Create an endpoint. Returns `signing_secret` **once** — store it immediately (30/hour) |
+| PATCH | `/api/webhooks-outbound/{id}` | Admin | Toggle enabled, rename, re-target, change event filter (60/min) |
+| DELETE | `/api/webhooks-outbound/{id}` | Admin | Hard-delete (30/min) |
+| POST | `/api/webhooks-outbound/{id}/test` | Admin | Fire a synthetic `test` event to verify the receiver (10/min) |
 
 ### MCP (for AI clients)
 
@@ -437,7 +449,7 @@ You're at the plan's node limit. `GET /api/nodes/plan` returns `{ nodes_used, no
 
 - Motion reporting is controlled by the CloudNode's `motion.enabled` config — if it's off, no events will ever arrive.
 - The dashboard subscribes to `/api/motion/events/stream` (SSE). If your deployment is behind a proxy that buffers responses, SSE may never flush — make sure proxy-buffering is disabled for `/api/*/stream`.
-- Per-org rate limits cap motion events at 120/min per camera; check `app/api/motion.py` if you need to tune this.
+- The CloudNode's HTTP motion fallback is capped at 120/min per node (WebSocket is the primary channel and isn't rate-limited). Check `app/api/motion.py` and the per-route table in `AGENTS.md` if you need to tune this.
 
 ### MCP tools don't show up in my agent
 

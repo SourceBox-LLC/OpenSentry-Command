@@ -189,7 +189,13 @@ app.include_router(webhooks_outbound.router)
 app.mount("/mcp", mcp_app)
 
 
-# Default retention: 90 days for all log types
+# Fallback retention for orgs whose plan can't be resolved (Clerk lookup
+# failed AND no cached Setting). The per-org tiered retention —
+# 30d / 90d / 365d for Free / Pro / Pro Plus — is sourced from
+# ``app.core.plans.PLAN_LIMITS[plan]["log_retention_days"]`` and applied
+# in ``_log_cleanup_loop`` below. This env var only matters when plan
+# resolution breaks entirely; we keep a 90-day default so a transient
+# Clerk outage doesn't silently wipe a paid customer's logs.
 LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
 LOG_CLEANUP_INTERVAL_HOURS = 24  # Run once per day
 # Cameras offline for longer than this get their in-memory caches freed.

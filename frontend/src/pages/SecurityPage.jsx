@@ -105,17 +105,27 @@ function SecurityPage() {
                 <tr>
                   <td>Motion events</td>
                   <td>Command Center database (metadata only: timestamp, score, camera)</td>
-                  <td>90 days, then auto-deleted.</td>
+                  <td>Tiered: 30 days on Free, 90 days on Pro, 365 days on Pro Plus.</td>
                 </tr>
                 <tr>
                   <td>Stream access logs</td>
                   <td>Command Center database (user, IP, user agent, timestamp)</td>
-                  <td>90 days, then auto-deleted.</td>
+                  <td>Tiered: 30 / 90 / 365 days.</td>
                 </tr>
                 <tr>
                   <td>Audit logs (admin actions)</td>
                   <td>Command Center database</td>
-                  <td>90 days, then auto-deleted.</td>
+                  <td>Tiered: 30 / 90 / 365 days.</td>
+                </tr>
+                <tr>
+                  <td>Monthly viewer-hour aggregate</td>
+                  <td>Command Center database (one row per org per month: org_id, year_month, viewer_seconds)</td>
+                  <td>Kept indefinitely for historical usage display; contains no personally identifiable information.</td>
+                </tr>
+                <tr>
+                  <td>Outbound webhook config (Pro Plus)</td>
+                  <td>Command Center database (URL, signing secret, event filter, delivery telemetry)</td>
+                  <td>Retained while the endpoint exists; hard-deleted when you remove it.</td>
                 </tr>
                 <tr>
                   <td>Cloud API key (held by your node)</td>
@@ -223,7 +233,8 @@ function SecurityPage() {
             Every authenticated stream view is logged: the viewer's user ID,
             email, IP address, truncated user agent, camera ID, and timestamp.
             Admins can see this from the in-app admin dashboard and export it.
-            Logs are retained for 90 days and then automatically purged.
+            Logs are retained per the organization's plan (30 days on Free,
+            90 days on Pro, 365 days on Pro Plus) and then automatically purged.
           </p>
           <p>
             This log trail belongs to your organization, not to us. We don't

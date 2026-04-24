@@ -86,6 +86,7 @@ function DocsPage() {
           <div className="docs-sidebar-group">
             <div className="docs-sidebar-group-label">Integrations</div>
             <a href="#mcp" className="docs-sidebar-link">MCP Integration</a>
+            <a href="#outbound-webhooks" className="docs-sidebar-link">Outbound Webhooks</a>
           </div>
           <div className="docs-sidebar-group">
             <div className="docs-sidebar-group-label">Account & Security</div>
@@ -183,7 +184,7 @@ function DocsPage() {
             <h3>Prerequisites</h3>
             <ul>
               <li>A USB webcam (built-in laptop cameras work too)</li>
-              <li>A SourceBox Sentry account (free tier covers 2 cameras on 1 node)</li>
+              <li>A SourceBox Sentry account (free tier covers up to 5 cameras across 2 nodes, with 30 viewer-hours/month of live playback)</li>
               <li>A Linux, Windows, or macOS machine for CloudNode</li>
               <li>FFmpeg installed (or Docker) — the installer downloads it automatically on Windows</li>
               <li>Outbound HTTPS access from the CloudNode machine to the internet</li>
@@ -1069,10 +1070,113 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
             </div>
           </section>
 
+          {/* ── Outbound webhooks (Pro Plus) ────────────────── */}
+          <section className="docs-section" id="outbound-webhooks">
+            <h2>Outbound Webhooks<a href="#outbound-webhooks" className="docs-anchor">#</a></h2>
+            <p>
+              Pro Plus feature. Push motion, camera-state, and node-state
+              events directly to your own HTTPS endpoint — wire SourceBox
+              Sentry into PagerDuty, Zapier, Slack, a ticketing system, or
+              home-automation without keeping a long-lived MCP session
+              or polling the REST API.
+            </p>
+
+            <h3>Setup</h3>
+            <ol>
+              <li>Go to <strong>Settings → Outbound Webhooks</strong> and click <strong>Add Endpoint</strong>.</li>
+              <li>Give it a name, an <code>https://</code> URL, and pick which event types the endpoint wants (leave empty for "all events").</li>
+              <li>Save the signing secret shown in the green banner — it is displayed <strong>once</strong>. Losing it means deleting and re-creating the endpoint.</li>
+              <li>Click <strong>Test</strong> on the new endpoint to fire a synthetic <code>test</code> event and verify your receiver.</li>
+            </ol>
+
+            <h3>Event payload</h3>
+            <p>Every delivery is a JSON <code>POST</code> with this body shape:</p>
+            <div className="docs-code-block">
+              <code>{`{
+  "event": "motion",
+  "org_id": "org_abc123",
+  "timestamp": "2026-04-23T19:42:11.482301+00:00",
+  "data": {
+    "camera_id": "cam_front_door",
+    "node_id": "node_xyz",
+    "score": 73,
+    "segment_seq": 14928,
+    "timestamp": "2026-04-23T19:42:11.399822+00:00"
+  }
+}`}</code>
+              <button className="docs-copy-btn" onClick={() => copyToClipboard(`{"event":"motion","org_id":"org_abc123","timestamp":"2026-04-23T19:42:11.482301+00:00","data":{"camera_id":"cam_front_door","node_id":"node_xyz","score":73,"segment_seq":14928,"timestamp":"2026-04-23T19:42:11.399822+00:00"}}`)}>Copy</button>
+            </div>
+
+            <h3>Request headers</h3>
+            <ul>
+              <li><code>X-SourceBox-Event</code> — the event kind (<code>motion</code> / <code>camera_online</code> / <code>camera_offline</code> / <code>node_online</code> / <code>node_offline</code> / <code>test</code>).</li>
+              <li><code>X-SourceBox-Signature</code> — HMAC-SHA256 of the raw request body, hex-encoded, using your endpoint's signing secret as the key. Verify before trusting the payload.</li>
+              <li><code>X-SourceBox-Delivery-Attempt</code> — 1 for the first try, 2/3/4 for retries. Idempotency key if you need one: combine <code>event</code> + <code>data.timestamp</code>.</li>
+              <li><code>User-Agent: SourceBox-Sentry-Webhooks/1</code></li>
+            </ul>
+
+            <h3>Verifying the signature (Python)</h3>
+            <div className="docs-code-block">
+              <code>{`import hmac, hashlib
+
+SIGNING_SECRET = os.environ["SOURCEBOX_WEBHOOK_SECRET"]  # from /settings
+
+def verify(raw_body: bytes, header_signature: str) -> bool:
+    expected = hmac.new(
+        SIGNING_SECRET.encode(),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, header_signature)`}</code>
+              <button className="docs-copy-btn" onClick={() => copyToClipboard(`import hmac, hashlib
+
+SIGNING_SECRET = os.environ["SOURCEBOX_WEBHOOK_SECRET"]
+
+def verify(raw_body: bytes, header_signature: str) -> bool:
+    expected = hmac.new(SIGNING_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header_signature)`)}>Copy</button>
+            </div>
+            <p>
+              Use the raw request body (the exact bytes we sent) — don't
+              re-serialize the parsed JSON, or the signature won't match
+              because Python's JSON encoder and ours may format it
+              differently.
+            </p>
+
+            <h3>Delivery behaviour</h3>
+            <ul>
+              <li><strong>Retries:</strong> 0s → 1s → 5s → 30s for 5xx responses and network errors, with a 10-second per-attempt timeout. 4xx is <em>not</em> retried (your endpoint said no; retrying won't help).</li>
+              <li><strong>Success:</strong> any 2xx response code. We don't inspect the body.</li>
+              <li><strong>Auto-disable:</strong> after 20 consecutive failures an endpoint flips to <code>enabled=false</code> so a dead URL can't burn outbound connections forever. Re-enabling from the dashboard clears the failure counter.</li>
+              <li><strong>Fan-out:</strong> every matching endpoint gets its own delivery task; one slow receiver doesn't hold up another. Up to 20 endpoints per org.</li>
+              <li><strong>Ordering:</strong> <em>not</em> guaranteed. Deliveries are fire-and-forget async tasks; if you need strict order, serialize on your side using the <code>data.timestamp</code> field.</li>
+            </ul>
+
+            <h3>Event types</h3>
+            <ul>
+              <li><code>motion</code> — a motion-detection scene-change event fired.</li>
+              <li><code>camera_online</code> / <code>camera_offline</code> — a camera transitioned status.</li>
+              <li><code>node_online</code> / <code>node_offline</code> — a CloudNode went online or stopped heartbeating.</li>
+              <li><code>test</code> — fired manually from the Test button; use this to confirm your receiver works.</li>
+            </ul>
+
+            <p>
+              Endpoints are plan-gated. Free and Pro orgs see an upgrade
+              prompt under <strong>Settings → Outbound Webhooks</strong> instead of the
+              create form.
+            </p>
+          </section>
+
           {/* ── Plans & Limits ────────────────────────────────── */}
           <section className="docs-section" id="plans">
             <h2>Plans & Limits<a href="#plans" className="docs-anchor">#</a></h2>
-            <p>SourceBox Sentry offers three plans to fit different needs.</p>
+            <p>
+              SourceBox Sentry is priced on <strong>usage</strong> — how much live
+              video you watch per month — not on how many cameras you connect.
+              Hardware counts (cameras, nodes) are generous abuse-rails rather than
+              product differentiators; the real tier axis is viewer-hours and
+              integration depth (MCP, outbound webhooks).
+            </p>
 
             <div className="docs-plans-table">
               <table>
@@ -1085,29 +1189,59 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr><td>Cameras</td><td>2</td><td>10</td><td>50</td></tr>
-                  <tr><td>Nodes</td><td>1</td><td>5</td><td>Unlimited</td></tr>
-                  <tr><td>Live Streaming</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+                  <tr><td><strong>Viewer-hours / month</strong></td><td><strong>30</strong></td><td><strong>300</strong></td><td><strong>1,500</strong></td></tr>
+                  <tr><td>Cameras (abuse rail)</td><td>5</td><td>25</td><td>200</td></tr>
+                  <tr><td>Nodes (abuse rail)</td><td>2</td><td>10</td><td>Unlimited</td></tr>
+                  <tr><td>Team seats</td><td>2</td><td>10</td><td>20</td></tr>
+                  <tr><td>Live dashboard connections (SSE)</td><td>10</td><td>30</td><td>100</td></tr>
+                  <tr><td>Log retention</td><td>30 days</td><td>90 days</td><td>365 days</td></tr>
+                  <tr><td>Live streaming + recording</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+                  <tr><td>Local recording to CloudNode (unmetered)</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
                   <tr><td>Snapshots</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-                  <tr><td>Recording</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-                  <tr><td>Camera Groups</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-                  <tr><td>Admin Dashboard</td><td>--</td><td>Yes</td><td>Yes</td></tr>
-                  <tr><td>Stream Analytics</td><td>--</td><td>Yes</td><td>Yes</td></tr>
-                  <tr><td>MCP Integration</td><td>--</td><td>Yes</td><td>Yes</td></tr>
-                  <tr><td>MCP Rate Limit</td><td>--</td><td>30 calls/min</td><td>120 calls/min</td></tr>
-                  <tr><td>Danger Zone Tools</td><td>--</td><td>Yes</td><td>Yes</td></tr>
-                  <tr><td>Priority Support</td><td>--</td><td>--</td><td>Yes</td></tr>
+                  <tr><td>Camera groups</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+                  <tr><td>Admin dashboard + stream analytics</td><td>—</td><td>Yes</td><td>Yes</td></tr>
+                  <tr><td>Danger-zone tools (log wipe, full reset)</td><td>—</td><td>Yes</td><td>Yes</td></tr>
+                  <tr><td>MCP integration</td><td>—</td><td>Yes</td><td>Yes</td></tr>
+                  <tr><td>MCP rate limit (per key)</td><td>—</td><td>30 / min · 5,000 / day</td><td>120 / min · 30,000 / day</td></tr>
+                  <tr><td>Outbound webhooks</td><td>—</td><td>—</td><td>Yes</td></tr>
+                  <tr><td>Priority support</td><td>—</td><td>—</td><td>24h first-response SLA</td></tr>
                 </tbody>
               </table>
             </div>
 
+            <h3>What counts as a viewer-hour</h3>
+            <p>
+              One viewer-hour = one hour of live HLS video served to an
+              authenticated browser session. The counter increments by
+              1 for every segment our backend serves (segments are ~1 second
+              each), so a minute of live playback costs ~1/60th of an hour.
+            </p>
+            <ul>
+              <li><strong>Counts:</strong> live playback from <code>GET /stream.m3u8</code>, including background dashboard tabs that keep polling segments.</li>
+              <li><strong>Does not count:</strong> recordings stored locally on your CloudNode (they never touch the cloud), motion event metadata, incident snapshots shown in the dashboard, MCP tool calls.</li>
+              <li><strong>When you hit the cap:</strong> segment requests return HTTP <code>429</code> with an upgrade prompt. Your cameras keep recording locally, your motion events still fire, your MCP integrations still work — only live playback to the dashboard pauses until the 1st of next month.</li>
+            </ul>
+
             <h3>Enforcement</h3>
             <ul>
-              <li><strong>Camera limits</strong> — When a node registers and you're at your camera cap, additional cameras are skipped.</li>
-              <li><strong>Node limits</strong> — Creating a node beyond your limit shows an upgrade prompt.</li>
-              <li><strong>Feature gates</strong> — Admin dashboard, danger zone, and MCP require Pro or Pro Plus.</li>
-              <li><strong>MCP rate limits</strong> — Tool calls are rate limited per API key: 30/min on Pro, 120/min on Pro Plus. Exceeding the limit returns an error until the window resets.</li>
+              <li><strong>Viewer-hour cap</strong> — enforced on each HLS segment serve. The dashboard shows a live usage gauge with warn/full states at 80% / 100%.</li>
+              <li><strong>Camera / node limits</strong> — when a node registers and you're at your camera cap, additional cameras are skipped with HTTP 402 and a <code>plan_limit_hit</code> detail. They are preserved in the database (soft-disable, not deletion) so upgrading restores them instantly.</li>
+              <li><strong>SSE connection cap</strong> — per-org concurrent live-dashboard connections are capped per tier. Hitting the cap returns HTTP 429; close unused tabs or upgrade.</li>
+              <li><strong>Feature gates</strong> — admin dashboard, danger zone, and MCP require Pro or Pro Plus. Outbound webhooks require Pro Plus.</li>
+              <li><strong>MCP rate limits</strong> — enforced per API key as a sliding window: a per-minute cap for burst control and a 24-hour cap that catches runaway automation loops.</li>
+              <li><strong>Log retention</strong> — stream access logs, MCP activity, audit logs, motion events, and notifications are automatically deleted after the per-tier retention window (a nightly cleanup task iterates orgs and applies each org's tier).</li>
             </ul>
+
+            <h3>Past-due grace period</h3>
+            <p>
+              When a payment fails, your account enters a 7-day grace period
+              during which retries happen automatically and your service
+              keeps running at full tier. After 7 days without a successful
+              payment, cameras beyond the Free-tier cap are suspended and
+              you're rebased to Free-tier viewer-hours. Updating your card
+              resumes everything immediately. The dashboard shows a live
+              countdown while you're in the grace window.
+            </p>
 
             <p>Manage your subscription from <strong>Settings &gt; Subscription</strong> or the <Link to="/pricing">Pricing</Link> page.</p>
           </section>
@@ -1272,9 +1406,16 @@ brew install ffmpeg            # macOS`}</code>
 
             <h3>MCP tool calls return 429</h3>
             <p>
-              You've hit the rate limit (30 calls/min on Pro, 120 calls/min on Pro Plus). Wait
-              a minute and retry, or upgrade. Rate limits are per API key — splitting an agent
-              across multiple keys distributes the budget.
+              Two different limits can trigger this, and the error message
+              tells you which:
+            </p>
+            <ul>
+              <li><strong>Per-minute cap</strong> (30/min on Pro, 120/min on Pro Plus) — usually a burst of simultaneous calls from an agent. Wait 60 seconds and retry.</li>
+              <li><strong>Per-day cap</strong> (5,000/day on Pro, 30,000/day on Pro Plus) — almost always a runaway loop. The 24-hour window resets from the first call, not midnight, so inspect what your agent is doing before blindly retrying.</li>
+            </ul>
+            <p>
+              Rate limits are per API key — splitting an agent across multiple
+              keys distributes the budget.
             </p>
 
             <h3>Hardware encoder won't initialize</h3>
@@ -1586,32 +1727,81 @@ brew install ffmpeg            # macOS`}</code>
                   <tr><td>DELETE <code>/api/mcp/keys/{"{id}"}</code></td><td>30 / hour</td><td>Per org</td></tr>
                   <tr><td>DELETE <code>/api/camera-groups/{"{id}"}</code></td><td>60 / min</td><td>Per org</td></tr>
                   <tr><td>POST <code>/api/webhooks/clerk</code></td><td>120 / min</td><td>Per IP (Svix-signed)</td></tr>
-                  <tr><td>GET/POST live stream and segment proxies</td><td>Unlimited</td><td>Read-path fast path</td></tr>
+                  <tr><td>POST <code>/api/webhooks-outbound</code> (create)</td><td>30 / hour</td><td>Per org</td></tr>
+                  <tr><td>PATCH <code>/api/webhooks-outbound/{"{id}"}</code></td><td>60 / min</td><td>Per org</td></tr>
+                  <tr><td>DELETE <code>/api/webhooks-outbound/{"{id}"}</code></td><td>30 / min</td><td>Per org</td></tr>
+                  <tr><td>POST <code>/api/webhooks-outbound/{"{id}"}/test</code></td><td>10 / min</td><td>Per org</td></tr>
+                  <tr><td>GET live stream and segment proxies</td><td>Unlimited (read-path)</td><td>Capped by viewer-hours</td></tr>
                 </tbody>
               </table>
             </div>
 
-            <h3>MCP Tool-Call Limits</h3>
+            <h3>Viewer-hour cap (HLS live playback)</h3>
             <p>
-              MCP keys have a separate budget on top of the REST limits. Buckets
-              are per-key, so revoking and re-issuing a key starts fresh.
+              Live-segment reads are not per-request rate limited, but every
+              successful segment delivery counts against your monthly
+              viewer-hour cap. When you hit the cap, subsequent segment
+              requests return HTTP <code>429</code> with <code>Retry-After: 3600</code>
+              and a body explaining when the cap resets. Caps:
             </p>
             <div className="docs-plans-table">
               <table>
                 <thead>
-                  <tr><th>Plan</th><th>Calls / minute</th></tr>
+                  <tr><th>Plan</th><th>Viewer-hours / month</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td>Free</td><td>— (MCP not available)</td></tr>
+                  <tr><td>Free</td><td>30</td></tr>
+                  <tr><td>Pro</td><td>300</td></tr>
+                  <tr><td>Pro Plus</td><td>1,500</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>MCP tool-call limits</h3>
+            <p>
+              MCP keys have a separate budget on top of the REST limits.
+              Buckets are per-key, so revoking and re-issuing a key starts
+              fresh. Two windows run in parallel: a per-minute cap for burst
+              protection and a 24-hour cap that catches runaway automations.
+              The 429 response body's <code>breach</code> field tells you which
+              window you tripped.
+            </p>
+            <div className="docs-plans-table">
+              <table>
+                <thead>
+                  <tr><th>Plan</th><th>Per minute</th><th>Per 24 hours</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Free</td><td colSpan="2">— (MCP not available)</td></tr>
+                  <tr><td>Pro</td><td>30</td><td>5,000</td></tr>
+                  <tr><td>Pro Plus</td><td>120</td><td>30,000</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3>SSE subscriber caps (per org)</h3>
+            <p>
+              Concurrent live-dashboard connections are capped per tier per
+              channel (motion, notifications, MCP activity). Hitting the cap
+              returns 429 with a detail that includes your current cap;
+              close unused browser tabs to free a slot.
+            </p>
+            <div className="docs-plans-table">
+              <table>
+                <thead>
+                  <tr><th>Plan</th><th>Concurrent SSE / org</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Free</td><td>10</td></tr>
                   <tr><td>Pro</td><td>30</td></tr>
-                  <tr><td>Pro Plus</td><td>120</td></tr>
+                  <tr><td>Pro Plus</td><td>100</td></tr>
                 </tbody>
               </table>
             </div>
 
             <h3>Other caps</h3>
             <ul>
-              <li><strong>SSE subscribers</strong> — 50 concurrent streams per org per channel (motion, notifications, MCP activity). Hitting the cap returns 429; close unused dashboard tabs to free a slot.</li>
+              <li><strong>Webhook endpoints per org</strong> — Pro Plus only, capped at 20 endpoints per org. Each endpoint auto-disables after 20 consecutive delivery failures.</li>
               <li><strong>Segment payload size</strong> — <code>push-segment</code> uploads are capped at 2 MiB per segment. Oversized segments return HTTP 400.</li>
               <li><strong>Pagination</strong> — <code>limit</code> is capped per endpoint (200 for incidents and notifications, 500 for motion events, 500 for audit logs). <code>offset</code> is capped at 1,000,000 on every paginated endpoint because large offsets force a full table scan.</li>
               <li><strong>Plan resolution</strong> — live Clerk lookups are throttled to one every 60 seconds per org to bound our billing-API spend; cached plan values are always served in between.</li>

@@ -63,7 +63,8 @@ backend/
 │   │   ├── notifications.py      # Notification inbox, unread count, SSE, broadcaster
 │   │   ├── install.py            # CloudNode + MCP setup script endpoints
 │   │   ├── ws.py                 # CloudNode WebSocket channel
-│   │   └── webhooks.py           # Clerk subscription webhook handler
+│   │   ├── webhooks.py           # Clerk subscription webhook handler (inbound)
+│   │   └── webhooks_outbound.py  # Pro Plus outbound webhooks: CRUD + HMAC signing + retry delivery
 │   ├── mcp/
 │   │   └── server.py             # FastMCP server + 22 tools + ScopeMiddleware
 │   ├── core/
@@ -72,7 +73,7 @@ backend/
 │   │   ├── clerk.py              # Clerk SDK init
 │   │   ├── database.py           # SQLAlchemy engine + session factory + Base
 │   │   └── limiter.py            # slowapi Limiter instance (tenant-aware key)
-│   ├── models/models.py          # 13 ORM models (see Data Models below)
+│   ├── models/models.py          # 15 ORM models (see Data Models below)
 │   └── schemas/schemas.py        # Pydantic request/response schemas incl. McpKeyCreate
 ├── scripts/
 │   ├── install.sh / install.ps1  # CloudNode installers (served by install.py)
@@ -195,7 +196,7 @@ MCP endpoint (`POST /mcp`) validates `Authorization: Bearer osc_<hex>`:
 
 ## Data Models
 
-All 13 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation.
+All 15 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation.
 
 | Model | Key Fields | Purpose |
 |-------|------------|---------|
@@ -212,6 +213,8 @@ All 13 models in `backend/app/models/models.py`. Every model has `org_id` for te
 | `MotionEvent` | `camera_id`, `node_id`, `score` (0–100), `segment_seq`, `timestamp` | Motion detected by CloudNode scene-change analysis |
 | `Notification` | `kind`, `audience` (`all` / `admin`), `title`, `body`, `severity`, `link`, `camera_id`, `node_id`, `meta_json` | Unified inbox entry (motion, camera/node online/offline, errors) |
 | `UserNotificationState` | `clerk_user_id` + `org_id` (unique), `last_viewed_at` | Per-user read cursor for the inbox |
+| `OrgMonthlyUsage` | `org_id` + `year_month` (unique), `viewer_seconds` | One row per org per calendar month; aggregates live-playback viewer-seconds for viewer-hour cap enforcement |
+| `WebhookEndpoint` | `name`, `url`, `signing_secret`, `events` (CSV), `enabled`, `last_delivery_at`, `last_delivery_status`, `consecutive_failures` | Pro Plus outbound webhook subscription; `signing_secret` is plaintext (needed for HMAC signing) so treat as a credential |
 
 Validation constants (also in `models.py`):
 - `INCIDENT_STATUSES` = `("open", "acknowledged", "resolved", "dismissed")`
@@ -235,6 +238,7 @@ Validation constants (also in `models.py`):
 | `install.py` | (none) | installation |
 | `ws.py` | (none) | ws |
 | `webhooks.py` | `/api/webhooks` | webhooks |
+| `webhooks_outbound.py` | `/api/webhooks-outbound` | webhooks-outbound |
 
 ### All endpoints
 
@@ -325,6 +329,13 @@ Validation constants (also in `models.py`):
 **webhooks.py** (prefix `/api/webhooks`):
 - `POST /clerk` — Clerk subscription events (Svix signature when `CLERK_WEBHOOK_SECRET` is set)
 
+**webhooks_outbound.py** (prefix `/api/webhooks-outbound`, Pro Plus only):
+- `GET /` — list endpoints (returns `{upgrade_required: true}` for non-Pro-Plus orgs)
+- `POST /` — create endpoint; returns `signing_secret` once (30/hour)
+- `PATCH /{id}` — toggle enabled / rename / re-target / change event filter (60/min)
+- `DELETE /{id}` — hard-delete (30/min)
+- `POST /{id}/test` — fire synthetic `test` event (10/min)
+
 **Top-level** (`main.py`):
 - `GET /api/health` — `{"status": "healthy", "version": "2.1.0"}` (no auth)
 - FastAPI docs: `/api-docs` (Swagger), `/api-redoc` (ReDoc), OpenAPI at `/api/openapi.json`. `/docs` is the React `DocsPage`.
@@ -404,7 +415,13 @@ Plus `FRONTEND_URL` if set (validated: must have scheme, no trailing slash, no e
 - `POST /api/cameras/{id}/playlist` — 600/min
 - `POST /api/cameras/{id}/motion` — 120/min
 
-HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are intentionally unlimited — segment fetches are fast-path with no per-request DB work.
+HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are not per-request rate limited — segment fetches are fast-path with no per-request DB work. They are however metered against the caller's monthly viewer-hour cap (see `Plan Enforcement` → Viewer-hours below): every served segment increments an in-memory counter, and the 429 kicks in when the counter exceeds `max_viewer_hours_per_month * 3600`.
+
+Additional routes not in the table above (added with outbound webhooks):
+- `POST /api/webhooks-outbound` — 30/hour (Pro Plus only)
+- `PATCH /api/webhooks-outbound/{id}` — 60/min
+- `DELETE /api/webhooks-outbound/{id}` — 30/min
+- `POST /api/webhooks-outbound/{id}/test` — 10/min
 
 ## Webhook Handling
 
@@ -418,12 +435,36 @@ HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are intentionally unlimited �
 
 ## Plan Enforcement
 
-`app/core/plans.py` owns plan-cap policy. Two entry points:
+`app/core/plans.py` owns plan-cap policy. `PLAN_LIMITS` is the source of truth for every per-tier number — camera/node/seat caps (abuse rails), monthly viewer-hour cap (the real tier axis), per-channel SSE concurrency cap, and log retention days. The `business` slug is retained as a transitional alias for `pro_plus` so JWTs minted before the Clerk-side rename keep resolving correctly.
+
+Two entry points for plan resolution:
 
 - `resolve_org_plan(db, org_id)` — nominal plan (what Clerk says the org pays for). Fast-path reads `Setting(org_plan)`; falls back to a throttled `clerk.organizations.get_billing_subscription` call for free/missing orgs. Used for the status-bar badge CloudNode shows the operator.
 - `effective_plan_for_caps(db, org_id)` — plan to use for *cap enforcement*. Returns `resolve_org_plan` unless the org has been `payment_past_due` for more than `PAYMENT_GRACE_DAYS` (7), in which case it returns `"free_org"`. Used inside `enforce_camera_cap`; keeps the two concerns separate so brief card failures don't punish paying users but long-unpaid accounts don't keep getting Pro service.
 
+### Camera cap
+
 `enforce_camera_cap(db, org_id)` — idempotent. Orders the org's cameras by `created_at ASC`, keeps the oldest N (N = effective plan's `max_cameras`), flags the rest as `disabled_by_plan=True`. Oldest-first is deterministic and preserves long-running cameras with history. On upgrade, flags clear in the same call.
+
+### Viewer-hours (the real tier axis)
+
+`app/api/hls.py` maintains a per-org monthly viewer-second counter. Each successful `GET /segment/{filename}` serve calls `record_viewer_second(org_id)` which increments a thread-safe in-memory dict keyed on `(org_id, "YYYY-MM")`. The `_viewer_usage_flush_loop` background task flushes accumulated deltas to `OrgMonthlyUsage` rows every 60 seconds with one UPSERT per active org, so the hot serve path never touches SQLite.
+
+Before serving each segment, `get_hls_segment` calls `_warm_cached_viewer_seconds(org_id)` to get the authoritative running total (cached DB value + pending in-memory delta). If that total is ≥ `max_viewer_hours_per_month * 3600`, the route returns HTTP 429 with `Retry-After: 3600` and an upgrade message. The first request for an org in a given process lifetime amortizes a DB read to warm the cache; thereafter it's all in-memory.
+
+The counter is exposed on `GET /api/nodes/plan` as `usage.viewer_hours_used` / `usage.viewer_hours_limit` so the dashboard can render a live gauge.
+
+### SSE caps
+
+Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActivityTracker`) accepts a per-call `cap` argument. Route handlers look up `get_plan_limits(user.plan)["max_sse_subscribers"]` and pass that; the broadcaster refuses `subscribe()` when the org is at cap and the route turns it into a 429 with the tier-specific cap in the message.
+
+### MCP daily cap
+
+`app/mcp/server.py::_RateLimiter` tracks two windows per API key hash: a rolling 60-second window (minute cap) and a rolling 24-hour window (daily cap). `RATE_LIMITS[plan]` supplies both numbers (Pro 30/min × 5000/day, Pro Plus 120/min × 30000/day). The `check()` method returns a `breach` reason string so the caller can generate a "you're spamming" vs "you've been looping for hours" error message.
+
+### Log retention
+
+`_log_cleanup_loop` in `main.py` runs daily. It collects distinct `org_id` values from the log tables, resolves each org's plan via `resolve_org_plan`, and deletes each log type older than that org's `log_retention_days`. Free gets 30d, Pro 90d, Pro Plus 365d.
 
 **Triggers** for `enforce_camera_cap`:
 1. Webhook: subscription lifecycle events (create/update/cancel/paid).
@@ -434,14 +475,24 @@ HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are intentionally unlimited �
 
 **Heartbeat response** also carries `disabled_cameras: list[str]` scoped to the calling node, so CloudNode can skip the upload task entirely for suspended cameras (no 402 flood) and mark those rows `suspended (plan)` in its live dashboard.
 
+## Outbound Webhooks (Pro Plus)
+
+`app/api/webhooks_outbound.py` owns the feature. One `WebhookEndpoint` row per subscription (URL + signing secret + event CSV + enabled + delivery telemetry). CRUD routes under `/api/webhooks-outbound`.
+
+- `dispatch_event(db, org_id, kind, payload)` is the producer entry point. Called from `app/api/ws.py` after motion events and from `app/api/notifications.py::emit_camera_transition` / `emit_node_transition` for camera + node state changes. Looks up matching endpoints (tier-gated to Pro Plus; free/pro orgs have zero rows so the SELECT is a no-op fast path) and spawns one `asyncio.create_task(_deliver(...))` per endpoint.
+- `_deliver(endpoint_id, kind, payload)` signs the body with HMAC-SHA256 using the endpoint's `signing_secret`, POSTs it with `X-SourceBox-Signature`, `X-SourceBox-Event`, and `X-SourceBox-Delivery-Attempt` headers. Retry schedule is `[0, 1, 5, 30]` seconds with a 10-second per-attempt timeout. 4xx is *not* retried (receiver rejected, retrying won't help); 5xx and network errors are. Each attempt opens its own DB session so a mid-flight delete or pause is respected.
+- `_record_delivery()` updates `last_delivery_at` / `last_delivery_status` / `last_delivery_error` / `consecutive_failures` on the endpoint row. When `consecutive_failures >= MAX_CONSECUTIVE_FAILURES` (20) the endpoint auto-disables so a dead URL doesn't burn outbound connections forever.
+- 20-endpoint cap per org; HTTPS-only (http:// rejected at the schema layer); signing secret is plaintext in the DB (we need it to sign) and shown to the user exactly once via `include_secret=True` on the create response.
+
 ## Background Loops
 
-`main.py` starts two long-running tasks on lifespan startup:
+`main.py` starts three long-running tasks on lifespan startup:
 
 | Task | Cadence | What it does |
 |------|---------|--------------|
-| `_log_cleanup_loop` | Every `LOG_CLEANUP_INTERVAL_HOURS` (hours) | Deletes logs older than `LOG_RETENTION_DAYS` (stream, MCP, audit, motion, notification); flushes in-memory segment/playlist caches for cameras offline >`INACTIVE_CAMERA_CLEANUP_HOURS` |
+| `_log_cleanup_loop` | Every `LOG_CLEANUP_INTERVAL_HOURS` (24h) | Iterates distinct `org_id` values across the log tables, resolves each org's plan, and deletes records older than that org's `log_retention_days` (30 / 90 / 365). Also flushes in-memory segment/playlist caches for cameras offline >`INACTIVE_CAMERA_CLEANUP_HOURS`. |
 | `_offline_sweep_loop` | Every `OFFLINE_SWEEP_INTERVAL_SECONDS` (30s) | Flips nodes/cameras whose `last_seen` is older than 90s from `status='online'` to `'offline'` and emits `Notification` rows + broadcasts SSE events |
+| `_viewer_usage_flush_loop` | Every 60s | Flushes pending in-memory viewer-second counters to the `org_monthly_usage` table with one UPSERT per active org. Keeps the hot HLS-serve path O(1) in memory. |
 
 ## Key Patterns
 
