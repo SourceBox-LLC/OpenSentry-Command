@@ -17,7 +17,7 @@ from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
 from app.core.migrations import sync_schema, sanitize_existing_codecs
 from app.core.sentry import init_sentry
-from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications, webhooks_outbound
+from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
 from app.mcp.server import mcp
 # Import models so every table registers on Base.metadata before create_all/sync_schema.
 from app.models import models  # noqa: F401
@@ -183,7 +183,6 @@ app.include_router(mcp_activity.router)
 app.include_router(incidents.router)
 app.include_router(motion.router)
 app.include_router(notifications.router)
-app.include_router(webhooks_outbound.router)
 
 # Mount MCP server at /mcp
 app.mount("/mcp", mcp_app)

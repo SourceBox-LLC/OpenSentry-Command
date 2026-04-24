@@ -111,9 +111,9 @@ function TermsContent() {
       </p>
       <p>
         <strong>No overage billing.</strong> Your monthly bill is the plan
-        price you selected. When a metered limit is reached (viewer-hours,
-        MCP calls, outbound webhook fan-out) we pause the metered feature
-        rather than apply automatic overage charges.
+        price you selected. When a metered limit is reached (viewer-hours
+        or MCP calls) we pause the metered feature rather than apply
+        automatic overage charges.
       </p>
       <p>
         <strong>Camera-cap enforcement on downgrade or cancellation.</strong>{" "}
@@ -403,7 +403,6 @@ function PrivacyContent() {
         <li>Stream access logs (who viewed which camera, when, and IP address)</li>
         <li>Per-organization monthly viewer-second aggregates used to enforce the viewer-hour cap for your plan</li>
         <li>MCP tool call activity (tool name, API key used, timestamps, and duration)</li>
-        <li>Outbound webhook delivery telemetry (last attempt timestamp, HTTP status code, consecutive-failure counter) for organizations that have configured outbound webhooks on the Pro Plus plan</li>
         <li>Node registration and heartbeat data (hostname, local IP, camera status)</li>
         <li>Audit logs for administrative actions</li>
       </ul>
@@ -500,9 +499,8 @@ function PrivacyContent() {
         <li>Recordings and snapshots are stored in encrypted form locally on your CloudNode device, not on our servers, and are subject to the retention and disk-quota settings you configure on that device</li>
         <li>Stream access logs, MCP activity logs, motion event metadata, notification records, and audit logs are retained according to the organization's plan: 30 days on the Free tier, 90 days on Pro, and 365 days on Pro Plus. Expired records are permanently deleted by a scheduled daily cleanup task</li>
         <li>Per-organization monthly viewer-second aggregates are retained indefinitely in a single aggregate row per calendar month so historical usage can be displayed in the dashboard; this row contains no personally identifiable information</li>
-        <li>Outbound webhook configurations (URL, signing secret, event filter, delivery telemetry) are retained for as long as the organization holds the endpoint; deleting an endpoint removes the row immediately with no soft-delete retention</li>
         <li>Account data is retained as long as your account is active</li>
-        <li>Upon organization deletion, all associated nodes, cameras, camera groups, MCP keys, outbound webhook endpoints, stream access logs, MCP activity logs, motion events, notifications, audit logs, monthly usage rows, and settings are permanently deleted in a single database transaction</li>
+        <li>Upon organization deletion, all associated nodes, cameras, camera groups, MCP keys, stream access logs, MCP activity logs, motion events, notifications, audit logs, monthly usage rows, and settings are permanently deleted in a single database transaction</li>
         <li>You can delete all organization data at any time using the Full Reset feature in Settings, or by deleting your organization through Clerk</li>
       </ul>
 

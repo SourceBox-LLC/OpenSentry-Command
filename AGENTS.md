@@ -63,8 +63,7 @@ backend/
 │   │   ├── notifications.py      # Notification inbox, unread count, SSE, broadcaster
 │   │   ├── install.py            # CloudNode + MCP setup script endpoints
 │   │   ├── ws.py                 # CloudNode WebSocket channel
-│   │   ├── webhooks.py           # Clerk subscription webhook handler (inbound)
-│   │   └── webhooks_outbound.py  # Pro Plus outbound webhooks: CRUD + HMAC signing + retry delivery
+│   │   └── webhooks.py           # Clerk subscription webhook handler
 │   ├── mcp/
 │   │   └── server.py             # FastMCP server + 22 tools + ScopeMiddleware
 │   ├── core/
@@ -73,7 +72,7 @@ backend/
 │   │   ├── clerk.py              # Clerk SDK init
 │   │   ├── database.py           # SQLAlchemy engine + session factory + Base
 │   │   └── limiter.py            # slowapi Limiter instance (tenant-aware key)
-│   ├── models/models.py          # 15 ORM models (see Data Models below)
+│   ├── models/models.py          # 14 ORM models (see Data Models below)
 │   └── schemas/schemas.py        # Pydantic request/response schemas incl. McpKeyCreate
 ├── scripts/
 │   ├── install.sh / install.ps1  # CloudNode installers (served by install.py)
@@ -196,7 +195,7 @@ MCP endpoint (`POST /mcp`) validates `Authorization: Bearer osc_<hex>`:
 
 ## Data Models
 
-All 15 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation.
+All 14 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation.
 
 | Model | Key Fields | Purpose |
 |-------|------------|---------|
@@ -214,7 +213,6 @@ All 15 models in `backend/app/models/models.py`. Every model has `org_id` for te
 | `Notification` | `kind`, `audience` (`all` / `admin`), `title`, `body`, `severity`, `link`, `camera_id`, `node_id`, `meta_json` | Unified inbox entry (motion, camera/node online/offline, errors) |
 | `UserNotificationState` | `clerk_user_id` + `org_id` (unique), `last_viewed_at` | Per-user read cursor for the inbox |
 | `OrgMonthlyUsage` | `org_id` + `year_month` (unique), `viewer_seconds` | One row per org per calendar month; aggregates live-playback viewer-seconds for viewer-hour cap enforcement |
-| `WebhookEndpoint` | `name`, `url`, `signing_secret`, `events` (CSV), `enabled`, `last_delivery_at`, `last_delivery_status`, `consecutive_failures` | Pro Plus outbound webhook subscription; `signing_secret` is plaintext (needed for HMAC signing) so treat as a credential |
 
 Validation constants (also in `models.py`):
 - `INCIDENT_STATUSES` = `("open", "acknowledged", "resolved", "dismissed")`
@@ -238,7 +236,6 @@ Validation constants (also in `models.py`):
 | `install.py` | (none) | installation |
 | `ws.py` | (none) | ws |
 | `webhooks.py` | `/api/webhooks` | webhooks |
-| `webhooks_outbound.py` | `/api/webhooks-outbound` | webhooks-outbound |
 
 ### All endpoints
 
@@ -329,13 +326,6 @@ Validation constants (also in `models.py`):
 **webhooks.py** (prefix `/api/webhooks`):
 - `POST /clerk` — Clerk subscription events (Svix signature when `CLERK_WEBHOOK_SECRET` is set)
 
-**webhooks_outbound.py** (prefix `/api/webhooks-outbound`, Pro Plus only):
-- `GET /` — list endpoints (returns `{upgrade_required: true}` for non-Pro-Plus orgs)
-- `POST /` — create endpoint; returns `signing_secret` once (30/hour)
-- `PATCH /{id}` — toggle enabled / rename / re-target / change event filter (60/min)
-- `DELETE /{id}` — hard-delete (30/min)
-- `POST /{id}/test` — fire synthetic `test` event (10/min)
-
 **Top-level** (`main.py`):
 - `GET /api/health` — `{"status": "healthy", "version": "2.1.0"}` (no auth)
 - FastAPI docs: `/api-docs` (Swagger), `/api-redoc` (ReDoc), OpenAPI at `/api/openapi.json`. `/docs` is the React `DocsPage`.
@@ -417,11 +407,6 @@ Plus `FRONTEND_URL` if set (validated: must have scheme, no trailing slash, no e
 
 HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are not per-request rate limited — segment fetches are fast-path with no per-request DB work. They are however metered against the caller's monthly viewer-hour cap (see `Plan Enforcement` → Viewer-hours below): every served segment increments an in-memory counter, and the 429 kicks in when the counter exceeds `max_viewer_hours_per_month * 3600`.
 
-Additional routes not in the table above (added with outbound webhooks):
-- `POST /api/webhooks-outbound` — 30/hour (Pro Plus only)
-- `PATCH /api/webhooks-outbound/{id}` — 60/min
-- `DELETE /api/webhooks-outbound/{id}` — 30/min
-- `POST /api/webhooks-outbound/{id}/test` — 10/min
 
 ## Webhook Handling
 
@@ -474,15 +459,6 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 **Push-segment gate** (`POST /api/cameras/{id}/push-segment`): when `camera.disabled_by_plan` is set, returns **HTTP 402** with a structured `plan_limit_hit` body (plan display name, cap, camera name, upgrade copy). CloudNode treats 402 as non-retryable and surfaces the suspension in its TUI.
 
 **Heartbeat response** also carries `disabled_cameras: list[str]` scoped to the calling node, so CloudNode can skip the upload task entirely for suspended cameras (no 402 flood) and mark those rows `suspended (plan)` in its live dashboard.
-
-## Outbound Webhooks (Pro Plus)
-
-`app/api/webhooks_outbound.py` owns the feature. One `WebhookEndpoint` row per subscription (URL + signing secret + event CSV + enabled + delivery telemetry). CRUD routes under `/api/webhooks-outbound`.
-
-- `dispatch_event(db, org_id, kind, payload)` is the producer entry point. Called from `app/api/ws.py` after motion events and from `app/api/notifications.py::emit_camera_transition` / `emit_node_transition` for camera + node state changes. Looks up matching endpoints (tier-gated to Pro Plus; free/pro orgs have zero rows so the SELECT is a no-op fast path) and spawns one `asyncio.create_task(_deliver(...))` per endpoint.
-- `_deliver(endpoint_id, kind, payload)` signs the body with HMAC-SHA256 using the endpoint's `signing_secret`, POSTs it with `X-SourceBox-Signature`, `X-SourceBox-Event`, and `X-SourceBox-Delivery-Attempt` headers. Retry schedule is `[0, 1, 5, 30]` seconds with a 10-second per-attempt timeout. 4xx is *not* retried (receiver rejected, retrying won't help); 5xx and network errors are. Each attempt opens its own DB session so a mid-flight delete or pause is respected.
-- `_record_delivery()` updates `last_delivery_at` / `last_delivery_status` / `last_delivery_error` / `consecutive_failures` on the endpoint row. When `consecutive_failures >= MAX_CONSECUTIVE_FAILURES` (20) the endpoint auto-disables so a dead URL doesn't burn outbound connections forever.
-- 20-endpoint cap per org; HTTPS-only (http:// rejected at the schema layer); signing secret is plaintext in the DB (we need it to sign) and shown to the user exactly once via `include_secret=True` on the create response.
 
 ## Background Loops
 

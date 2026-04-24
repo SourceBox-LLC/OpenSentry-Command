@@ -7,7 +7,6 @@ import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
-import WebhookSettings from "../components/WebhookSettings.jsx"
 
 function formatRelativeTime(dateString) {
   if (!dateString) return ""
@@ -666,12 +665,6 @@ function SettingsPage() {
           </div>
         </div>
       )}
-
-      <WebhookSettings
-        planInfo={planInfo}
-        onUpgrade={() => setUpgradeFeature("webhooks")}
-        showToast={showToast}
-      />
 
       <div className="settings-section danger-zone">
         <h2>Danger Zone</h2>

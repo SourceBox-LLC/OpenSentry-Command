@@ -86,7 +86,6 @@ function DocsPage() {
           <div className="docs-sidebar-group">
             <div className="docs-sidebar-group-label">Integrations</div>
             <a href="#mcp" className="docs-sidebar-link">MCP Integration</a>
-            <a href="#outbound-webhooks" className="docs-sidebar-link">Outbound Webhooks</a>
           </div>
           <div className="docs-sidebar-group">
             <div className="docs-sidebar-group-label">Account & Security</div>
@@ -1070,103 +1069,6 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
             </div>
           </section>
 
-          {/* ── Outbound webhooks (Pro Plus) ────────────────── */}
-          <section className="docs-section" id="outbound-webhooks">
-            <h2>Outbound Webhooks<a href="#outbound-webhooks" className="docs-anchor">#</a></h2>
-            <p>
-              Pro Plus feature. Push motion, camera-state, and node-state
-              events directly to your own HTTPS endpoint — wire SourceBox
-              Sentry into PagerDuty, Zapier, Slack, a ticketing system, or
-              home-automation without keeping a long-lived MCP session
-              or polling the REST API.
-            </p>
-
-            <h3>Setup</h3>
-            <ol>
-              <li>Go to <strong>Settings → Outbound Webhooks</strong> and click <strong>Add Endpoint</strong>.</li>
-              <li>Give it a name, an <code>https://</code> URL, and pick which event types the endpoint wants (leave empty for "all events").</li>
-              <li>Save the signing secret shown in the green banner — it is displayed <strong>once</strong>. Losing it means deleting and re-creating the endpoint.</li>
-              <li>Click <strong>Test</strong> on the new endpoint to fire a synthetic <code>test</code> event and verify your receiver.</li>
-            </ol>
-
-            <h3>Event payload</h3>
-            <p>Every delivery is a JSON <code>POST</code> with this body shape:</p>
-            <div className="docs-code-block">
-              <code>{`{
-  "event": "motion",
-  "org_id": "org_abc123",
-  "timestamp": "2026-04-23T19:42:11.482301+00:00",
-  "data": {
-    "camera_id": "cam_front_door",
-    "node_id": "node_xyz",
-    "score": 73,
-    "segment_seq": 14928,
-    "timestamp": "2026-04-23T19:42:11.399822+00:00"
-  }
-}`}</code>
-              <button className="docs-copy-btn" onClick={() => copyToClipboard(`{"event":"motion","org_id":"org_abc123","timestamp":"2026-04-23T19:42:11.482301+00:00","data":{"camera_id":"cam_front_door","node_id":"node_xyz","score":73,"segment_seq":14928,"timestamp":"2026-04-23T19:42:11.399822+00:00"}}`)}>Copy</button>
-            </div>
-
-            <h3>Request headers</h3>
-            <ul>
-              <li><code>X-SourceBox-Event</code> — the event kind (<code>motion</code> / <code>camera_online</code> / <code>camera_offline</code> / <code>node_online</code> / <code>node_offline</code> / <code>test</code>).</li>
-              <li><code>X-SourceBox-Signature</code> — HMAC-SHA256 of the raw request body, hex-encoded, using your endpoint's signing secret as the key. Verify before trusting the payload.</li>
-              <li><code>X-SourceBox-Delivery-Attempt</code> — 1 for the first try, 2/3/4 for retries. Idempotency key if you need one: combine <code>event</code> + <code>data.timestamp</code>.</li>
-              <li><code>User-Agent: SourceBox-Sentry-Webhooks/1</code></li>
-            </ul>
-
-            <h3>Verifying the signature (Python)</h3>
-            <div className="docs-code-block">
-              <code>{`import hmac, hashlib
-
-SIGNING_SECRET = os.environ["SOURCEBOX_WEBHOOK_SECRET"]  # from /settings
-
-def verify(raw_body: bytes, header_signature: str) -> bool:
-    expected = hmac.new(
-        SIGNING_SECRET.encode(),
-        raw_body,
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, header_signature)`}</code>
-              <button className="docs-copy-btn" onClick={() => copyToClipboard(`import hmac, hashlib
-
-SIGNING_SECRET = os.environ["SOURCEBOX_WEBHOOK_SECRET"]
-
-def verify(raw_body: bytes, header_signature: str) -> bool:
-    expected = hmac.new(SIGNING_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header_signature)`)}>Copy</button>
-            </div>
-            <p>
-              Use the raw request body (the exact bytes we sent) — don't
-              re-serialize the parsed JSON, or the signature won't match
-              because Python's JSON encoder and ours may format it
-              differently.
-            </p>
-
-            <h3>Delivery behaviour</h3>
-            <ul>
-              <li><strong>Retries:</strong> 0s → 1s → 5s → 30s for 5xx responses and network errors, with a 10-second per-attempt timeout. 4xx is <em>not</em> retried (your endpoint said no; retrying won't help).</li>
-              <li><strong>Success:</strong> any 2xx response code. We don't inspect the body.</li>
-              <li><strong>Auto-disable:</strong> after 20 consecutive failures an endpoint flips to <code>enabled=false</code> so a dead URL can't burn outbound connections forever. Re-enabling from the dashboard clears the failure counter.</li>
-              <li><strong>Fan-out:</strong> every matching endpoint gets its own delivery task; one slow receiver doesn't hold up another. Up to 20 endpoints per org.</li>
-              <li><strong>Ordering:</strong> <em>not</em> guaranteed. Deliveries are fire-and-forget async tasks; if you need strict order, serialize on your side using the <code>data.timestamp</code> field.</li>
-            </ul>
-
-            <h3>Event types</h3>
-            <ul>
-              <li><code>motion</code> — a motion-detection scene-change event fired.</li>
-              <li><code>camera_online</code> / <code>camera_offline</code> — a camera transitioned status.</li>
-              <li><code>node_online</code> / <code>node_offline</code> — a CloudNode went online or stopped heartbeating.</li>
-              <li><code>test</code> — fired manually from the Test button; use this to confirm your receiver works.</li>
-            </ul>
-
-            <p>
-              Endpoints are plan-gated. Free and Pro orgs see an upgrade
-              prompt under <strong>Settings → Outbound Webhooks</strong> instead of the
-              create form.
-            </p>
-          </section>
-
           {/* ── Plans & Limits ────────────────────────────────── */}
           <section className="docs-section" id="plans">
             <h2>Plans & Limits<a href="#plans" className="docs-anchor">#</a></h2>
@@ -1175,7 +1077,7 @@ def verify(raw_body: bytes, header_signature: str) -> bool:
               video you watch per month — not on how many cameras you connect.
               Hardware counts (cameras, nodes) are generous abuse-rails rather than
               product differentiators; the real tier axis is viewer-hours and
-              integration depth (MCP, outbound webhooks).
+              MCP integration depth.
             </p>
 
             <div className="docs-plans-table">
@@ -1203,7 +1105,6 @@ def verify(raw_body: bytes, header_signature: str) -> bool:
                   <tr><td>Danger-zone tools (log wipe, full reset)</td><td>—</td><td>Yes</td><td>Yes</td></tr>
                   <tr><td>MCP integration</td><td>—</td><td>Yes</td><td>Yes</td></tr>
                   <tr><td>MCP rate limit (per key)</td><td>—</td><td>30 / min · 5,000 / day</td><td>120 / min · 30,000 / day</td></tr>
-                  <tr><td>Outbound webhooks</td><td>—</td><td>—</td><td>Yes</td></tr>
                   <tr><td>Priority support</td><td>—</td><td>—</td><td>24h first-response SLA</td></tr>
                 </tbody>
               </table>
@@ -1227,7 +1128,7 @@ def verify(raw_body: bytes, header_signature: str) -> bool:
               <li><strong>Viewer-hour cap</strong> — enforced on each HLS segment serve. The dashboard shows a live usage gauge with warn/full states at 80% / 100%.</li>
               <li><strong>Camera / node limits</strong> — when a node registers and you're at your camera cap, additional cameras are skipped with HTTP 402 and a <code>plan_limit_hit</code> detail. They are preserved in the database (soft-disable, not deletion) so upgrading restores them instantly.</li>
               <li><strong>SSE connection cap</strong> — per-org concurrent live-dashboard connections are capped per tier. Hitting the cap returns HTTP 429; close unused tabs or upgrade.</li>
-              <li><strong>Feature gates</strong> — admin dashboard, danger zone, and MCP require Pro or Pro Plus. Outbound webhooks require Pro Plus.</li>
+              <li><strong>Feature gates</strong> — admin dashboard, danger zone, and MCP require Pro or Pro Plus.</li>
               <li><strong>MCP rate limits</strong> — enforced per API key as a sliding window: a per-minute cap for burst control and a 24-hour cap that catches runaway automation loops.</li>
               <li><strong>Log retention</strong> — stream access logs, MCP activity, audit logs, motion events, and notifications are automatically deleted after the per-tier retention window (a nightly cleanup task iterates orgs and applies each org's tier).</li>
             </ul>
@@ -1727,10 +1628,6 @@ brew install ffmpeg            # macOS`}</code>
                   <tr><td>DELETE <code>/api/mcp/keys/{"{id}"}</code></td><td>30 / hour</td><td>Per org</td></tr>
                   <tr><td>DELETE <code>/api/camera-groups/{"{id}"}</code></td><td>60 / min</td><td>Per org</td></tr>
                   <tr><td>POST <code>/api/webhooks/clerk</code></td><td>120 / min</td><td>Per IP (Svix-signed)</td></tr>
-                  <tr><td>POST <code>/api/webhooks-outbound</code> (create)</td><td>30 / hour</td><td>Per org</td></tr>
-                  <tr><td>PATCH <code>/api/webhooks-outbound/{"{id}"}</code></td><td>60 / min</td><td>Per org</td></tr>
-                  <tr><td>DELETE <code>/api/webhooks-outbound/{"{id}"}</code></td><td>30 / min</td><td>Per org</td></tr>
-                  <tr><td>POST <code>/api/webhooks-outbound/{"{id}"}/test</code></td><td>10 / min</td><td>Per org</td></tr>
                   <tr><td>GET live stream and segment proxies</td><td>Unlimited (read-path)</td><td>Capped by viewer-hours</td></tr>
                 </tbody>
               </table>
@@ -1801,7 +1698,6 @@ brew install ffmpeg            # macOS`}</code>
 
             <h3>Other caps</h3>
             <ul>
-              <li><strong>Webhook endpoints per org</strong> — Pro Plus only, capped at 20 endpoints per org. Each endpoint auto-disables after 20 consecutive delivery failures.</li>
               <li><strong>Segment payload size</strong> — <code>push-segment</code> uploads are capped at 2 MiB per segment. Oversized segments return HTTP 400.</li>
               <li><strong>Pagination</strong> — <code>limit</code> is capped per endpoint (200 for incidents and notifications, 500 for motion events, 500 for audit logs). <code>offset</code> is capped at 1,000,000 on every paginated endpoint because large offsets force a full table scan.</li>
               <li><strong>Plan resolution</strong> — live Clerk lookups are throttled to one every 60 seconds per org to bound our billing-API spend; cached plan values are always served in between.</li>

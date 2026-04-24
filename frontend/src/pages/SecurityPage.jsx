@@ -123,11 +123,6 @@ function SecurityPage() {
                   <td>Kept indefinitely for historical usage display; contains no personally identifiable information.</td>
                 </tr>
                 <tr>
-                  <td>Outbound webhook config (Pro Plus)</td>
-                  <td>Command Center database (URL, signing secret, event filter, delivery telemetry)</td>
-                  <td>Retained while the endpoint exists; hard-deleted when you remove it.</td>
-                </tr>
-                <tr>
                   <td>Cloud API key (held by your node)</td>
                   <td>CloudNode local SQLite, encrypted at rest</td>
                   <td>Until you rotate or decommission.</td>

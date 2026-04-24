@@ -232,18 +232,6 @@ Agents author incidents via the MCP write tools below; admins review them from t
 | POST | `/api/notifications/mark-viewed` | User | Mark the whole inbox viewed |
 | GET | `/api/notifications/stream` | User | SSE stream for live bell updates |
 
-### Outbound Webhooks (Pro Plus)
-
-Push events (motion, camera/node online/offline, test) to a customer-controlled HTTPS endpoint. Every delivery is signed with HMAC-SHA256 in `X-SourceBox-Signature`; 4xx not retried, 5xx/network retried at 0s/1s/5s/30s; auto-disables after 20 consecutive failures. See the `/docs#outbound-webhooks` page for the full payload format and verification recipe.
-
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/api/webhooks-outbound` | Admin | List endpoints for the org (or `upgrade_required=true` for non-Pro-Plus orgs) |
-| POST | `/api/webhooks-outbound` | Admin | Create an endpoint. Returns `signing_secret` **once** — store it immediately (30/hour) |
-| PATCH | `/api/webhooks-outbound/{id}` | Admin | Toggle enabled, rename, re-target, change event filter (60/min) |
-| DELETE | `/api/webhooks-outbound/{id}` | Admin | Hard-delete (30/min) |
-| POST | `/api/webhooks-outbound/{id}/test` | Admin | Fire a synthetic `test` event to verify the receiver (10/min) |
-
 ### MCP (for AI clients)
 
 Streamable HTTP MCP server exposing **22 tools** (16 read + 6 write). Requires a Pro or Pro Plus plan + an API key generated from the dashboard. Each key has a scope (`all` / `readonly` / `custom`) enforced server-side by a middleware layer — agents never see or can invoke tools the key isn't scoped for.

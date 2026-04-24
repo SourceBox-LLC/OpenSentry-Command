@@ -280,9 +280,7 @@ def emit_camera_transition(
     """Emit a camera online↔offline transition notification.
 
     Audience is ``"all"`` — every org member cares when a camera drops.
-    Debounced per-(camera, direction) to survive flaps. Also dispatches
-    to any configured outbound webhook endpoints so Pro Plus customers
-    can route camera-health events into their ticketing / PagerDuty.
+    Debounced per-(camera, direction) to survive flaps.
     """
     if new_status not in ("online", "offline"):
         return None
@@ -290,7 +288,7 @@ def emit_camera_transition(
         return None
 
     kind = "camera_online" if new_status == "online" else "camera_offline"
-    notif = create_notification(
+    return create_notification(
         org_id=org_id,
         kind=kind,
         title=f"{display_name} is online" if new_status == "online" else f"{display_name} went offline",
@@ -302,19 +300,6 @@ def emit_camera_transition(
         node_id=node_id,
         db=db,
     )
-
-    try:
-        from app.api.webhooks_outbound import dispatch_event
-        dispatch_event(db, org_id, kind, {
-            "camera_id": camera_id,
-            "node_id": node_id,
-            "display_name": display_name,
-            "status": new_status,
-        })
-    except Exception:
-        logger.exception("[Webhooks] camera transition dispatch failed for cam=%s", camera_id)
-
-    return notif
 
 
 def emit_node_transition(
@@ -328,8 +313,7 @@ def emit_node_transition(
     """Emit a node online↔offline transition notification.
 
     Audience is ``"admin"`` — node health is an operator concern; regular
-    viewers don't need to know about CloudNode uplink status. Also
-    dispatches to configured outbound webhooks (Pro Plus).
+    viewers don't need to know about CloudNode uplink status.
     """
     if new_status not in ("online", "offline"):
         return None
@@ -337,7 +321,7 @@ def emit_node_transition(
         return None
 
     kind = "node_online" if new_status == "online" else "node_offline"
-    notif = create_notification(
+    return create_notification(
         org_id=org_id,
         kind=kind,
         title=f"Node '{display_name}' is online" if new_status == "online" else f"Node '{display_name}' went offline",
@@ -348,18 +332,6 @@ def emit_node_transition(
         node_id=node_id,
         db=db,
     )
-
-    try:
-        from app.api.webhooks_outbound import dispatch_event
-        dispatch_event(db, org_id, kind, {
-            "node_id": node_id,
-            "display_name": display_name,
-            "status": new_status,
-        })
-    except Exception:
-        logger.exception("[Webhooks] node transition dispatch failed for node=%s", node_id)
-
-    return notif
 
 
 # ── Read-state helpers ─────────────────────────────────────────────
