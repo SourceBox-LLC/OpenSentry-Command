@@ -19,4 +19,14 @@ export default defineConfig({
       },
     },
   },
+  // Vitest config — happy-dom is faster than jsdom for our component tests
+  // and we don't need anything jsdom-only (yet). Tests live under tests/
+  // at the frontend root; setup.js wires in @testing-library/jest-dom
+  // matchers (toBeInTheDocument, etc.) and globals.
+  test: {
+    environment: 'happy-dom',
+    globals: true,
+    setupFiles: ['./tests/setup.js'],
+    include: ['tests/**/*.test.{js,jsx}'],
+  },
 })
