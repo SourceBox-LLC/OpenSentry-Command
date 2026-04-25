@@ -33,6 +33,9 @@ function SignedInActions() {
                 </Link>
               </>
             )}
+            <Link to="/docs" className="nav-link">
+              Docs
+            </Link>
           </nav>
         </>
       )}
@@ -53,26 +56,32 @@ function LandingNav() {
           <span className="landing-logo-text">Sentry</span>
         </Link>
 
-        <ul className={`landing-nav-links ${mobileMenuOpen ? 'active' : ''}`}>
-          <li>
-            <Link to="/#features" onClick={() => setMobileMenuOpen(false)}>Features</Link>
-          </li>
-          <li>
-            <Link to="/#architecture" onClick={() => setMobileMenuOpen(false)}>Architecture</Link>
-          </li>
-          <li>
-            <Link to="/#quickstart" onClick={() => setMobileMenuOpen(false)}>Quick Start</Link>
-          </li>
-          <li>
-            <Link to="/docs" onClick={() => setMobileMenuOpen(false)}>Docs</Link>
-          </li>
-          <li>
-            <Link to="/security" onClick={() => setMobileMenuOpen(false)}>Security</Link>
-          </li>
-          <li>
-            <Link to="/pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
-          </li>
-        </ul>
+        {/* Marketing nav. Hidden when signed in — the in-product nav
+            (Dashboard / Settings / Admin / Docs from SignedInActions) takes
+            over so the row doesn't overflow. Docs is the only marketing
+            link still useful in-product, so it appears in both nav modes. */}
+        <SignedOut>
+          <ul className={`landing-nav-links ${mobileMenuOpen ? 'active' : ''}`}>
+            <li>
+              <Link to="/#features" onClick={() => setMobileMenuOpen(false)}>Features</Link>
+            </li>
+            <li>
+              <Link to="/#architecture" onClick={() => setMobileMenuOpen(false)}>Architecture</Link>
+            </li>
+            <li>
+              <Link to="/#quickstart" onClick={() => setMobileMenuOpen(false)}>Quick Start</Link>
+            </li>
+            <li>
+              <Link to="/docs" onClick={() => setMobileMenuOpen(false)}>Docs</Link>
+            </li>
+            <li>
+              <Link to="/security" onClick={() => setMobileMenuOpen(false)}>Security</Link>
+            </li>
+            <li>
+              <Link to="/pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
+            </li>
+          </ul>
+        </SignedOut>
 
         <div className="landing-nav-actions">
           <SignedOut>
