@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
 from app.core.limiter import limiter
-from app.core.migrations import sync_schema, sanitize_existing_codecs
+from app.core.migrations import sync_schema, sanitize_existing_codecs, drop_orphan_tables
 from app.core.sentry import init_sentry
 from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
 from app.mcp.server import mcp
@@ -36,6 +36,9 @@ Base.metadata.create_all(bind=engine)
 # Patch in any columns that were added to existing models after the table was first
 # created. See app/core/migrations.py for the "why" — this is our stand-in for Alembic.
 sync_schema(engine, Base.metadata)
+# Drop tables for models we've retired (sync_schema doesn't touch these).
+# Currently sweeps `webhook_endpoints` left behind by the d4dd2db revert.
+drop_orphan_tables(engine)
 # One-time data sweep — rescue any rows still holding the garbage
 # `avc1.*e00a`-class codec string from the pre-v0.1.6 CloudNode bug.
 # Idempotent; post-fix boots match zero rows.

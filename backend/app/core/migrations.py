@@ -124,6 +124,66 @@ def sync_schema(engine: Engine, metadata) -> list[str]:
     return changes
 
 
+# ─────────────────────────────────────────────────────────────────
+# Orphan-table sweep
+# ─────────────────────────────────────────────────────────────────
+#
+# `sync_schema` only adds missing columns; it never drops things.  When a model
+# is removed entirely (e.g. the outbound-webhooks revert in commit d4dd2db
+# deleted `WebhookEndpoint` and its table mapping), the underlying SQLite
+# table sticks around as zero-row dead weight.  This sweep enumerates known
+# orphan tables and drops them once.  Idempotent — `DROP TABLE IF EXISTS`
+# noops on subsequent boots.
+#
+# Adding a new orphan: append the table name to `_ORPHAN_TABLES` together with
+# a comment that records (a) which commit retired the model and (b) confirmation
+# that the table holds no data we want to keep.  Don't add anything you haven't
+# verified is empty.
+
+_ORPHAN_TABLES: tuple[tuple[str, str], ...] = (
+    # (table_name, why)
+    (
+        "webhook_endpoints",
+        "Removed by commit d4dd2db (Apr 2026) which reverted the outbound-webhook "
+        "feature shipped in a94ef35.  Zero rows in production — feature was never "
+        "exercised against a real receiver before being pulled.",
+    ),
+)
+
+
+def drop_orphan_tables(engine: Engine) -> list[str]:
+    """Drop SQLite tables for models that have been removed from the codebase.
+
+    Runs `DROP TABLE IF EXISTS` for each entry in `_ORPHAN_TABLES`.  Returns
+    the list of tables that were actually present (and therefore dropped) so
+    the caller can log activity; subsequent runs return an empty list.
+    """
+    dropped: list[str] = []
+    existing = _existing_tables(engine)
+
+    for table_name, _why in _ORPHAN_TABLES:
+        if table_name not in existing:
+            continue
+        with engine.begin() as conn:
+            try:
+                conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}"'))
+                dropped.append(table_name)
+                logger.warning(
+                    "migrations: dropped orphan table %s (zero rows, model retired)",
+                    table_name,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "migrations: failed to drop orphan table %s: %s",
+                    table_name,
+                    exc,
+                )
+
+    if not dropped:
+        logger.debug("migrations: no orphan tables present")
+    return dropped
+
+
 def sanitize_existing_codecs(engine: Engine) -> int:
     """One-time sweep: rewrite any H.264 codec string below level 2.0.
 
