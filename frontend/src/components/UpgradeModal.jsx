@@ -33,9 +33,16 @@ const UPGRADE_MESSAGES = {
   },
 }
 
+// Numeric values mirror PLAN_LIMITS in backend/app/core/plans.py — keep them in
+// sync. Viewer-hours / month is the real tier differentiator (the binding cap
+// at runtime); cameras / nodes / seats are abuse rails that almost no
+// legitimate customer hits, but they're listed here because the upgrade-decision
+// audience cares about both sides of the picture.
 const PLAN_COMPARISON = [
-  { label: "Cameras", free: "2", pro: "10", proPlus: "50" },
-  { label: "Nodes", free: "1", pro: "5", proPlus: "Unlimited" },
+  { label: "Viewer-hours / month", free: "30", pro: "300", proPlus: "1,500" },
+  { label: "Cameras", free: "5", pro: "25", proPlus: "200" },
+  { label: "Nodes", free: "2", pro: "10", proPlus: "Unlimited" },
+  { label: "Team members", free: "2", pro: "10", proPlus: "20" },
   { label: "Admin Dashboard", free: false, pro: true, proPlus: true },
   { label: "Stream Analytics", free: false, pro: true, proPlus: true },
   { label: "Danger Zone Tools", free: false, pro: true, proPlus: true },

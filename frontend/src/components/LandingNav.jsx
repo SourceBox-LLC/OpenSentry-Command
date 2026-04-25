@@ -66,6 +66,12 @@ function LandingNav() {
           <li>
             <Link to="/docs" onClick={() => setMobileMenuOpen(false)}>Docs</Link>
           </li>
+          <li>
+            <Link to="/security" onClick={() => setMobileMenuOpen(false)}>Security</Link>
+          </li>
+          <li>
+            <Link to="/pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
+          </li>
         </ul>
 
         <div className="landing-nav-actions">
