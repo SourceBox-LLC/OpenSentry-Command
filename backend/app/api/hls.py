@@ -433,8 +433,16 @@ async def get_hls_segment(
     # Check the monthly viewer-hour cap before serving. Warm the cache on the
     # first segment we see for this org (same call amortizes one DB read per
     # org per process lifetime).
-    from app.core.plans import get_plan_limits
-    limits = get_plan_limits(user.plan)
+    #
+    # Use ``effective_plan_for_caps`` instead of ``user.plan`` (the JWT claim)
+    # so a stale token can't keep buying paid-tier viewer-hours after the
+    # 7-day grace window expires — the JWT only refreshes once a minute, and
+    # a Clerk webhook propagation hiccup can delay it further. Reading the
+    # DB-resolved plan here keeps this enforcement point consistent with the
+    # push-segment / camera-cap path, which already uses the effective plan.
+    from app.core.plans import effective_plan_for_caps, get_plan_limits
+    effective_plan = effective_plan_for_caps(db, user.org_id)
+    limits = get_plan_limits(effective_plan)
     max_hours = limits.get("max_viewer_hours_per_month")
     if max_hours is not None and max_hours > 0:
         used_seconds = _warm_cached_viewer_seconds(user.org_id)

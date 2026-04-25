@@ -196,14 +196,16 @@ def effective_plan_for_caps(db, org_id: str) -> str:
         re-enables everything immediately by flipping `payment_past_due`
         back to "false" and re-running `enforce_camera_cap`.
 
-    Only affects camera-cap enforcement.  ``require_active_billing`` still
-    gates MCP creation *immediately* on past-due (no grace) because issuing
-    fresh credentials to an org with a failing card is a different risk
-    than letting their existing cameras keep streaming for a week.
+    Affects runtime cap enforcement (camera cap via ``enforce_camera_cap``,
+    monthly viewer-hours via ``app.api.hls.get_hls_segment``).
+    ``require_active_billing`` still gates MCP creation *immediately* on
+    past-due (no grace) because issuing fresh credentials to an org with a
+    failing card is a different risk than letting their existing cameras
+    keep streaming for a week.
 
-    Use this everywhere that `enforce_camera_cap` is called.  Do NOT use
-    it for the TUI status-bar badge — operators want to see their *paid*
-    plan there, not a silent downgrade during a brief card failure.
+    Use this everywhere a runtime cap is checked.  Do NOT use it for the
+    TUI status-bar badge — operators want to see their *paid* plan there,
+    not a silent downgrade during a brief card failure.
     """
     from app.models.models import Setting
 
