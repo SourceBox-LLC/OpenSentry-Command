@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react"
-import Hls from "hls.js"
 import { useSharedToken } from "../hooks/useSharedToken.jsx"
+
+// hls.js is ~500 KB / ~155 KB gzipped. Static import would bloat the main
+// bundle on every route — including landing/pricing/security/docs which
+// never play video. Dynamic import below keeps it out until a HlsPlayer
+// actually mounts. The first video tile takes one extra round-trip to
+// fetch the chunk (cached thereafter); every other route gets a faster
+// first paint.
 
 // Set to true to connect directly to CloudNode on localhost:8080
 // Set to false to use backend proxy with authentication
@@ -34,8 +40,23 @@ function HlsPlayer({ cameraId, cameraName }) {
         const API_URL = import.meta.env.VITE_API_URL || ""
         const ownOrigin = API_URL || window.location.origin
 
+        // Cancellation flag for the async chunk load below — if the
+        // component unmounts (or cameraId changes) while the dynamic
+        // import is still in flight, we must NOT proceed to instantiate
+        // an Hls that nobody will clean up. The cleanup function below
+        // flips this to true.
+        let cancelled = false
+
         const setupHls = async () => {
             try {
+                // Lazy-load hls.js. Vite splits it into its own chunk
+                // (see comment at top of file). After the first call in
+                // a session the browser cache serves the chunk
+                // instantly; the cost is one round-trip on the first
+                // video the user opens.
+                const { default: Hls } = await import("hls.js")
+                if (cancelled) return
+
                 const playlistUrl = LOCAL_TEST_MODE
                     ? `http://localhost:8080/hls/${cameraId}/stream.m3u8`
                     : `${API_URL}/api/cameras/${cameraId}/stream.m3u8`
@@ -189,6 +210,9 @@ function HlsPlayer({ cameraId, cameraName }) {
         setupHls()
 
         return () => {
+            // Block the late branch in setupHls (post-await) from running
+            // its setup if the dynamic import hasn't resolved yet.
+            cancelled = true
             if (stallRef.current) {
                 clearInterval(stallRef.current)
                 stallRef.current = null
