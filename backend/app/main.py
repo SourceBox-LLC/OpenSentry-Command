@@ -45,6 +45,38 @@ sanitize_existing_codecs(engine)
 mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
 
 
+# ── Background-loop tunables ──────────────────────────────────────
+# These are defined *here* (above the functions that reference them)
+# so the f-string in ``lifespan`` doesn't depend on the rest of the
+# module having loaded first. lifespan is invoked by uvicorn during
+# app startup, after the module is fully imported, so the old layout
+# worked — but it was fragile to any refactor that called the
+# function during import. Putting the constants up top makes the
+# dependency direction obvious.
+
+# Fallback retention for orgs whose plan can't be resolved (Clerk lookup
+# failed AND no cached Setting). The per-org tiered retention —
+# 30d / 90d / 365d for Free / Pro / Pro Plus — is sourced from
+# ``app.core.plans.PLAN_LIMITS[plan]["log_retention_days"]`` and applied
+# in ``_log_cleanup_loop`` below. This env var only matters when plan
+# resolution breaks entirely; we keep a 90-day default so a transient
+# Clerk outage doesn't silently wipe a paid customer's logs.
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
+LOG_CLEANUP_INTERVAL_HOURS = 24  # Run once per day
+# Cameras offline for longer than this get their in-memory caches freed.
+# HLS segments are live-only fragments — useless once streaming stops.
+INACTIVE_CAMERA_CLEANUP_HOURS = int(os.getenv("INACTIVE_CAMERA_CLEANUP_HOURS", "24"))
+
+# How often to sweep for stale "online" entities and flip them to offline.
+# Needs to be shorter than the heartbeat-miss threshold (90s) for
+# timely notifications but longer than a few seconds to keep DB load low.
+OFFLINE_SWEEP_INTERVAL_SECONDS = int(os.getenv("OFFLINE_SWEEP_INTERVAL_SECONDS", "30"))
+# If a node/camera hasn't heart-beat in this many seconds, the sweep
+# marks it offline.  Matches the 90s threshold used by the model's
+# ``effective_status`` property so the UI and DB agree.
+OFFLINE_HEARTBEAT_TIMEOUT_SECONDS = 90
+
+
 @asynccontextmanager
 async def lifespan(app):
     """Application lifespan: startup and shutdown hooks."""
@@ -188,27 +220,9 @@ app.include_router(notifications.router)
 app.mount("/mcp", mcp_app)
 
 
-# Fallback retention for orgs whose plan can't be resolved (Clerk lookup
-# failed AND no cached Setting). The per-org tiered retention —
-# 30d / 90d / 365d for Free / Pro / Pro Plus — is sourced from
-# ``app.core.plans.PLAN_LIMITS[plan]["log_retention_days"]`` and applied
-# in ``_log_cleanup_loop`` below. This env var only matters when plan
-# resolution breaks entirely; we keep a 90-day default so a transient
-# Clerk outage doesn't silently wipe a paid customer's logs.
-LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "90"))
-LOG_CLEANUP_INTERVAL_HOURS = 24  # Run once per day
-# Cameras offline for longer than this get their in-memory caches freed.
-# HLS segments are live-only fragments — useless once streaming stops.
-INACTIVE_CAMERA_CLEANUP_HOURS = int(os.getenv("INACTIVE_CAMERA_CLEANUP_HOURS", "24"))
-
-# How often to sweep for stale "online" entities and flip them to offline.
-# Needs to be shorter than the heartbeat-miss threshold (90s) for
-# timely notifications but longer than a few seconds to keep DB load low.
-OFFLINE_SWEEP_INTERVAL_SECONDS = int(os.getenv("OFFLINE_SWEEP_INTERVAL_SECONDS", "30"))
-# If a node/camera hasn't heart-beat in this many seconds, the sweep
-# marks it offline.  Matches the 90s threshold used by the model's
-# ``effective_status`` property so the UI and DB agree.
-OFFLINE_HEARTBEAT_TIMEOUT_SECONDS = 90
+# Background-loop constants moved up to just above the ``lifespan``
+# function (search "Background-loop tunables") so the f-string in
+# ``lifespan`` doesn't reference a name defined later in the module.
 
 
 async def _log_cleanup_loop():
