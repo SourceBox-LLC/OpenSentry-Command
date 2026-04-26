@@ -87,6 +87,17 @@
   transition: all 0.3s;
 }
 
+/* Keep nav-action button labels ("Sign In", "Get Started") on a single
+   line. Without this, narrow-tablet widths (800–1100px) wrap the labels
+   into "Sign / In" / "Get / Started" because the row runs out of space
+   before the hamburger breakpoint kicks in. The hamburger now triggers
+   at 1024px (see the @media block below), but this nowrap is belt-and-
+   suspenders for any future ribbon / banner / locale that pushes the
+   layout tighter. */
+.landing-nav-actions .landing-btn {
+  white-space: nowrap;
+}
+
 /* Hero Section */
 .landing-hero {
   position: relative;
@@ -1613,6 +1624,44 @@
   }
 }
 
+/* Nav-only breakpoint — switch to the hamburger menu earlier than the
+   rest of the responsive layout because the desktop nav has six marketing
+   links plus two CTA buttons, and that combination overflows somewhere
+   in the 800–1100px range. Keeping this OUT of the 768px content
+   breakpoint below means iPad-portrait and tablet-ish widths still get
+   the right hero / docs sizing while the nav cleanly collapses. */
+@media (max-width: 1024px) {
+  .landing-nav-links {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    flex-direction: column;
+    padding: 1rem;
+    gap: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .landing-nav-links.active {
+    display: flex;
+  }
+
+  .landing-nav-links li {
+    width: 100%;
+  }
+
+  .landing-nav-links a {
+    display: block;
+    padding: 1rem;
+  }
+
+  .landing-mobile-menu-btn {
+    display: flex;
+  }
+}
+
 @media (max-width: 768px) {
   .docs-layout {
     flex-direction: column;
@@ -1698,36 +1747,6 @@
   
   .docs-cta {
     padding: 2rem 1.5rem;
-  }
-  
-  .landing-nav-links {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: var(--bg-secondary);
-    flex-direction: column;
-    padding: 1rem;
-    gap: 0;
-    border-bottom: 1px solid var(--border-color);
-  }
-  
-  .landing-nav-links.active {
-    display: flex;
-  }
-  
-  .landing-nav-links li {
-    width: 100%;
-  }
-  
-  .landing-nav-links a {
-    display: block;
-    padding: 1rem;
-  }
-  
-  .landing-mobile-menu-btn {
-    display: flex;
   }
   
   .landing-hero-title {
