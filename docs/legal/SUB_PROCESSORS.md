@@ -1,0 +1,123 @@
+# Sub-processors
+
+> **STATUS: WORKING DRAFT.** Same caveat as the DPA — this file
+> describes the engineering reality and must be reviewed by counsel
+> before being held out to customers as a binding sub-processor list.
+
+This is the public list of third-party services that SourceBox LLC
+engages to process Customer Personal Data on behalf of customers of
+**SourceBox Sentry Command Center**.
+
+The list mirrors what's stated in `/security` on the Command Center
+website; if the two ever drift, treat this file as the authoritative
+technical record and `/security` as the customer-facing summary.
+
+**Notice policy.** New sub-processors and replacements are announced
+by:
+
+1. Updating this file in the public repository (master branch); and
+2. Emailing the Customer's billing contact at least **14 days** before
+   the new sub-processor begins processing Customer Personal Data.
+
+Customers who reasonably object on data-protection grounds may
+terminate the affected Service per Section 4.4 of the
+[DPA](./DPA.md).
+
+---
+
+## Current sub-processors
+
+### Clerk
+- **Service provided:** User authentication, organization management,
+  session tokens, billing subscription management.
+- **Personal Data processed:** Name, email, password hash (Clerk-
+  managed; SourceBox never sees plain or hashed passwords), org
+  membership, role, session tokens, subscription metadata (plan,
+  status, billing dates).
+- **Location of processing:** United States.
+- **Cross-border transfers:** Yes (US-based; SCC reliance for EEA/UK
+  data).
+- **Privacy policy:** https://clerk.com/legal/privacy
+- **DPA reference:** https://clerk.com/legal/dpa
+- **Notes:** Clerk in turn engages its own sub-processors, including
+  Stripe (see below) for billing. Clerk's published sub-processor
+  list governs that downstream chain.
+
+### Stripe (via Clerk)
+- **Service provided:** Payment processing for SourceBox Sentry
+  subscriptions. Collected and processed by Clerk; SourceBox never
+  receives card numbers, CVVs, or other payment-instrument data.
+- **Personal Data processed:** Card number and other payment
+  instrument data (collected directly by Stripe), billing address,
+  email associated with payment.
+- **Location of processing:** United States.
+- **Cross-border transfers:** Yes.
+- **Privacy policy:** https://stripe.com/privacy
+- **Notes:** Treated here as a Clerk sub-processor, but called out
+  separately so customers know where card data physically lives.
+
+### Fly.io
+- **Service provided:** Application hosting, Postgres database,
+  global edge network, TLS termination.
+- **Personal Data processed:** All metadata SourceBox stores about
+  Customer (account identity, audit logs, stream access logs, motion
+  event metadata, settings rows). Fly.io does not see or process
+  video content (live segments are RAM-only; recordings live on
+  Customer's CloudNode hardware off Fly's network).
+- **Location of processing:** United States, with edge network in
+  multiple regions.
+- **Cross-border transfers:** Yes (US-based; edge regions in EU,
+  Asia-Pacific).
+- **Privacy policy:** https://fly.io/legal/privacy-policy/
+- **DPA reference:** https://fly.io/legal/data-processing-agreement/
+- **Notes:** Volumes encrypted at rest by Fly.io. SourceBox runs in a
+  single primary region with edge proxies forwarding to it.
+
+### Sentry — *optional, off by default*
+- **Service provided:** Application error tracking and performance
+  monitoring.
+- **Personal Data processed:** Exception stack traces, request URLs,
+  user_id (where present in the trace), IP address (truncated by
+  Sentry's PII scrubber). 10% trace sample rate. **No video, no
+  request body content, no MCP arguments.**
+- **Location of processing:** United States.
+- **Cross-border transfers:** Yes.
+- **Privacy policy:** https://sentry.io/privacy/
+- **DPA reference:** https://sentry.io/legal/dpa/
+- **Notes:** Disabled when the `SENTRY_DSN` environment variable is
+  unset. Self-hosting deployments and any deployment that hasn't
+  configured a DSN do not engage Sentry as a sub-processor.
+
+---
+
+## Sub-processors used by self-hosting deployments
+
+If you self-host Command Center under the AGPL-3.0 license, the
+sub-processor relationships above do not apply to your deployment —
+you are then responsible for the relationships you create with your
+own hosting provider, auth provider, and any error-monitoring
+service. SourceBox LLC has no visibility into and no responsibility
+for self-hosted deployments.
+
+---
+
+## Update history
+
+A short, append-only history of changes to this list. Customers can
+diff this file in the repository for the full record.
+
+- **2026-04-25** — Initial draft consolidated from the engineering
+  source-of-truth (`/security` page + actual codebase
+  configuration).
+
+---
+
+## Reporting a sub-processor concern
+
+If you have a concern about a sub-processor on this list — for
+example, a privacy-relevant change in their service or a new
+investigation that affects their data-handling — please contact
+SourceBox at the support address in your Order Form, or open a
+GitHub issue at
+<https://github.com/SourceBox-LLC/OpenSentry-Command/issues>
+(public; do not include sensitive information).
