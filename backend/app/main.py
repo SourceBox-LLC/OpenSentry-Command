@@ -1,10 +1,18 @@
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+# Process start markers for ``/api/health/detailed``. Captured at module
+# import (i.e. uvicorn cold-start) so uptime is real wall + monotonic
+# time, not "ms since the request handler ran". Module-level constants
+# are fine — there's only ever one process per Fly machine.
+_STARTED_AT_WALL = datetime.now(tz=timezone.utc)
+_STARTED_AT_MONO = time.monotonic()
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -593,3 +601,109 @@ if static_dir.exists():
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "version": "2.1.0"}
+
+
+@app.get("/api/health/detailed")
+async def health_check_detailed():
+    """Verbose health/status endpoint — intended for status-page polling
+    and on-call diagnostics, not for load balancers (those should poll
+    ``/api/health`` so a slow DB doesn't cascade into removing the
+    machine from rotation).
+
+    Public on purpose: a status page tool needs to read it from off-net,
+    and the surface here is deliberately metric-shaped — DB ping ms,
+    cache occupancy counts, queue depths — never org IDs, camera IDs,
+    user emails, or anything that would leak business intelligence to
+    a competitor scraping the endpoint.
+
+    Status semantics:
+      - "healthy"    — every check passed.
+      - "degraded"   — non-critical subsystem reporting a warning (e.g.
+                       a viewer-usage flush queue that's growing faster
+                       than it drains). The app still serves traffic
+                       correctly; just keep an eye on it.
+      - "unhealthy"  — DB ping failed. The app is up but cannot serve
+                       most reads/writes. Pages should fire.
+    """
+    from sqlalchemy import text
+    # Defer import: hls.py pulls in storage helpers that are heavier
+    # than this endpoint should pay for on cold start.
+    from app.api.hls import (
+        _playlist_cache,
+        _segment_cache,
+        _pending_viewer_seconds,
+    )
+    from app.api.notifications import notification_broadcaster
+
+    now_wall = datetime.now(tz=timezone.utc)
+    uptime_s = round(time.monotonic() - _STARTED_AT_MONO, 3)
+
+    # ── Database ping ────────────────────────────────────────
+    # ``SELECT 1`` is the cheapest round-trip that proves the connection
+    # is live + the DB is responding. Time it so a slow DB shows up as a
+    # latency spike before it tips over into errors.
+    db_check: dict = {"status": "ok"}
+    try:
+        db = SessionLocal()
+        try:
+            t0 = time.perf_counter()
+            db.execute(text("SELECT 1"))
+            db_check["latency_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+        finally:
+            db.close()
+    except Exception as exc:
+        # Don't surface the exception text — it can include connection
+        # strings or hostnames. Generic class name is enough for triage.
+        db_check = {"status": "error", "error_class": type(exc).__name__}
+        logger.warning("[Health] DB ping failed", exc_info=True)
+
+    # ── In-memory subsystem snapshots ────────────────────────
+    # All read without locks: a momentary inconsistency in a count is
+    # fine for a status page; not worth blocking the hot path.
+    hls_cache = {
+        "status": "ok",
+        "playlists_cached": len(_playlist_cache),
+        "segment_cameras": len(_segment_cache),
+    }
+
+    pending_views = sum(_pending_viewer_seconds.values())
+    viewer_usage = {
+        "status": "ok",
+        "pending_writes": pending_views,
+    }
+    # The flush loop ticks every 60s; if pending grows past a threshold
+    # the loop is probably failing silently. ``warn`` doesn't gate
+    # liveness — the app keeps serving — but a status page would render
+    # this as yellow.
+    if pending_views > 100_000:
+        viewer_usage["status"] = "warn"
+
+    sse = {
+        "status": "ok",
+        "subscriber_orgs": len(notification_broadcaster._subscribers),
+        "subscriber_total": sum(
+            len(s) for s in notification_broadcaster._subscribers.values()
+        ),
+    }
+
+    # ── Roll up overall status ───────────────────────────────
+    if db_check["status"] != "ok":
+        overall = "unhealthy"
+    elif viewer_usage["status"] == "warn":
+        overall = "degraded"
+    else:
+        overall = "healthy"
+
+    return {
+        "status": overall,
+        "version": "2.1.0",
+        "uptime_seconds": uptime_s,
+        "started_at": _STARTED_AT_WALL.isoformat(),
+        "time": now_wall.isoformat(),
+        "checks": {
+            "database": db_check,
+            "hls_cache": hls_cache,
+            "viewer_usage": viewer_usage,
+            "sse": sse,
+        },
+    }
