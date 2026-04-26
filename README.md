@@ -287,7 +287,7 @@ Admin access is required for node management, group management, settings, audit 
 
 ## Data Models
 
-All 13 ORM models live in `backend/app/models/models.py`; every row is scoped by `org_id`.
+All 14 ORM models live in `backend/app/models/models.py`; every row is scoped by `org_id`.
 
 | Model | Purpose |
 |-------|---------|
@@ -304,6 +304,7 @@ All 13 ORM models live in `backend/app/models/models.py`; every row is scoped by
 | `MotionEvent` | Motion detection event reported by a node (`score`, `segment_seq`, timestamp) |
 | `Notification` | Unified inbox entry (motion, camera/node online/offline, errors) |
 | `UserNotificationState` | Per-`(clerk_user_id, org_id)` read cursor (`last_viewed_at`) |
+| `OrgMonthlyUsage` | Per-`(org_id, year_month)` viewer-second counter — populated by `_viewer_usage_flush_loop` for billing-cap enforcement |
 
 ---
 
@@ -334,7 +335,7 @@ backend/
 │   │   ├── clerk.py             # Clerk SDK initialization
 │   │   ├── database.py          # SQLAlchemy engine + session factory
 │   │   └── limiter.py           # slowapi Limiter instance
-│   ├── models/models.py         # 13 ORM models (see table above)
+│   ├── models/models.py         # 14 ORM models (see table above)
 │   └── schemas/schemas.py       # Pydantic request/response schemas
 ├── scripts/
 │   ├── install.sh / install.ps1 # CloudNode installers

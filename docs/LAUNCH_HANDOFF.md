@@ -37,8 +37,8 @@ charges don't post, the dev-mode badge shows in the UI, and the
      -a opensentry-command
    ```
 4. Verify the Clerk webhook endpoint
-   `https://opensentry-command.fly.dev/webhooks/clerk` is registered
-   in the production Clerk app and signing secret is set
+   `https://opensentry-command.fly.dev/api/webhooks/clerk` is
+   registered in the production Clerk app and signing secret is set
    (`CLERK_WEBHOOK_SECRET`). Test by upgrading a test org and
    confirming the `Setting(org_plan="pro")` row shows up.
 

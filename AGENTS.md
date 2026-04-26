@@ -354,7 +354,8 @@ Validation constants (also in `models.py`):
 - `POST /clerk` — Clerk subscription events (Svix signature when `CLERK_WEBHOOK_SECRET` is set)
 
 **Top-level** (`main.py`):
-- `GET /api/health` — `{"status": "healthy", "version": "2.1.0"}` (no auth)
+- `GET /api/health` — minimal liveness for load balancers: `{"status": "healthy", "version": "2.1.0"}` (no auth)
+- `GET /api/health/detailed` — verbose status for status-page polling and on-call diagnostics: `{status, version, uptime_seconds, started_at, time, checks: {database: {status, latency_ms}, hls_cache: {playlists_cached, segment_cameras}, viewer_usage: {pending_writes, status}, sse: {subscriber_orgs, subscriber_total}}}`. Public on purpose — every value is metric-shaped, never an org/camera/user identifier (pinned by a privacy regression test in `tests/test_health.py`).
 - FastAPI docs: `/api-docs` (Swagger), `/api-redoc` (ReDoc), OpenAPI at `/api/openapi.json`. `/docs` is the React `DocsPage`.
 
 ## MCP Server
@@ -493,7 +494,7 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 
 | Task | Cadence | What it does |
 |------|---------|--------------|
-| `_log_cleanup_loop` | Every `LOG_CLEANUP_INTERVAL_HOURS` (24h) | Iterates distinct `org_id` values across the log tables, resolves each org's plan, and deletes records older than that org's `log_retention_days` (30 / 90 / 365). Also flushes in-memory segment/playlist caches for cameras offline >`INACTIVE_CAMERA_CLEANUP_HOURS`. |
+| `_log_cleanup_loop` | Every `LOG_CLEANUP_INTERVAL_HOURS` (24h) | Thin scheduler around `run_log_cleanup(db) -> dict` (extracted into `main.py` for direct test coverage — same pattern as `run_offline_sweep`). Iterates distinct `org_id` values across the log tables, resolves each org's plan, and deletes records older than that org's `log_retention_days` (30 / 90 / 365). The loop also flushes in-memory segment/playlist caches for cameras offline >`INACTIVE_CAMERA_CLEANUP_HOURS`. |
 | `_offline_sweep_loop` | Every `OFFLINE_SWEEP_INTERVAL_SECONDS` (30s) | Flips nodes/cameras whose `last_seen` is older than 90s from `status='online'` to `'offline'` and emits `Notification` rows + broadcasts SSE events |
 | `_viewer_usage_flush_loop` | Every 60s | Flushes pending in-memory viewer-second counters to the `org_monthly_usage` table with one UPSERT per active org. Keeps the hot HLS-serve path O(1) in memory. |
 
