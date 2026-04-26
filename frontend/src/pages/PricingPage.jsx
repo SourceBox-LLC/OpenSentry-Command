@@ -100,6 +100,10 @@ function PricingPage() {
             <h3>Is the CloudNode software free?</h3>
             <p>Yes, always. CloudNode is open source (GPL-3) and runs on your own hardware. You only pay for the Command Center cloud service — and you can self-host that too (AGPL-3) if you want to skip us entirely.</p>
           </div>
+          <div className="pricing-faq-item">
+            <h3>Do you send email or SMS alerts on motion?</h3>
+            <p>No — email, SMS, and push-notification delivery are not built into Command Center today. Motion events surface as in-dashboard banners, in the Incidents tab, and through MCP tool calls. If you need external notifications, wire your MCP agent to your own transport (Twilio, Resend, your existing PagerDuty, etc.) — every plan has full MCP access. We're being explicit about this so nobody upgrades expecting alerts that aren't built yet.</p>
+          </div>
         </div>
       </div>
     </div>

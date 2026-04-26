@@ -425,6 +425,49 @@ function SecurityPage() {
           </p>
         </section>
 
+        {/* ── What we don't ship yet ──────────────────────────────── */}
+        <section className="security-section">
+          <h2>Honest gaps — what we don't ship today</h2>
+          <p>
+            We'd rather you know what's missing before you sign up than
+            discover it after a payment failure leaves you confused.
+          </p>
+          <ul className="security-bullets">
+            <li>
+              <strong>No built-in email, SMS, or push alerts.</strong> Motion
+              and offline events surface as in-dashboard banners, in the
+              Incidents tab, and via the MCP tool log — but Command Center
+              does not send notifications to any external channel today. If
+              you need pages to a phone or an email when a camera goes
+              offline, wire your MCP agent to your own transport (Twilio,
+              Resend, PagerDuty, your existing webhook) — every plan has
+              full MCP access, and the agent can subscribe to motion events
+              and route them however you like.
+            </li>
+            <li>
+              <strong>No public status page yet.</strong> If Command Center
+              is down, you'll see it from the dashboard but we don't yet
+              publish historical uptime. Subscribe to{" "}
+              <a
+                href="https://github.com/SourceBox-LLC/OpenSentry-Command/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                the issues page
+              </a>{" "}
+              for incident write-ups in the meantime.
+            </li>
+            <li>
+              <strong>No formal SLA on Free or Pro.</strong> Pro Plus is
+              best-effort priority support; enterprise SLA agreements are
+              available by request. We're not going to pretend we have
+              99.99% uptime guaranteed when we run on a single Fly.io
+              region — see "What happens if SourceBox goes down" below for
+              the actual failure profile.
+            </li>
+          </ul>
+        </section>
+
         {/* ── Offline / self-host ────────────────────────────────── */}
         <section className="security-section">
           <h2>What happens if SourceBox goes down</h2>

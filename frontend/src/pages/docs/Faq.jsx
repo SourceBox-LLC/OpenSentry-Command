@@ -26,6 +26,18 @@ function Faq() {
         only live viewing via Command Center does.
       </p>
 
+      <h3>Will I get email or SMS alerts when motion is detected?</h3>
+      <p>
+        Not from Command Center directly. Email, SMS, and push-notification delivery
+        are not built into Command Center today — motion and offline events surface as
+        in-dashboard banners, in the Incidents tab, and via MCP. To get alerts to a
+        phone or inbox, point an MCP agent (Claude, Cursor, your own) at the motion
+        events stream and route through your own transport (Twilio, Resend, PagerDuty,
+        a webhook). Every plan has full MCP access, so this works on Free too. See the{" "}
+        <a href="#notifications">Notifications</a> section for the full list of
+        triggers and where they show up today.
+      </p>
+
       <h3>Does CloudNode need always-on internet?</h3>
       <p>
         For live streaming to Command Center, yes — segments are pushed as they're
