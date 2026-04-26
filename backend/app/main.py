@@ -273,20 +273,115 @@ app.mount("/mcp", mcp_app)
 # ``lifespan`` doesn't reference a name defined later in the module.
 
 
+def run_log_cleanup(db, *, default_retention_days: int = LOG_RETENTION_DAYS) -> dict:
+    """Delete log rows older than each org's tier-specific retention window.
+
+    Extracted from ``_log_cleanup_loop`` so tests can drive it directly
+    without waiting for a background tick. Mirrors ``run_offline_sweep``'s
+    "synchronous, takes a session, returns a summary" shape — see the
+    Sentry alert OPENSENTRY-COMMAND-1 for why exercising this path
+    end-to-end matters (the loop's outer ``try/except`` swallowed an
+    AttributeError nightly for an unknown stretch before that fired).
+
+    Retention is tiered (Free 30d / Pro 90d / Pro Plus 365d) so cleanup
+    has to iterate orgs instead of running one global cutoff query. Orgs
+    without a resolvable plan fall back to ``default_retention_days``
+    (a parameter for test override; production passes
+    ``LOG_RETENTION_DAYS``) so an org we can't look up isn't silently
+    kept forever.
+
+    The function form ``union(a, b, c, ...)`` below is the SQLAlchemy
+    2.x-compatible way to compose this. The chained form
+    ``select(...).union(...).union(...)`` works on the first call
+    (returns a ``CompoundSelect``) but the second ``.union()`` raises
+    ``AttributeError: 'CompoundSelect' object has no attribute 'union'``
+    — that was the production Sentry bug.
+
+    Returns a dict::
+
+        {
+            "orgs_processed": int,
+            "totals": {"stream", "mcp", "audit", "motion", "notif"},
+            "total_deleted": int,
+        }
+    """
+    from sqlalchemy import union, select
+    from app.models.models import (
+        StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Notification,
+    )
+    from app.core.plans import get_plan_limits, resolve_org_plan
+
+    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+
+    # One query collects every org_id we're holding logs for.
+    # UNION across the log tables — small set, runs once a day.
+    org_rows = db.execute(
+        union(
+            select(StreamAccessLog.org_id).distinct(),
+            select(McpActivityLog.org_id).distinct(),
+            select(AuditLog.org_id).distinct(),
+            select(MotionEvent.org_id).distinct(),
+            select(Notification.org_id).distinct(),
+        )
+    ).all()
+    org_ids = {row[0] for row in org_rows if row[0]}
+
+    totals = {"stream": 0, "mcp": 0, "audit": 0, "motion": 0, "notif": 0}
+    for org_id in org_ids:
+        try:
+            plan = resolve_org_plan(db, org_id)
+        except Exception:
+            plan = "free_org"
+        retention_days = get_plan_limits(plan).get(
+            "log_retention_days", default_retention_days,
+        )
+        cutoff = now - timedelta(days=retention_days)
+
+        totals["stream"] += (
+            db.query(StreamAccessLog)
+            .filter(StreamAccessLog.org_id == org_id, StreamAccessLog.accessed_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        totals["mcp"] += (
+            db.query(McpActivityLog)
+            .filter(McpActivityLog.org_id == org_id, McpActivityLog.timestamp < cutoff)
+            .delete(synchronize_session=False)
+        )
+        totals["audit"] += (
+            db.query(AuditLog)
+            .filter(AuditLog.org_id == org_id, AuditLog.timestamp < cutoff)
+            .delete(synchronize_session=False)
+        )
+        totals["motion"] += (
+            db.query(MotionEvent)
+            .filter(MotionEvent.org_id == org_id, MotionEvent.timestamp < cutoff)
+            .delete(synchronize_session=False)
+        )
+        totals["notif"] += (
+            db.query(Notification)
+            .filter(Notification.org_id == org_id, Notification.created_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+
+    db.commit()
+
+    return {
+        "orgs_processed": len(org_ids),
+        "totals": totals,
+        "total_deleted": sum(totals.values()),
+    }
+
+
 async def _log_cleanup_loop():
     """Background task: delete old logs per-org using the caller's plan's
     retention setting, and free segment caches for cameras that have been
     offline.
 
-    Retention is tiered (Free 30d / Pro 90d / Pro Plus 365d) so cleanup has
-    to iterate orgs instead of running one global cutoff query. Orgs without
-    a resolvable plan fall back to ``LOG_RETENTION_DAYS`` so an org we can't
-    look up isn't silently kept forever.
+    The actual work lives in ``run_log_cleanup`` (log retention) and the
+    inline inactive-camera-cache block below — keeping the loop itself
+    a thin scheduler makes the testable parts testable.
     """
-    from app.models.models import (
-        StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Camera, Notification, Setting,
-    )
-    from app.core.plans import get_plan_limits, resolve_org_plan
+    from app.models.models import Camera
 
     while True:
         await asyncio.sleep(LOG_CLEANUP_INTERVAL_HOURS * 3600)
@@ -295,74 +390,13 @@ async def _log_cleanup_loop():
         try:
             db = SessionLocal()
             try:
-                now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
-                # One query collects every org_id we're holding logs for.
-                # UNION across the log tables — small set, runs once a day.
-                #
-                # The function form `union(a, b, c, ...)` is the SQLAlchemy
-                # 2.x-compatible way to compose this. The chained form
-                # `select(...).union(...).union(...)` works on the first
-                # call (returns a CompoundSelect) but the SECOND `.union()`
-                # raises ``AttributeError: 'CompoundSelect' object has no
-                # attribute 'union'`` — Sentry caught this firing nightly
-                # in production (alert OPENSENTRY-COMMAND-1, Apr 2026).
-                from sqlalchemy import union, select
-                org_rows = (
-                    db.execute(
-                        union(
-                            select(StreamAccessLog.org_id).distinct(),
-                            select(McpActivityLog.org_id).distinct(),
-                            select(AuditLog.org_id).distinct(),
-                            select(MotionEvent.org_id).distinct(),
-                            select(Notification.org_id).distinct(),
-                        )
-                    ).all()
-                )
-                org_ids = {row[0] for row in org_rows if row[0]}
-
-                totals = {"stream": 0, "mcp": 0, "audit": 0, "motion": 0, "notif": 0}
-                for org_id in org_ids:
-                    try:
-                        plan = resolve_org_plan(db, org_id)
-                    except Exception:
-                        plan = "free_org"
-                    retention_days = get_plan_limits(plan).get(
-                        "log_retention_days", LOG_RETENTION_DAYS,
-                    )
-                    cutoff = now - timedelta(days=retention_days)
-
-                    totals["stream"] += (
-                        db.query(StreamAccessLog)
-                        .filter(StreamAccessLog.org_id == org_id, StreamAccessLog.accessed_at < cutoff)
-                        .delete(synchronize_session=False)
-                    )
-                    totals["mcp"] += (
-                        db.query(McpActivityLog)
-                        .filter(McpActivityLog.org_id == org_id, McpActivityLog.timestamp < cutoff)
-                        .delete(synchronize_session=False)
-                    )
-                    totals["audit"] += (
-                        db.query(AuditLog)
-                        .filter(AuditLog.org_id == org_id, AuditLog.timestamp < cutoff)
-                        .delete(synchronize_session=False)
-                    )
-                    totals["motion"] += (
-                        db.query(MotionEvent)
-                        .filter(MotionEvent.org_id == org_id, MotionEvent.timestamp < cutoff)
-                        .delete(synchronize_session=False)
-                    )
-                    totals["notif"] += (
-                        db.query(Notification)
-                        .filter(Notification.org_id == org_id, Notification.created_at < cutoff)
-                        .delete(synchronize_session=False)
-                    )
-                db.commit()
-                total = sum(totals.values())
-                if total > 0:
+                summary = run_log_cleanup(db)
+                if summary["total_deleted"] > 0:
+                    t = summary["totals"]
                     logger.info(
                         "[Cleanup] Deleted %d old logs across %d orgs (stream=%d mcp=%d audit=%d motion=%d notif=%d)",
-                        total, len(org_ids),
-                        totals["stream"], totals["mcp"], totals["audit"], totals["motion"], totals["notif"],
+                        summary["total_deleted"], summary["orgs_processed"],
+                        t["stream"], t["mcp"], t["audit"], t["motion"], t["notif"],
                     )
             finally:
                 db.close()
