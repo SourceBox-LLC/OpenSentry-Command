@@ -56,7 +56,7 @@ describe('fetchWithAuth', () => {
     expect(out).toBeNull()
   })
 
-  it('throws Error with detail message on non-2xx', async () => {
+  it('throws Error with string detail on non-2xx (legacy HTTPException shape)', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 402,
@@ -66,6 +66,114 @@ describe('fetchWithAuth', () => {
     await expect(
       fetchWithAuth('/api/cameras/cam_1/push-segment', async () => 'tok_x'),
     ).rejects.toThrow(/plan_limit_hit/)
+  })
+
+  it('parses ApiError envelope (Shape 1) — sets message + code + detail + status', async () => {
+    // Matches what backend/app/core/errors.py::ApiError produces, also the
+    // existing 402 plan-limit-hit body, also the new 422 validation handler.
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 402,
+      json: async () => ({
+        detail: {
+          error: 'plan_limit_hit',
+          message: 'Camera over the Free plan limit',
+          plan: 'Free',
+          max_cameras: 5,
+          camera_name: 'Front Door',
+        },
+      }),
+    })
+
+    let caught
+    try {
+      await fetchWithAuth('/api/cameras/cam_1/push-segment', async () => 'tok_x')
+    } catch (e) {
+      caught = e
+    }
+
+    expect(caught).toBeInstanceOf(Error)
+    expect(caught.message).toBe('Camera over the Free plan limit')
+    expect(caught.code).toBe('plan_limit_hit')   // for branching
+    expect(caught.status).toBe(402)
+    expect(caught.detail.max_cameras).toBe(5)    // structured fields preserved
+    expect(caught.detail.plan).toBe('Free')
+  })
+
+  it('parses Pydantic 422 array detail (Shape 4) — defensive fallback', async () => {
+    // Backend's main.py rewrites 422s through the validation handler now,
+    // but in-flight deploys / dev servers can still surface the raw shape.
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 422,
+      json: async () => ({
+        detail: [
+          { loc: ['body', 'name'], msg: 'field required', type: 'value_error.missing' },
+        ],
+      }),
+    })
+
+    let caught
+    try {
+      await fetchWithAuth('/api/nodes', async () => 'tok_x', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+    } catch (e) {
+      caught = e
+    }
+
+    expect(caught.message).toMatch(/field required/)
+    expect(caught.message).toMatch(/name/)        // location surfaced
+    expect(caught.code).toBe('validation_failed')
+    expect(caught.status).toBe(422)
+  })
+
+  it('parses top-level envelope without .detail (Shape 3 — rate-limit handler)', async () => {
+    // rate_limit_exceeded_handler in main.py builds a JSONResponse with a
+    // top-level shape, not wrapped under .detail like HTTPException would be.
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({
+        error: 'rate_limit_exceeded',
+        message: 'Too many requests. Back off and retry after the Retry-After window.',
+        limit: '60/minute',
+        retry_after_seconds: 60,
+      }),
+    })
+
+    let caught
+    try {
+      await fetchWithAuth('/api/nodes/heartbeat', async () => 'tok_x')
+    } catch (e) {
+      caught = e
+    }
+
+    expect(caught.message).toMatch(/Too many requests/)
+    expect(caught.code).toBe('rate_limit_exceeded')
+    expect(caught.status).toBe(429)
+  })
+
+  it('falls back gracefully when error body is empty/non-JSON', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new SyntaxError('unexpected end of JSON input')
+      },
+    })
+
+    let caught
+    try {
+      await fetchWithAuth('/api/anything', async () => 'tok_x')
+    } catch (e) {
+      caught = e
+    }
+
+    expect(caught.message).toBe('Request failed with status 500')
+    expect(caught.code).toBeNull()
+    expect(caught.status).toBe(500)
   })
 
   it('throws fetch error when network fails', async () => {

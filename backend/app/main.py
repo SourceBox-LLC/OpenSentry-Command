@@ -140,6 +140,51 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+
+# ── Pydantic validation errors → ApiError envelope ──────────────────
+#
+# FastAPI's default 422 body for a request that fails Pydantic
+# validation is a list of dicts:
+#
+#     {"detail": [{"loc": [...], "msg": "...", "type": "..."}]}
+#
+# That's machine-friendly but unreadable to a human, and the frontend's
+# error parser used to stringify the array into something like
+# "[object Object]" before we taught it about the shape.  Funnel
+# validation failures through the same envelope ApiError uses, so the
+# REST surface produces one shape regardless of whether the failure
+# came from a hand-raised exception or Pydantic's auto-validation.
+#
+# Behaviour on the frontend stays consistent: services/api.js looks at
+# body.detail.message and shows it as-is.  Test code can still inspect
+# body.detail.errors for the structured per-field breakdown.
+from fastapi.exceptions import RequestValidationError  # noqa: E402
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Rewrite Pydantic 422 envelope to match ApiError's shape."""
+    errors = exc.errors()
+    # Build a one-line summary out of the first failing field — that's
+    # what gets shown in the toast.  The full error list is preserved
+    # under detail.errors for callers (and tests) that want the breakdown.
+    if errors:
+        first = errors[0]
+        loc = ".".join(str(p) for p in first.get("loc", []) if p != "body")
+        msg = first.get("msg", "Validation failed")
+        summary = f"{msg} ({loc})" if loc else msg
+    else:
+        summary = "Request validation failed"
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": {
+                "error": "validation_failed",
+                "message": summary,
+                "errors": errors,  # full list for clients that want it
+            },
+        },
+    )
+
 # Get frontend URL from environment (set in fly.toml or .env)
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
 

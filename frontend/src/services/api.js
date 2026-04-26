@@ -1,5 +1,89 @@
 const API_URL = import.meta.env.VITE_API_URL || ""
 
+/**
+ * Parse a non-2xx response body into a usable Error.
+ *
+ * Three shapes exist on the wire today; the parser handles each cleanly
+ * so consumers never see "[object Object]" in a toast regardless of
+ * which backend pattern produced the response:
+ *
+ *   1. ApiError envelope — ``{detail: {error, message, ...extras}}``
+ *      (see backend/app/core/errors.py — also matches the existing 402
+ *      plan-limit-hit body and the new 422 validation handler)
+ *   2. Plain string detail — ``{detail: "string"}``
+ *      (most legacy ``raise HTTPException(detail="...")`` sites)
+ *   3. Top-level envelope without ``detail`` —
+ *      ``{error, message, ...}``
+ *      (rate_limit_exceeded_handler in main.py emits this shape directly
+ *      via JSONResponse rather than HTTPException)
+ *
+ * Plus the catch-all "no body / empty / non-JSON" fallback.
+ *
+ * The returned Error always has:
+ *   - .message  — human-readable, ready to drop in a toast
+ *   - .code     — machine-readable string when available, else null
+ *                 (call sites can do ``if (e.code === "plan_limit_hit")``)
+ *   - .status   — the HTTP status code
+ *   - .detail   — the raw structured detail when one was sent, so
+ *                 callers that branch on extra fields (plan,
+ *                 max_cameras, etc.) can read them directly
+ */
+function parseErrorBody(body, status) {
+  const detail = body?.detail
+
+  // Shape 1: ApiError-style structured envelope under .detail
+  if (detail && typeof detail === "object" && !Array.isArray(detail) && detail.message) {
+    const err = new Error(detail.message)
+    err.code = detail.error ?? null
+    err.detail = detail
+    err.status = status
+    return err
+  }
+
+  // Shape 2: plain-string detail (legacy ``raise HTTPException`` pattern)
+  if (typeof detail === "string") {
+    const err = new Error(detail)
+    err.code = null
+    err.detail = null
+    err.status = status
+    return err
+  }
+
+  // Pydantic 422 fallback: array of {loc, msg, type}. Should be rare now
+  // that main.py rewrites 422s through the validation handler, but
+  // in-flight deploys (and the dev server when the handler hasn't
+  // reloaded yet) can still surface this — handle defensively.
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0] || {}
+    const loc = Array.isArray(first.loc)
+      ? first.loc.filter((p) => p !== "body").join(".")
+      : ""
+    const msg = first.msg || "Validation failed"
+    const err = new Error(loc ? `${msg} (${loc})` : msg)
+    err.code = "validation_failed"
+    err.detail = { errors: detail }
+    err.status = status
+    return err
+  }
+
+  // Shape 3: top-level envelope without .detail (rate-limit handler).
+  // The body itself carries error/message at the top.
+  if (body && typeof body === "object" && body.message) {
+    const err = new Error(body.message)
+    err.code = body.error ?? null
+    err.detail = body
+    err.status = status
+    return err
+  }
+
+  // Last-resort fallback: nothing useful in the body at all.
+  const err = new Error(`Request failed with status ${status}`)
+  err.code = null
+  err.detail = null
+  err.status = status
+  return err
+}
+
 export async function fetchWithAuth(endpoint, getToken, options = {}) {
   const token = getToken ? await getToken() : null
 
@@ -7,7 +91,7 @@ export async function fetchWithAuth(endpoint, getToken, options = {}) {
     'Content-Type': 'application/json',
     ...options.headers
   }
-  
+
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
@@ -27,8 +111,8 @@ export async function fetchWithAuth(endpoint, getToken, options = {}) {
   }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}))
-    throw new Error(error.detail || `Request failed with status ${response.status}`)
+    const body = await response.json().catch(() => null)
+    throw parseErrorBody(body, response.status)
   }
 
   if (response.status === 204) {
