@@ -1,0 +1,76 @@
+import { DashboardIaDiagram, IncidentLifecycleDiagram } from "../../components/DocsDiagrams"
+
+
+function Dashboard() {
+  return (
+    <section className="docs-section" id="dashboard">
+      <h2>Dashboard & Features<a href="#dashboard" className="docs-anchor">#</a></h2>
+      <p>The Command Center web dashboard is where your team actually uses the system. It's organized into a few main areas.</p>
+
+      <DashboardIaDiagram />
+
+      <h3>Live view</h3>
+      <p>
+        The default page after sign-in. Every camera appears as a tile with a status
+        pill (online, offline, or stale) and a live HLS player you can expand. Tiles
+        are grouped by camera group and each tile shows its node name for quick
+        identification.
+      </p>
+      <ul>
+        <li><strong>Live Streams</strong> — HLS video served same-origin through the Command Center proxy, JWT-authenticated per viewer. Starts at the live edge.</li>
+        <li><strong>Snapshots</strong> — Click the camera icon to capture a single JPEG and save it on the node. Shows up in the node's snapshots list.</li>
+        <li><strong>Recording</strong> — Manual start/stop per camera. Recordings are stored locally on the node in the encrypted SQLite database.</li>
+        <li><strong>Fullscreen + multi-view</strong> — Click a tile to expand to full screen, or select multiple tiles to watch side-by-side.</li>
+      </ul>
+
+      <h3>Settings</h3>
+      <p>Configure your org, nodes, and recording policy. Admin-only.</p>
+      <ul>
+        <li><strong>Node Management</strong> — Create nodes, copy API keys at creation time, rotate keys, delete nodes (cascades to cameras).</li>
+        <li><strong>Recording Settings</strong> — Toggle continuous 24/7 or scheduled recording and define the time window. See the <a href="#recording">Recording</a> section below.</li>
+        <li><strong>Organization</strong> — Invite members, manage roles (Admin vs Member), view resource usage relative to plan caps.</li>
+        <li><strong>Subscription</strong> — Current plan, usage bars for cameras and nodes, and an upgrade/downgrade flow.</li>
+        <li><strong>Danger Zone</strong> — Wipe stream logs or perform a full organization reset. Pro/Pro Plus only and each action requires a typed confirmation.</li>
+      </ul>
+
+      <h3>Admin dashboard</h3>
+      <p>Pro and Pro Plus plans unlock a separate Admin dashboard for auditing and analytics:</p>
+      <ul>
+        <li><strong>Stream Access Logs</strong> — Who watched which camera, from which IP, at what time. One row per user × camera × ~5-minute window.</li>
+        <li><strong>Usage Statistics</strong> — Views by camera, by user, and by day. Useful to see which feeds matter and which are dormant.</li>
+        <li><strong>MCP Tool Activity</strong> — Every tool call made by a connected AI client: which key, which tool, what it did, whether it succeeded.</li>
+        <li><strong>System Health</strong> — Online vs offline camera counts, node heartbeat ages, segment cache status.</li>
+      </ul>
+
+      <h3>AI incident reports</h3>
+      <p>
+        When an AI client is connected over MCP, it can open structured incident reports
+        on your behalf. Each report has a severity, status, markdown write-up, attached
+        snapshots, video clips, and a timeline of observations — all editable from the
+        Incidents tab in the dashboard.
+      </p>
+      <IncidentLifecycleDiagram />
+      <ul>
+        <li><strong>Create</strong> — Agents open an incident when they notice something worth
+          flagging (possible intruder, equipment fault, unexpected motion).</li>
+        <li><strong>Investigate</strong> — They can attach fresh JPEG snapshots from any camera,
+          save short video clips from a camera's recent live buffer, and log text observations
+          as they check other feeds.</li>
+        <li><strong>Finalize</strong> — A markdown report is written at the end with what was
+          seen, what was ruled out, and any recommended actions.</li>
+        <li><strong>Review</strong> — Humans open the Incidents tab, read the report, view the
+          evidence thumbnails, play back the captured clips, and mark each incident
+          acknowledged, resolved, or dismissed.</li>
+        <li><strong>Look back</strong> — Agents can also list and re-read past incidents
+          (including fetching their snapshots and clip metadata) so they can follow up without
+          losing context.</li>
+      </ul>
+      <p className="docs-subtle">
+        Requires MCP access (Pro or Pro Plus) and an MCP API key. See
+        the <a href="#mcp">MCP Integration</a> section for setup.
+      </p>
+    </section>
+  )
+}
+
+export default Dashboard

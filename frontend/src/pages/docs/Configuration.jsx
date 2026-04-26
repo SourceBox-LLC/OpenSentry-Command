@@ -1,0 +1,101 @@
+import { ConfigPrecedenceDiagram } from "../../components/DocsDiagrams"
+import { useDocs } from "./context"
+
+
+function Configuration() {
+  const { copyToClipboard } = useDocs()
+
+  return (
+    <section className="docs-section" id="configuration">
+      <h2>Configuration<a href="#configuration" className="docs-anchor">#</a></h2>
+      <p>
+        CloudNode resolves configuration from multiple sources so you can run it
+        however suits your deployment — interactive wizard for a single box,
+        environment variables for Docker, CLI flags for one-off overrides.
+      </p>
+
+      <h3>Loading order</h3>
+      <p>Higher priority overrides lower priority:</p>
+      <ol>
+        <li><strong>SQLite database</strong> (<code>data/node.db</code>) — primary source of truth, written by the setup wizard and encrypted at rest</li>
+        <li><strong>YAML file</strong> (<code>config.yaml</code>) — legacy fallback, auto-migrated into the DB on first load</li>
+        <li><strong>Environment variables</strong> — override any stored value at runtime</li>
+        <li><strong>CLI flags</strong> — highest priority, typically used for debugging</li>
+      </ol>
+      <ConfigPrecedenceDiagram />
+
+      <h3>Environment variables</h3>
+      <div className="docs-plans-table">
+        <table>
+          <thead>
+            <tr><th>Variable</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>OPENSENTRY_NODE_ID</code></td><td>Node ID assigned by Command Center</td></tr>
+            <tr><td><code>OPENSENTRY_API_KEY</code></td><td>Node API key (encrypted at rest in the DB)</td></tr>
+            <tr><td><code>OPENSENTRY_API_URL</code></td><td>Command Center URL (<code>https://opensentry-command.fly.dev</code>)</td></tr>
+            <tr><td><code>OPENSENTRY_ENCODER</code></td><td>Force a specific encoder (e.g. <code>h264_nvenc</code>, <code>libx264</code>)</td></tr>
+            <tr><td><code>RUST_LOG</code></td><td>Log verbosity: <code>trace</code>, <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>CLI flags</h3>
+      <p>
+        For one-off runs you can pass the three core values on the command line.
+        They override anything in the database and env:
+      </p>
+      <div className="docs-code-block">
+        <code>opensentry-cloudnode --node-id NODE --api-key KEY --api-url URL</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard('opensentry-cloudnode --node-id NODE --api-key KEY --api-url URL')}>Copy</button>
+      </div>
+
+      <h3>Example <code>config.yaml</code></h3>
+      <p>
+        The YAML file is optional — only needed if you want to seed values without the
+        wizard, or tune motion detection. Placed next to the binary:
+      </p>
+      <div className="docs-code-block">
+        <code>{`node_id: "node_abc123"
+api_key: "nak_your_key_here"
+api_url: "https://opensentry-command.fly.dev"
+
+motion:
+  enabled: true
+  threshold: 0.02      # 0.0 = identical, 1.0 = totally different
+  cooldown_secs: 30    # minimum seconds between motion events per camera
+
+storage:
+  max_size_gb: 20      # oldest recordings/snapshots evicted when over`}</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard(`node_id: "node_abc123"
+api_key: "nak_your_key_here"
+api_url: "https://opensentry-command.fly.dev"
+
+motion:
+  enabled: true
+  threshold: 0.02
+  cooldown_secs: 30
+
+storage:
+  max_size_gb: 20`)}>Copy</button>
+      </div>
+
+      <h3>Credential storage</h3>
+      <p>
+        The node API key is encrypted at rest in the SQLite DB using AES-256-GCM
+        with a machine-derived key (SHA-256 of hostname + application salt). The
+        database is <strong>not portable</strong> — copying <code>node.db</code> to a
+        different host will make the stored key unreadable. Re-run <code>setup</code>
+        after moving to a new machine.
+      </p>
+
+      <h3>Resetting a node</h3>
+      <ul>
+        <li><strong><code>/reauth confirm</code></strong> — from the dashboard's settings page, clears credentials and reopens the setup wizard. Preserves recordings.</li>
+        <li><strong><code>/wipe confirm</code></strong> — erases all stored data (credentials, recordings, snapshots) and restarts setup from scratch.</li>
+      </ul>
+    </section>
+  )
+}
+
+export default Configuration
