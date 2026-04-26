@@ -20,9 +20,15 @@ export function useMotionAlerts(cameras) {
   const { getToken } = useAuth()
   const { showToast } = useToasts()
   const abortRef = useRef(null)
-  // Keep cameras ref current so the SSE callback always sees the latest map
+  // Keep cameras ref current so the SSE callback always sees the latest
+  // map. Updating the ref inside an effect (rather than during render)
+  // satisfies React's purity rules — refs aren't supposed to be mutated
+  // during render. The SSE callback fires asynchronously after commit so
+  // it always reads the post-commit value.
   const camerasRef = useRef(cameras)
-  camerasRef.current = cameras
+  useEffect(() => {
+    camerasRef.current = cameras
+  }, [cameras])
 
   useEffect(() => {
     let cancelled = false
