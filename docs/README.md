@@ -9,6 +9,18 @@ One decision per file, numbered in order. ADRs capture the *why* behind a non-ob
 - [0001-sync-schema-vs-alembic.md](adr/0001-sync-schema-vs-alembic.md) — why we don't use Alembic for backend schema migrations
 - [0002-viewer-hour-billing.md](adr/0002-viewer-hour-billing.md) — why monthly viewer-hours, not camera count, are the binding tier limit
 
+## Runbooks (`docs/runbooks/`)
+
+Step-by-step responses to incidents that recur often enough to be
+worth writing down. Optimised for being read under pressure — short
+sections, command-oriented, not narrative.
+
+- [ON_CALL.md](runbooks/ON_CALL.md) — eight scenarios covering Sentry
+  alerts, customer-reported camera/stream outages, DB issues,
+  multi-customer incidents, suspected breaches, deletion requests,
+  and pre-deploy sanity checks. Has an append-only incident log
+  section to populate as we respond to real ones.
+
 ## Legal templates (`docs/legal/`)
 
 Working drafts of customer-facing legal documents. Each is marked `DRAFT — NOT FOR EXECUTION` at the top and **must** be reviewed by counsel before it is sent to a customer or relied on as binding. They live in source control so the engineering reality and the legal text don't drift apart unnoticed.
