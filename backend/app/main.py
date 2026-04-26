@@ -298,14 +298,24 @@ async def _log_cleanup_loop():
                 now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
                 # One query collects every org_id we're holding logs for.
                 # UNION across the log tables — small set, runs once a day.
+                #
+                # The function form `union(a, b, c, ...)` is the SQLAlchemy
+                # 2.x-compatible way to compose this. The chained form
+                # `select(...).union(...).union(...)` works on the first
+                # call (returns a CompoundSelect) but the SECOND `.union()`
+                # raises ``AttributeError: 'CompoundSelect' object has no
+                # attribute 'union'`` — Sentry caught this firing nightly
+                # in production (alert OPENSENTRY-COMMAND-1, Apr 2026).
                 from sqlalchemy import union, select
                 org_rows = (
                     db.execute(
-                        select(StreamAccessLog.org_id).distinct()
-                        .union(select(McpActivityLog.org_id).distinct())
-                        .union(select(AuditLog.org_id).distinct())
-                        .union(select(MotionEvent.org_id).distinct())
-                        .union(select(Notification.org_id).distinct())
+                        union(
+                            select(StreamAccessLog.org_id).distinct(),
+                            select(McpActivityLog.org_id).distinct(),
+                            select(AuditLog.org_id).distinct(),
+                            select(MotionEvent.org_id).distinct(),
+                            select(Notification.org_id).distinct(),
+                        )
                     ).all()
                 )
                 org_ids = {row[0] for row in org_rows if row[0]}
