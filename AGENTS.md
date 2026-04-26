@@ -71,18 +71,37 @@ backend/
 │   │   ├── config.py             # Environment loading (Config class)
 │   │   ├── clerk.py              # Clerk SDK init
 │   │   ├── database.py           # SQLAlchemy engine + session factory + Base
-│   │   └── limiter.py            # slowapi Limiter instance (tenant-aware key)
+│   │   ├── errors.py             # ApiError class — structured 4xx/5xx envelope
+│   │   ├── limiter.py            # slowapi Limiter instance (tenant-aware key)
+│   │   ├── migrations.py         # sync_schema (column adder), drop_orphan_tables,
+│   │   │                         # sanitize_existing_codecs — stand-in for Alembic
+│   │   ├── plans.py              # PLAN_LIMITS, effective_plan_for_caps, grace period
+│   │   └── sentry.py             # Sentry SDK init (no-op when SENTRY_DSN unset)
 │   ├── models/models.py          # 14 ORM models (see Data Models below)
 │   └── schemas/schemas.py        # Pydantic request/response schemas incl. McpKeyCreate
 ├── scripts/
 │   ├── install.sh / install.ps1  # CloudNode installers (served by install.py)
 │   └── mcp-setup.sh / .ps1       # MCP client config helpers (Claude Code / Desktop / Cursor / Windsurf)
-├── tests/                        # pytest — security, MCP scoping, motion, notifications, offline sweep
+├── tests/                        # pytest — security, MCP scoping, motion, notifications, offline sweep,
+│                                 # billing/grace, ApiError envelope, drop_orphan_tables migration
 ├── start.py                      # Uvicorn entrypoint (0.0.0.0:8000, reload=True)
-├── pyproject.toml
+├── pyproject.toml                # Includes [tool.uv] constraint-dependencies pinning
+│                                 # python-multipart and authlib past Dependabot moderates
 └── .env.example
 
+docs/                             # Supplementary docs that don't belong in README/AGENTS
+├── README.md                     # Index of runbooks + ADRs
+└── adr/
+    ├── 0001-sync-schema-vs-alembic.md
+    └── 0002-viewer-hour-billing.md
+
 frontend/
+├── tests/                        # vitest + @testing-library/react + happy-dom
+│   ├── setup.js                  # @testing-library/jest-dom matchers + cleanup
+│   ├── sanity.test.js            # runner + DOM + matcher wiring smoke
+│   ├── services/api.test.js      # fetchWithAuth shape contract (4 wire shapes)
+│   ├── components/               # DocsDiagrams, UpgradeModal, EmptyState
+│   └── pages/DocsPage.test.jsx   # split structural smoke (every section id renders)
 └── src/
     ├── pages/
     │   ├── LandingPage.jsx           # Public landing page
@@ -91,9 +110,13 @@ frontend/
     │   ├── McpPage.jsx               # MCP keys (scope picker) + activity + incident list
     │   ├── AdminPage.jsx             # Stream logs, MCP activity, audit trail
     │   ├── PricingPage.jsx           # Public pricing tiers
+    │   ├── SecurityPage.jsx          # Public privacy + security claims page (/security)
     │   ├── SentinelPage.jsx          # Public marketing page for the Sentinel AI agent
     │   ├── LegalPage.jsx             # /legal/:page — Terms, Privacy, etc.
-    │   ├── DocsPage.jsx              # /docs — in-app documentation
+    │   ├── DocsPage.jsx              # /docs — slim composition shell that renders 19 sections
+    │   ├── docs/                     # one file per <section> on /docs (extracted from the
+    │   │                             # 1,747-line monolith); shared state lives in
+    │   │                             # docs/context.jsx (DocsProvider + OsTabs + useDocs)
     │   ├── SignInPage.jsx / SignUpPage.jsx
     │   └── TestHlsPage.jsx           # Admin-only HLS debug view
     ├── components/
@@ -116,6 +139,10 @@ frontend/
     │   ├── Layout.jsx / PublicLayout.jsx
     │   ├── LandingNav.jsx / LandingFooter.jsx
     │   ├── ToastContainer.jsx / LoadingSpinner.jsx
+    │   ├── DocsDiagrams.jsx         # 8 inline-SVG diagrams embedded on /docs
+    │   │                             # (System Architecture / HLS Pipeline / Motion FSM /
+    │   │                             # Config Precedence / Incident Lifecycle / MCP Workflow /
+    │   │                             # Security Model rings / Dashboard IA tree)
     │   └── EmptyState.jsx
     ├── hooks/
     │   ├── useNotifications.jsx      # SSE inbox + unread count
@@ -474,7 +501,7 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 
 **Tenant isolation:** every query filters by `org_id` from the authenticated user/node.
 
-**Error handling:** FastAPI `HTTPException` with appropriate status codes. Clerk auth failures return 401/403.
+**Error handling:** Two layers. New endpoints raise `app.core.errors.ApiError(status, code, message, **extras)` for a structured envelope (`{detail: {error, message, ...extras}}`); the frontend's `services/api.js::parseErrorBody` reads `e.message` for toasts and `e.code` for branching. Older endpoints still use bare `HTTPException(detail="...")` and the frontend parser handles both shapes plus the rate-limit handler's top-level `{error, message, ...}` shape, so call sites never see `[object Object]`. Pydantic 422s are normalised through the same envelope by a `RequestValidationError` handler in `main.py`. ADR docstring on `ApiError` warns: REST-only — MCP tools at `/mcp` use `ToolError` (the JSON-RPC error envelope is fixed by the protocol).
 
 **Database sessions:** `get_db()` dependency yields a SQLAlchemy session per request.
 
