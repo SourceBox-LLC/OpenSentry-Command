@@ -16,38 +16,37 @@ function CloudNodeSetup() {
       <h3>Installation</h3>
       <OsTabs id="cn" />
       <p style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-        {os === 'windows' ? 'Run in PowerShell as Administrator.' : 'Run in your terminal.'}
+        {os === 'windows'
+          ? 'After the MSI finishes, open PowerShell as Administrator to run setup.'
+          : 'Run in your terminal.'}
       </p>
 
-      {os === 'windows' && (
-        <div className="docs-callout docs-callout-info" style={{ marginTop: '1rem' }}>
-          <p>
-            <span className="docs-callout-icon">🪟</span>
-            <span>
-              <strong>Recommended for always-on cameras:</strong> use the{' '}
-              <a
-                href="https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                MSI installer
-              </a>
-              . It registers CloudNode as a Windows Service that survives logout and reboots,
-              installs to <code>C:\Program Files\OpenSentry CloudNode\</code>, and stores config under{' '}
-              <code>C:\ProgramData\OpenSentry\</code>. The MSI is currently <strong>unsigned</strong> —
-              SmartScreen will warn "Windows protected your PC" on first run. Click{' '}
-              <strong>More info → Run anyway</strong>. Code signing is on the roadmap.
-            </span>
-          </p>
-        </div>
-      )}
-
       <h3>Setup Wizard</h3>
-      <p>After installation, configure your API key:</p>
+      <p>
+        After installation, run the wizard to enrol the node and detect cameras:
+      </p>
       <div className="docs-code-block">
         <code>{os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup'}</code>
         <button className="docs-copy-btn" onClick={() => copyToClipboard(os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup')}>Copy</button>
       </div>
+      <p>The wizard walks through five steps:</p>
+      <ol>
+        <li>
+          <strong>Prerequisites</strong> — detects platform, finds your USB cameras, verifies FFmpeg.
+          On Windows, if FFmpeg isn't installed the wizard offers to{' '}
+          <strong>download it for you</strong> (~150 MB, lands under{' '}
+          <code>C:\ProgramData\OpenSentry\ffmpeg\</code>). Linux/macOS users get pointed
+          at <code>apt install ffmpeg</code> / <code>brew install ffmpeg</code>.
+        </li>
+        <li><strong>Configuration</strong> — prompts for your Node ID + API key (from Command Center → Settings → Add Node).</li>
+        <li><strong>Install</strong> — saves the encrypted config and detects the best video encoder (NVENC / QSV / AMF, or libx264 fallback).</li>
+        <li><strong>Verify</strong> — round-trips a credential check against Command Center.</li>
+        <li><strong>Launch</strong> — optionally auto-starts the node.</li>
+      </ol>
+      <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+        On a fresh Windows machine with no FFmpeg, the whole flow takes about
+        2 minutes including the FFmpeg download (depends on your connection).
+      </p>
 
       {os === 'windows' && (
         <>
@@ -69,6 +68,24 @@ Set-Service -Name OpenSentryCloudNode -StartupType Automatic`}</code>
             <li><code>Stop-Service OpenSentryCloudNode</code> / <code>Restart-Service OpenSentryCloudNode</code></li>
             <li><code>Get-Content -Wait C:\ProgramData\OpenSentry\logs\cloudnode-service.<i>YYYY-MM-DD</i></code> — tail today's service log</li>
           </ul>
+
+          <h3>Uninstalling</h3>
+          <p>
+            Use <strong>Settings → Apps → Installed apps → OpenSentry CloudNode → Uninstall</strong>.
+            That stops the service, removes the binary, removes the Windows Service
+            registration, and removes everything under{' '}
+            <code>C:\ProgramData\OpenSentry\</code> — including your encrypted config,
+            recordings, and the auto-installed FFmpeg. After uninstall the machine is
+            in a true "never installed" state.
+          </p>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Upgrades (re-running a newer MSI) preserve everything under ProgramData;
+            only an explicit uninstall wipes it. The CLI{' '}
+            <code>opensentry-cloudnode uninstall</code> subcommand is for source-built
+            installs and redirects MSI users to Settings → Apps if you accidentally
+            run it on an MSI machine.
+          </p>
+
           <p>
             See the CloudNode <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node#running-as-a-windows-service" target="_blank" rel="noopener noreferrer">README</a> for the full reference.
           </p>
