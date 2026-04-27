@@ -28,11 +28,18 @@ function LandingPage() {
   }
 
   const base = window.location.origin
+  // Windows is intentionally absent — that platform installs via the
+  // MSI from GitHub Releases (rendered as a download button below)
+  // rather than a curl-style one-liner. The PowerShell installer
+  // (`install.ps1`) was retired when the MSI shipped: the MSI registers
+  // a Windows Service, which is the right execution model for an
+  // always-on camera node and what `install.ps1` couldn't cleanly do.
   const installCommands = {
     linux: `curl -fsSL ${base}/install.sh | bash`,
     macos: `curl -fsSL ${base}/install.sh | bash`,
-    windows: `irm ${base}/install.ps1 | iex`,
   }
+  const MSI_DOWNLOAD_URL =
+    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi'
 
   return (
     <>
@@ -381,29 +388,39 @@ function LandingPage() {
                       Windows
                     </button>
                   </div>
-                  <div className="landing-code-block">
-                    <code>{installCommands[os]}</code>
-                    <button className="landing-copy-btn" onClick={() => copyToClipboard(installCommands[os])}>
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-                  {os === 'windows' && (
-                    <p className="landing-step-note" style={{ marginTop: '0.75rem' }}>
-                      Or run as a Windows Service (auto-starts on boot, recommended for always-on cameras):{' '}
+                  {os !== 'windows' ? (
+                    <>
+                      <div className="landing-code-block">
+                        <code>{installCommands[os]}</code>
+                        <button className="landing-copy-btn" onClick={() => copyToClipboard(installCommands[os])}>
+                          {copied ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="landing-step-note">
+                        One command. Downloads CloudNode, checks dependencies, and guides you through setup.
+                      </p>
+                    </>
+                  ) : (
+                    <>
                       <a
-                        href="https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi"
+                        href={MSI_DOWNLOAD_URL}
                         target="_blank"
                         rel="noopener noreferrer"
+                        className="landing-btn landing-btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                       >
-                        download the MSI installer
-                      </a>{' '}
-                      (unsigned, see <Link to="/docs#cloudnode-setup">install notes</Link>).
-                    </p>
+                        ⬇  Download Windows MSI
+                      </a>
+                      <p className="landing-step-note" style={{ marginTop: '1rem' }}>
+                        Run the MSI (one UAC prompt), then open PowerShell as Administrator and run{' '}
+                        <code>opensentry-cloudnode setup</code>. Registers as a Windows Service that
+                        auto-starts on boot. MSI is currently unsigned — SmartScreen will warn:
+                        click <strong>More info → Run anyway</strong>. See{' '}
+                        <Link to="/docs#cloudnode-setup">install notes</Link> for full details.
+                      </p>
+                    </>
                   )}
                 </div>
-                <p className="landing-step-note">
-                  One command. Downloads CloudNode, checks dependencies, and guides you through setup.
-                </p>
               </div>
             </div>
             <div className="landing-step">

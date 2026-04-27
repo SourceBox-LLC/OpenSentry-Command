@@ -31,8 +31,11 @@ case "$OS" in
     Darwin*) PLATFORM="macos" ;;
     *)
         echo -e "${RED}Error: Unsupported operating system: $OS${NC}"
-        echo "For Windows, use PowerShell:"
-        echo "  irm https://opensentry-command.fly.dev/install.ps1 | iex"
+        echo ""
+        echo "For Windows, download the MSI installer from the latest release:"
+        echo "  https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest"
+        echo ""
+        echo "(Run the MSI, then 'opensentry-cloudnode setup' from an admin PowerShell.)"
         exit 1
         ;;
 esac

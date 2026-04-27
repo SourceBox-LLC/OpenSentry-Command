@@ -80,7 +80,9 @@ backend/
 │   ├── models/models.py          # 14 ORM models (see Data Models below)
 │   └── schemas/schemas.py        # Pydantic request/response schemas incl. McpKeyCreate
 ├── scripts/
-│   ├── install.sh / install.ps1  # CloudNode installers (served by install.py)
+│   ├── install.sh                # CloudNode installer for Linux/macOS (served by install.py).
+│   │                               # Windows installs via the MSI from the latest CloudNode
+│   │                               # GitHub release, not a script — see CloudNodeSetup docs.
 │   └── mcp-setup.sh / .ps1       # MCP client config helpers (Claude Code / Desktop / Cursor / Windsurf)
 ├── tests/                        # pytest — security, MCP scoping, motion, notifications, offline sweep,
 │                                 # billing/grace, ApiError envelope, drop_orphan_tables migration
@@ -341,8 +343,8 @@ Validation constants (also in `models.py`):
 - `GET /stream` — SSE stream for the bell; audience filter applied server-side (view)
 
 **install.py** (no prefix, no auth):
-- `GET /install.sh` / `GET /install.ps1` — CloudNode installer scripts
-- `GET /mcp-setup.sh` / `GET /mcp-setup.ps1` — MCP client config helpers
+- `GET /install.sh` — CloudNode installer for Linux/macOS. Windows users install via the MSI from the latest CloudNode GitHub release; the legacy `/install.ps1` route was removed when the MSI shipped.
+- `GET /mcp-setup.sh` / `GET /mcp-setup.ps1` — MCP client config helpers (separate from CloudNode install — these configure Claude / Cursor / etc. to talk to this Command Center)
 
 **ws.py** (no prefix):
 - `WS /ws/node` — WebSocket channel for CloudNode realtime (API key in query)

@@ -47,13 +47,27 @@ export function DocsProvider({ children }) {
   // module top-level so test runners that stub window.location can produce
   // consistent results.
   const base = window.location.origin
+  // Windows is intentionally absent — that platform installs via the MSI
+  // from GitHub Releases (rendered as a download button in OsTabs) rather
+  // than a curl-style one-liner. The PowerShell installer was retired
+  // when the MSI shipped: the MSI registers a Windows Service, which is
+  // the right execution model for an always-on camera node.
   const installCommands = {
     linux: `curl -fsSL ${base}/install.sh | bash`,
     macos: `curl -fsSL ${base}/install.sh | bash`,
-    windows: `irm ${base}/install.ps1 | iex`,
   }
+  const msiDownloadUrl =
+    "https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi"
 
-  const value = { os, setOs, copied, copyToClipboard, base, installCommands }
+  const value = {
+    os,
+    setOs,
+    copied,
+    copyToClipboard,
+    base,
+    installCommands,
+    msiDownloadUrl,
+  }
   return <DocsContext.Provider value={value}>{children}</DocsContext.Provider>
 }
 
@@ -68,11 +82,24 @@ export function useDocs() {
 
 
 // Reusable install-command tabs widget.
-// Renders three OS tabs and a copy-able install command for the currently
-// selected one. Two callsites today (Getting Started + CloudNode Setup) so
-// the switch propagates between them via the shared `os` state.
+// Renders three OS tabs and the appropriate install action for the
+// selected platform. Two callsites today (Getting Started + CloudNode
+// Setup) so the switch propagates between them via the shared `os` state.
+//
+// Linux / macOS render a copy-able shell one-liner. Windows renders an
+// MSI download button instead — there's no command to copy, the MSI is
+// the install. Conditional rendering inside the same widget keeps both
+// consumers consistent without forcing them to know about the platform
+// difference.
 export function OsTabs({ id }) {
-  const { os, setOs, copied, copyToClipboard, installCommands } = useDocs()
+  const {
+    os,
+    setOs,
+    copied,
+    copyToClipboard,
+    installCommands,
+    msiDownloadUrl,
+  } = useDocs()
   return (
     <div className="install-tabs" key={id}>
       <div className="install-tab-buttons">
@@ -87,15 +114,44 @@ export function OsTabs({ id }) {
         ))}
       </div>
       <div className="install-tab-content">
-        <div className="docs-code-block">
-          <code>{installCommands[os]}</code>
-          <button
-            className="docs-copy-btn"
-            onClick={() => copyToClipboard(installCommands[os])}
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-        </div>
+        {os !== "windows" ? (
+          <div className="docs-code-block">
+            <code>{installCommands[os]}</code>
+            <button
+              className="docs-copy-btn"
+              onClick={() => copyToClipboard(installCommands[os])}
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        ) : (
+          <div style={{ marginTop: "0.5rem" }}>
+            <a
+              href={msiDownloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                padding: "0.6rem 1.2rem",
+                background: "var(--accent-green)",
+                color: "var(--bg-primary)",
+                fontWeight: "600",
+                borderRadius: "6px",
+                textDecoration: "none",
+              }}
+            >
+              ⬇  Download Windows MSI
+            </a>
+            <p style={{ marginTop: "0.75rem", fontSize: "0.9rem", color: "var(--text-muted)" }}>
+              Run the MSI (UAC prompt; SmartScreen → <strong>More info → Run anyway</strong>),
+              then open PowerShell as Administrator and run{" "}
+              <code>opensentry-cloudnode setup</code>. The MSI registers
+              a Windows Service that auto-starts on boot.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

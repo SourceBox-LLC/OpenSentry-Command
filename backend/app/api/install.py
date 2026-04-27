@@ -1,11 +1,15 @@
 """
 Install script routes for CloudNode and MCP client setup.
 
-Serves platform-specific install scripts so users can install with:
+CloudNode install:
   Linux/macOS:  curl -fsSL https://opensentry-command.fly.dev/install.sh | bash
-  Windows:      irm https://opensentry-command.fly.dev/install.ps1 | iex
+  Windows:      MSI installer from the latest GitHub release. There is no
+                PowerShell one-liner — the MSI is the supported Windows
+                install path. See the CloudNode README for the download
+                URL pattern.
 
-MCP client auto-setup:
+MCP client auto-setup (separate from CloudNode install — these are for
+configuring Claude / Cursor / etc. to talk to this Command Center):
   Linux/macOS:  curl -fsSL <origin>/mcp-setup.sh | bash -s -- <key> <url>
   Windows:      & ([scriptblock]::Create((irm <origin>/mcp-setup.ps1))) <key> <url>
 
@@ -132,16 +136,16 @@ async def install_sh(request: Request):
     )
 
 
-@router.get("/install.ps1", response_class=PlainTextResponse)
-@limiter.limit("30/minute")
-async def install_ps1(request: Request):
-    """Serve the PowerShell install script for Windows."""
-    content = _read_script("install.ps1")
-    return PlainTextResponse(
-        content=content,
-        media_type="text/plain",
-        headers={"Content-Disposition": "inline; filename=install.ps1"},
-    )
+# NOTE: The PowerShell CloudNode install one-liner (`/install.ps1`)
+# was removed. Windows users install via the MSI from the latest
+# GitHub release — that path supports Windows Service registration,
+# Add/Remove Programs integration, and the upgrade/uninstall chain
+# the PS one-liner couldn't do cleanly. See CloudNode README for the
+# canonical download URL.
+#
+# The /mcp-setup.ps1 route below is unrelated — it configures MCP
+# clients (Claude / Cursor / etc.) to talk to this Command Center,
+# not to install CloudNode.
 
 
 # ── MCP Client Setup Scripts ─────────────────────────
@@ -203,7 +207,7 @@ async def download_binary(request: Request, os_name: str, arch: str):
     if not release:
         raise HTTPException(
             status_code=503,
-            detail="Release metadata unavailable. Try the install script instead: /install.sh or /install.ps1",
+            detail="Release metadata unavailable. Try /install.sh on Linux/macOS, or download the MSI directly from the latest GitHub release on Windows.",
         )
 
     asset_url = _pick_asset(release, os_key, arch_key)

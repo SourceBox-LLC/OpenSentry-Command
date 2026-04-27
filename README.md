@@ -256,8 +256,8 @@ See [AGENTS.md](AGENTS.md) for the full per-tool list.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/install.sh` / `/install.ps1` | CloudNode installer scripts |
-| GET | `/mcp-setup.sh` / `/mcp-setup.ps1` | MCP client setup helpers |
+| GET | `/install.sh` | CloudNode installer for Linux/macOS (Windows = MSI from GitHub Releases) |
+| GET | `/mcp-setup.sh` / `/mcp-setup.ps1` | MCP client setup helpers (configures Claude/Cursor/etc. — unrelated to CloudNode install) |
 
 ### System
 
@@ -338,8 +338,8 @@ backend/
 │   ├── models/models.py         # 14 ORM models (see table above)
 │   └── schemas/schemas.py       # Pydantic request/response schemas
 ├── scripts/
-│   ├── install.sh / install.ps1 # CloudNode installers
-│   └── mcp-setup.sh / .ps1      # MCP client config helpers
+│   ├── install.sh               # CloudNode installer for Linux/macOS (Windows = MSI)
+│   └── mcp-setup.sh / .ps1      # MCP client config helpers (Claude / Cursor / etc.)
 ├── tests/                       # pytest (security + MCP scoping + motion + notifications)
 ├── .env.example
 ├── pyproject.toml

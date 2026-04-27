@@ -109,9 +109,11 @@ hard-coded for that origin (`backend/app/main.py::cors_origins`).
    domain.
 4. Update `FRONTEND_URL` env var on Fly.
 5. Update Clerk's allowed origins to include the new domain.
-6. Update the install scripts (`install.sh`, `install.ps1`) so they
-   point at the new base URL — these get baked into customer
-   CloudNodes at install time, so transitioning takes weeks.
+6. Update `install.sh` (Linux/macOS) so it points at the new base URL
+   — this URL gets baked into customer CloudNodes at install time, so
+   transitioning takes weeks. The Windows MSI doesn't need a parallel
+   update because it's a static download from GitHub Releases (the
+   MSI's URL doesn't change with the Command Center domain).
 
 ---
 

@@ -38,11 +38,14 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
   }
 
   const base = window.location.origin
+  // Windows installs via the MSI, not a one-liner — see the Windows
+  // branch in the install-tab content below.
   const installCommands = {
     linux: `curl -fsSL ${base}/install.sh | bash`,
     macos: `curl -fsSL ${base}/install.sh | bash`,
-    windows: `irm ${base}/install.ps1 | iex`,
   }
+  const MSI_DOWNLOAD_URL =
+    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi'
 
   const exe = os === 'windows' ? 'opensentry-cloudnode.exe' : 'opensentry-cloudnode'
   const quickSetupCmd = credentials
@@ -172,8 +175,27 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
                       <button className={`install-tab-btn${os === 'windows' ? ' active' : ''}`} onClick={() => setOs('windows')}>Windows</button>
                     </div>
                   </div>
-                  <code>{installCommands[os]}</code>
-                  <button className="btn btn-small" onClick={() => handleCopy(installCommands[os])}>Copy</button>
+                  {os !== 'windows' ? (
+                    <>
+                      <code>{installCommands[os]}</code>
+                      <button className="btn btn-small" onClick={() => handleCopy(installCommands[os])}>Copy</button>
+                    </>
+                  ) : (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <a
+                        href={MSI_DOWNLOAD_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-primary btn-small"
+                        style={{ textDecoration: 'none', display: 'inline-block' }}
+                      >
+                        ⬇ Download Windows MSI
+                      </a>
+                      <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                        Run the MSI (UAC). SmartScreen → <strong>More info → Run anyway</strong>.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="command-box quick-setup-box">
                   <h5>2. Quick Setup (one command):</h5>
