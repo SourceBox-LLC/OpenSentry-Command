@@ -387,6 +387,19 @@ function LandingPage() {
                       {copied ? 'Copied!' : 'Copy'}
                     </button>
                   </div>
+                  {os === 'windows' && (
+                    <p className="landing-step-note" style={{ marginTop: '0.75rem' }}>
+                      Or run as a Windows Service (auto-starts on boot, recommended for always-on cameras):{' '}
+                      <a
+                        href="https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        download the MSI installer
+                      </a>{' '}
+                      (unsigned, see <Link to="/docs#cloudnode-setup">install notes</Link>).
+                    </p>
+                  )}
                 </div>
                 <p className="landing-step-note">
                   One command. Downloads CloudNode, checks dependencies, and guides you through setup.
