@@ -54,23 +54,17 @@ class Config:
     # always tolerated for now so very old CloudNodes that pre-date version
     # reporting can still register and be told to upgrade.
     #
-    # LATEST_NODE_VERSION — what the CloudNode installer would download today.
-    # If a node reports a version older than this we still accept it, but the
-    # response includes an `update_available` hint so the dashboard can nudge
-    # the operator.  Update this on every CloudNode release.
+    # LATEST_NODE_VERSION — disaster fallback for the latest-version
+    # lookup.  As of 2026-04-28 the runtime resolves this dynamically
+    # by polling GitHub /releases/latest in app.core.release_cache, so
+    # this constant is only read on cold-boot before the first refresh
+    # tick lands AND when GitHub is unreachable for the full TTL.  In
+    # practice that means it almost never gets read — but it MUST be
+    # set to a real version to keep ``update_available`` sensible
+    # during a sustained GitHub outage.  The value here is the floor,
+    # not the ceiling: the cache will surface a newer version as soon
+    # as one ships, with no Command Center deploy required.
     MIN_SUPPORTED_NODE_VERSION: str = os.getenv("MIN_SUPPORTED_NODE_VERSION", "0.1.0")
-    # Bumped to 0.1.26 on 2026-04-27 — the SourceBox Sentry brand transition.
-    # Across 0.1.20-0.1.26: MSI installer with launch-on-install +
-    # auto-FFmpeg (0.1.20-0.1.21), service-startup hardening +
-    # ProgramData fallback (0.1.22-0.1.23), full SourceBox Sentry
-    # rebrand of binary / service ID / paths / env vars (0.1.24),
-    # surgical-wipe uninstaller that preserves ffmpeg (0.1.25), and
-    # automatic service start after MSI setup (0.1.26).
-    #
-    # Keep in lockstep with the newest GitHub release of
-    # opensentry-cloud-node.  TODO: replace with a dynamic
-    # `_get_latest_release()`-style lookup so this comment doesn't
-    # become a release-checklist trip wire.
     LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.26")
 
     @classmethod

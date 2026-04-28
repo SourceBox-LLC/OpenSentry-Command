@@ -87,6 +87,15 @@ OFFLINE_SWEEP_INTERVAL_SECONDS = int(os.getenv("OFFLINE_SWEEP_INTERVAL_SECONDS",
 # ``effective_status`` property so the UI and DB agree.
 OFFLINE_HEARTBEAT_TIMEOUT_SECONDS = 90
 
+# How often to refresh the GitHub /releases/latest cache used by
+# version-compatibility checks.  Matches the cache TTL in
+# ``app.core.release_cache`` (10 minutes) so each tick lands just as
+# the cache would otherwise go stale.  Kept under GitHub's 60/hour
+# unauthenticated rate limit even with multiple replicas.
+RELEASE_CACHE_REFRESH_INTERVAL_SECONDS = int(
+    os.getenv("RELEASE_CACHE_REFRESH_INTERVAL_SECONDS", "600")
+)
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -94,12 +103,14 @@ async def lifespan(app):
     cleanup_task = asyncio.create_task(_log_cleanup_loop())
     offline_sweep_task = asyncio.create_task(_offline_sweep_loop())
     viewer_usage_task = asyncio.create_task(_viewer_usage_flush_loop())
+    release_refresh_task = asyncio.create_task(_release_cache_refresh_loop())
     print(f"[App] SourceBox Sentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
     async with mcp_app.lifespan(app):
         yield
     cleanup_task.cancel()
     offline_sweep_task.cancel()
     viewer_usage_task.cancel()
+    release_refresh_task.cancel()
     print("[System] Shutdown complete")
 
 
@@ -518,6 +529,40 @@ def run_offline_sweep(db, *, heartbeat_timeout_seconds: int = OFFLINE_HEARTBEAT_
         "nodes_flipped": len(node_transitions),
         "cameras_flipped": len(camera_transitions),
     }
+
+
+async def _release_cache_refresh_loop():
+    """Background task — keep the GitHub /releases/latest cache warm.
+
+    The cache feeds two paths:
+      1. ``/downloads/{os}/{arch}`` — needs the asset list to redirect.
+      2. ``check_node_version`` on every node heartbeat — needs the
+         ``tag_name`` to decide whether ``update_available`` should fire.
+
+    Refreshing here means heartbeats never block on GitHub, and the
+    moment a new CloudNode release ships every connected node sees
+    ``update_available`` within one tick — no Command Center deploy
+    or env var bump required.
+
+    Runs the first refresh immediately on startup so the cache is
+    populated before any heartbeat lands; subsequent ticks honour
+    ``RELEASE_CACHE_REFRESH_INTERVAL_SECONDS`` (default 600s, matching
+    the cache TTL).  Failures are logged but never raise — the env var
+    fallback in ``release_cache.latest_node_version`` keeps the
+    heartbeat path serving sensible answers during a GitHub outage.
+    """
+    from app.core.release_cache import refresh_latest_release
+
+    while True:
+        try:
+            version = await refresh_latest_release()
+            if version:
+                logger.debug(
+                    "[ReleaseCache] Refreshed latest CloudNode version: %s", version
+                )
+        except Exception:
+            logger.exception("[ReleaseCache] Refresh tick failed")
+        await asyncio.sleep(RELEASE_CACHE_REFRESH_INTERVAL_SECONDS)
 
 
 async def _viewer_usage_flush_loop():

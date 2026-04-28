@@ -31,23 +31,17 @@ disk.  A legitimate install hits each script exactly once.
 """
 
 import re
-import time
 from pathlib import Path
 
-import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 
 from app.core.limiter import limiter
+from app.core.release_cache import get_latest_release
 
 router = APIRouter(tags=["installation"])
 
 SCRIPTS_DIR = Path(__file__).parent.parent.parent / "scripts"
-
-# GitHub repo that hosts CloudNode release artifacts.  Must match the
-# ``REPO`` constant in ``scripts/install.sh`` so both install paths
-# agree on where binaries come from.
-CLOUDNODE_GH_REPO = "SourceBox-LLC/opensentry-cloud-node"
 
 # Allowed OS/arch combos for /downloads/{os}/{arch}.  Matches what
 # install.sh already supports so users don't hit a friendlier URL and
@@ -55,40 +49,11 @@ CLOUDNODE_GH_REPO = "SourceBox-LLC/opensentry-cloud-node"
 _ALLOWED_OS = {"linux", "macos", "windows"}
 _ALLOWED_ARCH = {"x86_64", "aarch64", "armv7"}
 
-# Simple module-level cache for the GitHub "latest release" lookup.
-# GitHub's unauthenticated API is 60/hour per IP, so we'd burn through
-# that quickly on a busy install day without this.  10 minutes is short
-# enough that a new release is reachable quickly and long enough to
-# smooth out bursts.
-_release_cache: dict[str, tuple[float, dict]] = {}
-_RELEASE_CACHE_TTL_S = 600
-
-
-async def _get_latest_release() -> dict | None:
-    """Fetch (or cache-hit) the latest CloudNode release JSON from GitHub.
-
-    Returns ``None`` if GitHub is unreachable or returned a non-2xx so
-    callers can fall back gracefully.  We never raise from here because
-    the install page should keep working even when GitHub has a bad day.
-    """
-    cached = _release_cache.get(CLOUDNODE_GH_REPO)
-    if cached and (time.time() - cached[0]) < _RELEASE_CACHE_TTL_S:
-        return cached[1]
-
-    url = f"https://api.github.com/repos/{CLOUDNODE_GH_REPO}/releases/latest"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                url,
-                headers={"Accept": "application/vnd.github+json"},
-            )
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        _release_cache[CLOUDNODE_GH_REPO] = (time.time(), data)
-        return data
-    except (httpx.HTTPError, ValueError):
-        return None
+# Note: the GitHub "latest release" cache lives in app.core.release_cache
+# now — versions.check_node_version() needs the same data on every node
+# heartbeat, so a single shared cache lets a refresh paid for by one
+# /downloads request also satisfy thousands of subsequent heartbeats.
+# See app/core/release_cache.py for the full caching policy.
 
 
 def _pick_asset(release: dict, os_name: str, arch: str) -> str | None:
@@ -223,7 +188,7 @@ async def download_binary(request: Request, os_name: str, arch: str):
             detail=f"Unsupported arch '{arch}'. Try one of: {sorted(_ALLOWED_ARCH)}.",
         )
 
-    release = await _get_latest_release()
+    release = await get_latest_release()
     if not release:
         raise HTTPException(
             status_code=503,

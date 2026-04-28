@@ -28,6 +28,7 @@ import logging
 import re
 
 from .config import settings
+from .release_cache import latest_node_version
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,10 @@ def check_node_version(reported: str | None) -> dict:
     """
     parsed = parse_version(reported)
     min_parts = parse_version(settings.MIN_SUPPORTED_NODE_VERSION)
-    latest_parts = parse_version(settings.LATEST_NODE_VERSION)
+    # Sourced via release_cache — prefers the freshest GitHub release
+    # tag the process has cached, falls back to settings.LATEST_NODE_VERSION
+    # when the cache is cold (tests, first-boot pre-refresh, GitHub outage).
+    latest_parts = parse_version(latest_node_version())
 
     if reported:
         supported = parsed >= min_parts

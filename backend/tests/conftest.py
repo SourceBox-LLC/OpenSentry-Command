@@ -59,6 +59,24 @@ def setup_db():
 
 
 @pytest.fixture(autouse=True)
+def reset_release_cache():
+    """Clear the GitHub /releases/latest cache between tests.
+
+    ``app.core.release_cache`` keeps the latest release JSON in module
+    state.  Without this reset, a test that hits ``/downloads`` first
+    (populating the cache from real GitHub) would change what
+    ``check_node_version`` returns in subsequent tests — they
+    monkeypatch ``settings.LATEST_NODE_VERSION`` expecting that to be
+    the source of truth, which it only is when the cache is empty.
+    Cheap to reset, and it restores deterministic test ordering.
+    """
+    from app.core import release_cache
+    release_cache._reset_cache_for_tests()
+    yield
+    release_cache._reset_cache_for_tests()
+
+
+@pytest.fixture(autouse=True)
 def reset_rate_limiter():
     """Drop all in-memory rate-limit counters between tests.
 
