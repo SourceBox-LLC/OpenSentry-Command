@@ -17,13 +17,15 @@ function CloudNodeSetup() {
       <OsTabs id="cn" />
       <p style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
         {os === 'windows'
-          ? 'After the MSI finishes, open PowerShell as Administrator to run setup.'
-          : 'Run in your terminal.'}
+          ? 'After the MSI finishes, click the SourceBox Sentry CloudNode shortcut from the Start menu — first launch runs the setup wizard, every launch after streams cameras directly.'
+          : 'Run in your terminal. The script downloads the binary, runs setup, and (on Linux + systemd) optionally installs a service unit so the node restarts on boot.'}
       </p>
 
       <h3>Setup Wizard</h3>
       <p>
-        After installation, run the wizard to enrol the node and detect cameras:
+        On Windows the Start menu shortcut launches the wizard automatically the first time.
+        On Linux/macOS the install script invokes it inline. To re-run the wizard later
+        (e.g. to re-enrol or change the API URL):
       </p>
       <div className="docs-code-block">
         <code>{os === 'windows' ? 'sourcebox-sentry-cloudnode.exe setup' : 'sourcebox-sentry-cloudnode setup'}</code>
@@ -33,29 +35,33 @@ function CloudNodeSetup() {
       <ol>
         <li>
           <strong>Prerequisites</strong> — detects platform, finds your USB cameras, verifies FFmpeg.
-          On Windows, if FFmpeg isn't installed the wizard offers to{' '}
-          <strong>download it for you</strong> (~150 MB, lands under{' '}
-          <code>C:\ProgramData\SourceBoxSentry\ffmpeg\</code>). Linux/macOS users get pointed
-          at <code>apt install ffmpeg</code> / <code>brew install ffmpeg</code>.
+          If FFmpeg isn't on PATH the wizard offers to install it via the OS package manager:{' '}
+          <code>winget install Gyan.FFmpeg</code> on Windows, <code>brew install ffmpeg</code> on
+          macOS, the matching <code>apt</code> / <code>dnf</code> / <code>pacman</code> command
+          on Linux. CloudNode always uses the system FFmpeg — there is no bundled copy.
         </li>
         <li><strong>Configuration</strong> — prompts for your Node ID + API key (from Command Center → Settings → Add Node).</li>
         <li><strong>Install</strong> — saves the encrypted config and detects the best video encoder (NVENC / QSV / AMF, or libx264 fallback).</li>
         <li><strong>Verify</strong> — round-trips a credential check against Command Center.</li>
         <li><strong>Launch</strong> — optionally auto-starts the node.</li>
       </ol>
-      <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-        On a fresh Windows machine with no FFmpeg, the whole flow takes about
-        2 minutes including the FFmpeg download (depends on your connection).
-      </p>
 
       {os === 'windows' && (
         <>
-          <h3>Running as a Windows Service (MSI install)</h3>
+          <h3>Running on Windows</h3>
           <p>
-            If you installed via the MSI, CloudNode is registered as the{' '}
-            <code>SourceBoxSentryCloudNode</code> service but is set to manual start so the first
-            run can't fail before you've completed setup. After running setup, start it once
-            and then flip it to auto-start so it survives reboots:
+            The Start menu shortcut launches CloudNode as a foreground app — a terminal window
+            opens with the live dashboard, FFmpeg starts pushing segments, and the node stays
+            online for as long as the window is open. This is the recommended path for everyday
+            use: you can see what's happening, hit a slash command, and close it cleanly.
+          </p>
+
+          <h4>Auto-start on boot (optional)</h4>
+          <p>
+            For 24/7 unattended operation, the MSI also registers a Windows Service named{' '}
+            <code>SourceBoxSentryCloudNode</code> set to <strong>manual start</strong>. Flip it
+            to automatic if you want CloudNode to come up after a reboot without anyone logging
+            in:
           </p>
           <div className="docs-code-block">
             <code>{`Start-Service SourceBoxSentryCloudNode
@@ -68,26 +74,26 @@ Set-Service -Name SourceBoxSentryCloudNode -StartupType Automatic`}</code>
             <li><code>Stop-Service SourceBoxSentryCloudNode</code> / <code>Restart-Service SourceBoxSentryCloudNode</code></li>
             <li><code>Get-Content -Wait C:\ProgramData\SourceBoxSentry\logs\cloudnode-service.<i>YYYY-MM-DD</i></code> — tail today's service log</li>
           </ul>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Don't run the foreground TUI and the service at the same time — only one process
+            should hold the cameras.
+          </p>
 
           <h3>Uninstalling</h3>
           <p>
             Use <strong>Settings → Apps → Installed apps → SourceBox Sentry CloudNode → Uninstall</strong>.
-            That stops the service, removes the binary, removes the Windows Service
-            registration, and removes everything under{' '}
-            <code>C:\ProgramData\SourceBoxSentry\</code> — including your encrypted config,
-            recordings, and the auto-installed FFmpeg. After uninstall the machine is
-            in a true "never installed" state.
+            That stops the service (if running), removes the binary, removes the Windows Service
+            registration, and wipes <code>C:\ProgramData\SourceBoxSentry\</code> — including your
+            encrypted config and recordings. FFmpeg installed via <code>winget</code> stays put
+            because it's a separate package owned by the OS package manager.
           </p>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-            Upgrades (re-running a newer MSI) preserve everything under ProgramData;
-            only an explicit uninstall wipes it. The CLI{' '}
-            <code>sourcebox-sentry-cloudnode uninstall</code> subcommand is for source-built
-            installs and redirects MSI users to Settings → Apps if you accidentally
-            run it on an MSI machine.
+            Upgrades (re-running a newer MSI) preserve everything under ProgramData; only an
+            explicit uninstall wipes it.
           </p>
 
           <p>
-            See the CloudNode <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node#running-as-a-windows-service" target="_blank" rel="noopener noreferrer">README</a> for the full reference.
+            See the CloudNode <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node#quick-start" target="_blank" rel="noopener noreferrer">README</a> for the full reference.
           </p>
         </>
       )}
@@ -98,8 +104,8 @@ Set-Service -Name SourceBoxSentryCloudNode -StartupType Automatic`}</code>
       </p>
       <ul>
         <li><code>$SOURCEBOX_SENTRY_DATA_DIR/node.db</code> if the env var is set (Docker)</li>
-        <li><code>./data/node.db</code> if it already exists (legacy / <code>cargo build</code> installs)</li>
-        <li><code>C:\ProgramData\SourceBoxSentry\node.db</code> on Windows MSI installs</li>
+        <li><code>./data/node.db</code> if it already exists — Linux/macOS only, for legacy <code>cargo build</code> installs (Windows always uses the platform default below)</li>
+        <li><code>C:\ProgramData\SourceBoxSentry\node.db</code> on Windows</li>
         <li><code>./data/node.db</code> otherwise (fresh manual install on Linux/macOS)</li>
       </ul>
       <p>The API key is encrypted at rest. Key settings:</p>

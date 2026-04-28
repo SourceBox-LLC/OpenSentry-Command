@@ -49,9 +49,10 @@ export function DocsProvider({ children }) {
   const base = window.location.origin
   // Windows is intentionally absent — that platform installs via the MSI
   // from GitHub Releases (rendered as a download button in OsTabs) rather
-  // than a curl-style one-liner. The PowerShell installer was retired
-  // when the MSI shipped: the MSI registers a Windows Service, which is
-  // the right execution model for an always-on camera node.
+  // than a curl-style one-liner. There used to be a PowerShell installer
+  // alongside the MSI; it was retired in v0.1.31 because the MSI is the
+  // only Windows install path that handles upgrades + Add/Remove Programs
+  // cleanly.
   const installCommands = {
     linux: `curl -fsSL ${base}/install.sh | bash`,
     macos: `curl -fsSL ${base}/install.sh | bash`,
@@ -146,9 +147,9 @@ export function OsTabs({ id }) {
             </a>
             <p style={{ marginTop: "0.75rem", fontSize: "0.9rem", color: "var(--text-muted)" }}>
               Run the MSI (UAC prompt; SmartScreen → <strong>More info → Run anyway</strong>),
-              then open PowerShell as Administrator and run{" "}
-              <code>sourcebox-sentry-cloudnode setup</code>. The MSI registers
-              a Windows Service that auto-starts on boot.
+              then open the <strong>SourceBox Sentry CloudNode</strong> shortcut from the
+              Start menu. First launch runs the setup wizard; every launch after streams
+              cameras directly.
             </p>
           </div>
         )}

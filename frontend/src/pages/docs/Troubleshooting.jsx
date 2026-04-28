@@ -24,15 +24,20 @@ sudo usermod -a -G video $USER
       <p><strong>macOS:</strong> grant camera access in <strong>System Settings &gt; Privacy & Security &gt; Camera</strong> — you'll need to approve the terminal app running CloudNode.</p>
 
       <h3>FFmpeg not found</h3>
-      <p><strong>Windows:</strong> re-run <code>sourcebox-sentry-cloudnode setup</code>. The wizard downloads a portable FFmpeg into <code>./ffmpeg/bin/</code> if it's missing.</p>
-      <p><strong>Linux / macOS:</strong> install via your package manager:</p>
+      <p>CloudNode looks for FFmpeg on PATH. Install it via your OS package manager:</p>
       <div className="docs-code-block">
-        <code>{`sudo apt install ffmpeg        # Ubuntu / Debian
+        <code>{`winget install Gyan.FFmpeg     # Windows
+brew install ffmpeg            # macOS
+sudo apt install ffmpeg        # Ubuntu / Debian
 sudo dnf install ffmpeg        # Fedora
-sudo pacman -S ffmpeg          # Arch
-brew install ffmpeg            # macOS`}</code>
-        <button className="docs-copy-btn" onClick={() => copyToClipboard('sudo apt install ffmpeg')}>Copy</button>
+sudo pacman -S ffmpeg          # Arch`}</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard('winget install Gyan.FFmpeg')}>Copy</button>
       </div>
+      <p>
+        Re-run <code>sourcebox-sentry-cloudnode setup</code> — the wizard offers to run the right
+        command for your platform if FFmpeg still isn't on PATH. After a Windows winget install,
+        open a new terminal so the updated PATH is picked up.
+      </p>
 
       <h3>Stream won't play in the dashboard</h3>
       <ol>

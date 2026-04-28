@@ -11,17 +11,19 @@ function Faq() {
         "mute" toggle yet — remove or mute the input source if you need silent-only.
       </p>
 
-      <h3>Should I use the Windows MSI or the PowerShell installer?</h3>
+      <h3>How do I install CloudNode on Windows?</h3>
       <p>
-        Use the MSI for any node you want running 24/7 — it registers CloudNode as a
-        Windows Service that auto-starts on boot, runs as <code>LocalSystem</code> (so
-        it works without you being logged in), and lives under <code>C:\Program Files</code> /{" "}
-        <code>C:\ProgramData</code> like a proper system service. The PowerShell one-liner
-        installer is fine for a quick test or a personal-use foreground install, but
-        once you log out the cameras stop streaming. The MSI is currently unsigned —
-        SmartScreen warns "Windows protected your PC" on first run; click{" "}
-        <strong>More info → Run anyway</strong>. See the{" "}
-        <a href="#cloudnode-setup">CloudNode Setup</a> section for the full service flow.
+        Download <code>sourcebox-sentry-cloudnode-windows-x86_64.msi</code> from the{" "}
+        <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest" target="_blank" rel="noopener noreferrer">latest GitHub release</a>{" "}
+        and run it. The MSI is unsigned today, so SmartScreen will warn "Windows protected
+        your PC" on first run — click <strong>More info → Run anyway</strong>. After install,
+        click the <strong>SourceBox Sentry CloudNode</strong> shortcut from the Start menu —
+        first launch runs the setup wizard, every launch after streams cameras directly. For
+        24/7 unattended operation, the MSI also registers an optional Windows Service named{" "}
+        <code>SourceBoxSentryCloudNode</code> that you can flip to auto-start; see the{" "}
+        <a href="#cloudnode-setup">CloudNode Setup</a> section for details. There is no
+        PowerShell one-liner installer — that path was retired in v0.1.31 because the MSI
+        is the only Windows install that handles upgrades and Add/Remove Programs cleanly.
       </p>
 
       <h3>Can I use IP cameras (RTSP) instead of USB?</h3>

@@ -70,7 +70,7 @@ function GettingStarted() {
         <li>A USB webcam (built-in laptop cameras work too)</li>
         <li>A SourceBox Sentry account (free tier covers up to 5 cameras across 2 nodes, with 30 viewer-hours/month of live playback)</li>
         <li>A Linux, Windows, or macOS machine for CloudNode</li>
-        <li>FFmpeg installed (or Docker) — the installer downloads it automatically on Windows</li>
+        <li>FFmpeg installed (or Docker) — the setup wizard offers to install it via your OS package manager (<code>winget</code> on Windows, <code>brew</code> on macOS, <code>apt</code>/<code>dnf</code>/<code>pacman</code> on Linux)</li>
         <li>Outbound HTTPS access from the CloudNode machine to the internet</li>
       </ul>
 
@@ -95,7 +95,7 @@ function GettingStarted() {
           <div className="docs-step-content">
             <h4>Install CloudNode</h4>
             <OsTabs id="qs" />
-            <p>The installer downloads CloudNode, checks for FFmpeg, and walks you through setup.</p>
+            <p>The installer downloads CloudNode and walks you through setup. If FFmpeg isn't already on the system, the wizard offers to install it via your OS package manager.</p>
           </div>
         </div>
         <div className="docs-step">
