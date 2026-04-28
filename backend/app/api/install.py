@@ -95,15 +95,35 @@ def _pick_asset(release: dict, os_name: str, arch: str) -> str | None:
     """Find the release asset matching ``<os>.*<arch>`` in its filename.
 
     Mirrors the regex install.sh uses so both paths resolve to the same
-    binary.  We prefer archives (.tar.gz/.zip) over raw binaries since
-    GitHub Releases always bundles them that way.
+    binary.  Per-OS asset preference:
+
+      - Windows: ``.msi`` (real installer) > ``.zip`` (raw binary in archive).
+        The MSI registers the Windows Service, lays the binary into
+        ``C:\\Program Files``, and adds an Add/Remove Programs entry.
+        The ``.zip`` is just the bare exe — operators who download it
+        thinking it's an installer end up with no install at all.
+        Until 2026-04-28 the ranker preferred ``.zip`` (treated ``.msi``
+        as a "raw binary") which broke ``GET /downloads/windows/x86_64``
+        for everyone using the dashboard's "Download CloudNode" link.
+      - Linux/macOS: ``.tar.gz`` > raw binary. There is no installer
+        format for these; the tarball is the canonical artifact.
     """
     assets = release.get("assets") or []
     pattern = re.compile(rf"{re.escape(os_name)}.*{re.escape(arch)}", re.IGNORECASE)
+    is_windows = os_name.lower() == "windows"
 
-    # Preferred ordering: archives first, then raw binaries.
     def rank(name: str) -> int:
         lower = name.lower()
+        if is_windows:
+            # On Windows, .msi is the canonical installer.  Prefer it
+            # over .zip so operators get a real install (Program Files
+            # + service registration), not a manual extract.
+            if lower.endswith(".msi"):
+                return 0
+            if lower.endswith(".zip"):
+                return 1
+            return 2
+        # Non-Windows: archive > raw binary (matches install.sh).
         if lower.endswith(".tar.gz") or lower.endswith(".tgz"):
             return 0
         if lower.endswith(".zip"):
