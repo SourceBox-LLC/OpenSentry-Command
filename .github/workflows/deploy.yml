@@ -38,6 +38,15 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - run: flyctl deploy --remote-only
+      # `--depot=false` falls back to Fly's built-in remote builder
+      # (a Fly Machine running `docker build`).  Slower than depot
+      # (~3 min vs ~30s for a cached build) but doesn't depend on
+      # depot.dev's availability — depot has timed out twice in a
+      # row on consecutive deploys (2026-04-28), wedging CI for ~10
+      # min each before falling through to a final auth-handshake
+      # error.  Switch back to `--depot=true` (or remove the flag)
+      # once depot stabilises, or accept the slower-but-reliable
+      # path indefinitely if uptime matters more than build speed.
+      - run: flyctl deploy --remote-only --depot=false
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
