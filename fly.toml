@@ -16,19 +16,25 @@ primary_region = "sjc"
   destination = "/data"
 
 [deploy]
-  # `immediate`, not `rolling`, because we run a single machine with
-  # a single persistent volume (`opensentry_data` at /data, holding
-  # the SQLite DB).  Rolling deploys want to start a new machine
-  # alongside the old one, then drain the old — but the volume only
-  # has one attachment slot, so the new machine has nowhere to mount
-  # it and Fly errors with "creating a new machine in group 'app'
-  # requires an unattached 'opensentry_data' volume".  `immediate`
-  # tells Fly to stop the existing machine, redeploy on the same
-  # volume, restart.  ~30-60s of downtime per deploy is the price of
-  # SQLite-on-a-single-volume; the alternative (multiple volumes)
-  # would split-brain the DB.  Migrating to Postgres (or LiteFS)
-  # would unlock zero-downtime deploys.
+  # Single machine + single persistent volume (`opensentry_data` at
+  # /data, holding the SQLite DB) means we MUST allow downtime during
+  # deploys — there's only one volume attachment slot, so a new
+  # machine cannot be brought up alongside the old one without
+  # erroring "creating a new machine in group 'app' requires an
+  # unattached 'opensentry_data' volume".
+  #
+  # `strategy = "immediate"` alone is insufficient because flyctl's
+  # default `max_unavailable = 0.33` means it still tries to maintain
+  # 67% availability by creating-before-destroying.  Setting
+  # `max_unavailable = 1` lets Fly stop the existing machine, free
+  # the volume, and reattach it to the new machine on the same
+  # deploy — which is the only path that works with this storage
+  # setup.  Cost: ~30-60s of downtime per deploy.
+  #
+  # The path to zero-downtime deploys is migrating off
+  # SQLite-on-a-single-volume (Postgres or LiteFS).
   strategy = "immediate"
+  max_unavailable = 1
 
 [http_service]
   internal_port = 8000
