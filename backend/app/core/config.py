@@ -59,14 +59,19 @@ class Config:
     # response includes an `update_available` hint so the dashboard can nudge
     # the operator.  Update this on every CloudNode release.
     MIN_SUPPORTED_NODE_VERSION: str = os.getenv("MIN_SUPPORTED_NODE_VERSION", "0.1.0")
-    # Bumped to 0.1.16 on 2026-04-21: rolls up seven streaming fixes —
-    # orphan HLS segment sweep + disk-full crash annotation (0.1.16),
-    # libx264 preset/level fixes (0.1.15), h264_v4l2m2m retirement
-    # (0.1.14), strict ffprobe validation (0.1.13), hardware encoder
-    # round-trip verify (0.1.12), dashboard /wipe confirmation fix
-    # (0.1.11), and musl V4L2 ioctl cast (0.1.10).  Keep in lockstep
-    # with the newest GitHub release of opensentry-cloud-node.
-    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.16")
+    # Bumped to 0.1.26 on 2026-04-27 — the SourceBox Sentry brand transition.
+    # Across 0.1.20-0.1.26: MSI installer with launch-on-install +
+    # auto-FFmpeg (0.1.20-0.1.21), service-startup hardening +
+    # ProgramData fallback (0.1.22-0.1.23), full SourceBox Sentry
+    # rebrand of binary / service ID / paths / env vars (0.1.24),
+    # surgical-wipe uninstaller that preserves ffmpeg (0.1.25), and
+    # automatic service start after MSI setup (0.1.26).
+    #
+    # Keep in lockstep with the newest GitHub release of
+    # opensentry-cloud-node.  TODO: replace with a dynamic
+    # `_get_latest_release()`-style lookup so this comment doesn't
+    # become a release-checklist trip wire.
+    LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.26")
 
     @classmethod
     def is_clerk_configured(cls) -> bool:
