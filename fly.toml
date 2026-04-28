@@ -16,7 +16,19 @@ primary_region = "sjc"
   destination = "/data"
 
 [deploy]
-  strategy = "rolling"
+  # `immediate`, not `rolling`, because we run a single machine with
+  # a single persistent volume (`opensentry_data` at /data, holding
+  # the SQLite DB).  Rolling deploys want to start a new machine
+  # alongside the old one, then drain the old — but the volume only
+  # has one attachment slot, so the new machine has nowhere to mount
+  # it and Fly errors with "creating a new machine in group 'app'
+  # requires an unattached 'opensentry_data' volume".  `immediate`
+  # tells Fly to stop the existing machine, redeploy on the same
+  # volume, restart.  ~30-60s of downtime per deploy is the price of
+  # SQLite-on-a-single-volume; the alternative (multiple volumes)
+  # would split-brain the DB.  Migrating to Postgres (or LiteFS)
+  # would unlock zero-downtime deploys.
+  strategy = "immediate"
 
 [http_service]
   internal_port = 8000
