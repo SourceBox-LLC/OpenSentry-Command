@@ -39,7 +39,7 @@ function LandingPage() {
     macos: `curl -fsSL ${base}/install.sh | bash`,
   }
   const MSI_DOWNLOAD_URL =
-    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi'
+    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi'
 
   return (
     <>
@@ -413,7 +413,7 @@ function LandingPage() {
                       </a>
                       <p className="landing-step-note" style={{ marginTop: '1rem' }}>
                         Run the MSI (one UAC prompt), then open PowerShell as Administrator and run{' '}
-                        <code>opensentry-cloudnode setup</code>. Registers as a Windows Service that
+                        <code>sourcebox-sentry-cloudnode setup</code>. Registers as a Windows Service that
                         auto-starts on boot. MSI is currently unsigned — SmartScreen will warn:
                         click <strong>More info → Run anyway</strong>. See{' '}
                         <Link to="/docs#cloudnode-setup">install notes</Link> for full details.

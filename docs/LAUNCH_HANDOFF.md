@@ -192,7 +192,7 @@ including a Raspberry Pi". I haven't validated that actually works
 under a realistic camera load.
 
 **What you need to do.**
-1. Get a Pi 4 (or Pi 5, increasingly common). Install OpenSentry
+1. Get a Pi 4 (or Pi 5, increasingly common). Install SourceBox Sentry
    CloudNode via the install script.
 2. Connect 1, 2, 4 USB cameras at 1080p / 30fps and watch:
    - CPU steady-state under load.

@@ -31,10 +31,10 @@ function Configuration() {
             <tr><th>Variable</th><th>Purpose</th></tr>
           </thead>
           <tbody>
-            <tr><td><code>OPENSENTRY_NODE_ID</code></td><td>Node ID assigned by Command Center</td></tr>
-            <tr><td><code>OPENSENTRY_API_KEY</code></td><td>Node API key (encrypted at rest in the DB)</td></tr>
-            <tr><td><code>OPENSENTRY_API_URL</code></td><td>Command Center URL (<code>https://opensentry-command.fly.dev</code>)</td></tr>
-            <tr><td><code>OPENSENTRY_ENCODER</code></td><td>Force a specific encoder (e.g. <code>h264_nvenc</code>, <code>libx264</code>)</td></tr>
+            <tr><td><code>SOURCEBOX_SENTRY_NODE_ID</code></td><td>Node ID assigned by Command Center</td></tr>
+            <tr><td><code>SOURCEBOX_SENTRY_API_KEY</code></td><td>Node API key (encrypted at rest in the DB)</td></tr>
+            <tr><td><code>SOURCEBOX_SENTRY_API_URL</code></td><td>Command Center URL (<code>https://opensentry-command.fly.dev</code>)</td></tr>
+            <tr><td><code>SOURCEBOX_SENTRY_ENCODER</code></td><td>Force a specific encoder (e.g. <code>h264_nvenc</code>, <code>libx264</code>)</td></tr>
             <tr><td><code>RUST_LOG</code></td><td>Log verbosity: <code>trace</code>, <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code></td></tr>
           </tbody>
         </table>
@@ -46,8 +46,8 @@ function Configuration() {
         They override anything in the database and env:
       </p>
       <div className="docs-code-block">
-        <code>opensentry-cloudnode --node-id NODE --api-key KEY --api-url URL</code>
-        <button className="docs-copy-btn" onClick={() => copyToClipboard('opensentry-cloudnode --node-id NODE --api-key KEY --api-url URL')}>Copy</button>
+        <code>sourcebox-sentry-cloudnode --node-id NODE --api-key KEY --api-url URL</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard('sourcebox-sentry-cloudnode --node-id NODE --api-key KEY --api-url URL')}>Copy</button>
       </div>
 
       <h3>Example <code>config.yaml</code></h3>

@@ -50,11 +50,11 @@ $script:ClientProcesses = @{
 }
 
 # Returns the PID of a running matching process, or $null. Returns $null when
-# the env var OPENSENTRY_MCP_ALLOW_RUNNING=1 is set -- tests set that so they
+# the env var SOURCEBOX_SENTRY_MCP_ALLOW_RUNNING=1 is set -- tests set that so they
 # can run even while a real Claude Desktop is up on the dev machine.
 function Test-ClientRunning {
     param([string]$ClientName)
-    if ($env:OPENSENTRY_MCP_ALLOW_RUNNING -eq "1") { return $null }
+    if ($env:SOURCEBOX_SENTRY_MCP_ALLOW_RUNNING -eq "1") { return $null }
     $names = $script:ClientProcesses[$ClientName]
     if (-not $names) { return $null }
     foreach ($n in $names) {

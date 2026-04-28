@@ -539,7 +539,7 @@ export function ConfigPrecedenceDiagram() {
   const id = 'cfg'
   const lanes = [
     { label: 'CLI flags',       sub: '--node-id · --api-key · --api-url',  color: C.purple, y: 80,  width: 260 },
-    { label: 'Environment',     sub: 'OPENSENTRY_* · RUST_LOG',            color: C.amber,  y: 140, width: 360 },
+    { label: 'Environment',     sub: 'SOURCEBOX_SENTRY_* · RUST_LOG',      color: C.amber,  y: 140, width: 360 },
     { label: 'YAML config',     sub: 'config.yaml (legacy, migrated)',     color: C.blue,   y: 200, width: 460 },
     { label: 'SQLite database', sub: 'data/node.db — source of truth',     color: C.green,  y: 260, width: 560 },
   ]

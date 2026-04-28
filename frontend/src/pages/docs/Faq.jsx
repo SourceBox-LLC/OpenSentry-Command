@@ -87,7 +87,7 @@ function Faq() {
       <h3>Can I move a node to a different machine?</h3>
       <p>
         The node database is bound to the host machine (the AES key is derived from
-        hostname). To move a node: on the new machine, run <code>opensentry-cloudnode setup</code>
+        hostname). To move a node: on the new machine, run <code>sourcebox-sentry-cloudnode setup</code>
         with the same <code>node_id</code> and API key — Command Center will re-associate
         the cameras to the new host. The old node should be stopped first to avoid a
         split-brain heartbeat.

@@ -15,26 +15,26 @@ function Deployment() {
       <h3>Docker (single camera)</h3>
       <p>The most portable option. Maps one USB camera device into the container:</p>
       <div className="docs-code-block">
-        <code>{`docker build -t opensentry-cloudnode .
+        <code>{`docker build -t sourcebox-sentry-cloudnode .
 
 docker run -d \\
-  --name opensentry-cloudnode \\
+  --name sourcebox-sentry-cloudnode \\
   --device /dev/video0:/dev/video0 \\
-  -e OPENSENTRY_NODE_ID=your_node_id \\
-  -e OPENSENTRY_API_KEY=your_api_key \\
-  -e OPENSENTRY_API_URL=https://opensentry-command.fly.dev \\
+  -e SOURCEBOX_SENTRY_NODE_ID=your_node_id \\
+  -e SOURCEBOX_SENTRY_API_KEY=your_api_key \\
+  -e SOURCEBOX_SENTRY_API_URL=https://opensentry-command.fly.dev \\
   -p 8080:8080 \\
   -v ./data:/app/data \\
-  opensentry-cloudnode`}</code>
+  sourcebox-sentry-cloudnode`}</code>
         <button className="docs-copy-btn" onClick={() => copyToClipboard(`docker run -d \\
-  --name opensentry-cloudnode \\
+  --name sourcebox-sentry-cloudnode \\
   --device /dev/video0:/dev/video0 \\
-  -e OPENSENTRY_NODE_ID=your_node_id \\
-  -e OPENSENTRY_API_KEY=your_api_key \\
-  -e OPENSENTRY_API_URL=https://opensentry-command.fly.dev \\
+  -e SOURCEBOX_SENTRY_NODE_ID=your_node_id \\
+  -e SOURCEBOX_SENTRY_API_KEY=your_api_key \\
+  -e SOURCEBOX_SENTRY_API_URL=https://opensentry-command.fly.dev \\
   -p 8080:8080 \\
   -v ./data:/app/data \\
-  opensentry-cloudnode`)}>Copy</button>
+  sourcebox-sentry-cloudnode`)}>Copy</button>
       </div>
 
       <h3>Docker (multiple cameras)</h3>
@@ -43,19 +43,19 @@ docker run -d \\
         <code>{`docker run -d \\
   --device /dev/video0:/dev/video0 \\
   --device /dev/video2:/dev/video2 \\
-  -e OPENSENTRY_NODE_ID=your_node_id \\
-  -e OPENSENTRY_API_KEY=your_api_key \\
-  -e OPENSENTRY_API_URL=https://opensentry-command.fly.dev \\
+  -e SOURCEBOX_SENTRY_NODE_ID=your_node_id \\
+  -e SOURCEBOX_SENTRY_API_KEY=your_api_key \\
+  -e SOURCEBOX_SENTRY_API_URL=https://opensentry-command.fly.dev \\
   -p 8080:8080 \\
-  opensentry-cloudnode`}</code>
+  sourcebox-sentry-cloudnode`}</code>
         <button className="docs-copy-btn" onClick={() => copyToClipboard(`docker run -d \\
   --device /dev/video0:/dev/video0 \\
   --device /dev/video2:/dev/video2 \\
-  -e OPENSENTRY_NODE_ID=your_node_id \\
-  -e OPENSENTRY_API_KEY=your_api_key \\
-  -e OPENSENTRY_API_URL=https://opensentry-command.fly.dev \\
+  -e SOURCEBOX_SENTRY_NODE_ID=your_node_id \\
+  -e SOURCEBOX_SENTRY_API_KEY=your_api_key \\
+  -e SOURCEBOX_SENTRY_API_URL=https://opensentry-command.fly.dev \\
   -p 8080:8080 \\
-  opensentry-cloudnode`)}>Copy</button>
+  sourcebox-sentry-cloudnode`)}>Copy</button>
       </div>
 
       <h3>Docker Compose</h3>
@@ -75,15 +75,15 @@ docker-compose up -d`)}>Copy</button>
         <code>{`git clone https://github.com/SourceBox-LLC/opensentry-cloud-node.git
 cd opensentry-cloud-node
 cargo build --release
-./target/release/opensentry-cloudnode setup`}</code>
+./target/release/sourcebox-sentry-cloudnode setup`}</code>
         <button className="docs-copy-btn" onClick={() => copyToClipboard(`git clone https://github.com/SourceBox-LLC/opensentry-cloud-node.git
 cd opensentry-cloud-node
 cargo build --release
-./target/release/opensentry-cloudnode setup`)}>Copy</button>
+./target/release/sourcebox-sentry-cloudnode setup`)}>Copy</button>
       </div>
 
       <h3>systemd service (Linux)</h3>
-      <p>To run CloudNode as a background service on boot, create <code>/etc/systemd/system/opensentry-cloudnode.service</code>:</p>
+      <p>To run CloudNode as a background service on boot, create <code>/etc/systemd/system/sourcebox-sentry-cloudnode.service</code>:</p>
       <div className="docs-code-block">
         <code>{`[Unit]
 Description=SourceBox Sentry CloudNode
@@ -92,9 +92,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=opensentry
-WorkingDirectory=/opt/opensentry
-ExecStart=/opt/opensentry/opensentry-cloudnode
+User=sentry
+WorkingDirectory=/opt/sourcebox-sentry
+ExecStart=/opt/sourcebox-sentry/sourcebox-sentry-cloudnode
 Restart=on-failure
 RestartSec=5
 Environment=RUST_LOG=info
@@ -108,9 +108,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=opensentry
-WorkingDirectory=/opt/opensentry
-ExecStart=/opt/opensentry/opensentry-cloudnode
+User=sentry
+WorkingDirectory=/opt/sourcebox-sentry
+ExecStart=/opt/sourcebox-sentry/sourcebox-sentry-cloudnode
 Restart=on-failure
 RestartSec=5
 Environment=RUST_LOG=info
@@ -120,8 +120,8 @@ WantedBy=multi-user.target`)}>Copy</button>
       </div>
       <p>Enable and start:</p>
       <div className="docs-code-block">
-        <code>sudo systemctl enable --now opensentry-cloudnode</code>
-        <button className="docs-copy-btn" onClick={() => copyToClipboard('sudo systemctl enable --now opensentry-cloudnode')}>Copy</button>
+        <code>sudo systemctl enable --now sourcebox-sentry-cloudnode</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard('sudo systemctl enable --now sourcebox-sentry-cloudnode')}>Copy</button>
       </div>
 
       <h3>Cross-compilation (Raspberry Pi)</h3>
@@ -138,7 +138,7 @@ cargo build --release --target aarch64-unknown-linux-gnu`)}>Copy</button>
         Re-run the install script. It downloads the latest release, preserves your
         <code>data/node.db</code>, and restarts the binary. With Docker, pull the new image
         and recreate the container. With systemd, replace the binary and run
-        <code>sudo systemctl restart opensentry-cloudnode</code>.
+        <code>sudo systemctl restart sourcebox-sentry-cloudnode</code>.
       </p>
     </section>
   )

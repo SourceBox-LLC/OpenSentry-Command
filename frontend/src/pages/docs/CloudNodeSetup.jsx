@@ -26,8 +26,8 @@ function CloudNodeSetup() {
         After installation, run the wizard to enrol the node and detect cameras:
       </p>
       <div className="docs-code-block">
-        <code>{os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup'}</code>
-        <button className="docs-copy-btn" onClick={() => copyToClipboard(os === 'windows' ? 'opensentry-cloudnode.exe setup' : 'opensentry-cloudnode setup')}>Copy</button>
+        <code>{os === 'windows' ? 'sourcebox-sentry-cloudnode.exe setup' : 'sourcebox-sentry-cloudnode setup'}</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard(os === 'windows' ? 'sourcebox-sentry-cloudnode.exe setup' : 'sourcebox-sentry-cloudnode setup')}>Copy</button>
       </div>
       <p>The wizard walks through five steps:</p>
       <ol>
@@ -35,7 +35,7 @@ function CloudNodeSetup() {
           <strong>Prerequisites</strong> — detects platform, finds your USB cameras, verifies FFmpeg.
           On Windows, if FFmpeg isn't installed the wizard offers to{' '}
           <strong>download it for you</strong> (~150 MB, lands under{' '}
-          <code>C:\ProgramData\OpenSentry\ffmpeg\</code>). Linux/macOS users get pointed
+          <code>C:\ProgramData\SourceBoxSentry\ffmpeg\</code>). Linux/macOS users get pointed
           at <code>apt install ffmpeg</code> / <code>brew install ffmpeg</code>.
         </li>
         <li><strong>Configuration</strong> — prompts for your Node ID + API key (from Command Center → Settings → Add Node).</li>
@@ -53,35 +53,35 @@ function CloudNodeSetup() {
           <h3>Running as a Windows Service (MSI install)</h3>
           <p>
             If you installed via the MSI, CloudNode is registered as the{' '}
-            <code>OpenSentryCloudNode</code> service but is set to manual start so the first
+            <code>SourceBoxSentryCloudNode</code> service but is set to manual start so the first
             run can't fail before you've completed setup. After running setup, start it once
             and then flip it to auto-start so it survives reboots:
           </p>
           <div className="docs-code-block">
-            <code>{`Start-Service OpenSentryCloudNode
-Set-Service -Name OpenSentryCloudNode -StartupType Automatic`}</code>
-            <button className="docs-copy-btn" onClick={() => copyToClipboard("Start-Service OpenSentryCloudNode\nSet-Service -Name OpenSentryCloudNode -StartupType Automatic")}>Copy</button>
+            <code>{`Start-Service SourceBoxSentryCloudNode
+Set-Service -Name SourceBoxSentryCloudNode -StartupType Automatic`}</code>
+            <button className="docs-copy-btn" onClick={() => copyToClipboard("Start-Service SourceBoxSentryCloudNode\nSet-Service -Name SourceBoxSentryCloudNode -StartupType Automatic")}>Copy</button>
           </div>
           <p>Standard service-management commands all work:</p>
           <ul>
-            <li><code>Get-Service OpenSentryCloudNode</code> — running / stopped status</li>
-            <li><code>Stop-Service OpenSentryCloudNode</code> / <code>Restart-Service OpenSentryCloudNode</code></li>
-            <li><code>Get-Content -Wait C:\ProgramData\OpenSentry\logs\cloudnode-service.<i>YYYY-MM-DD</i></code> — tail today's service log</li>
+            <li><code>Get-Service SourceBoxSentryCloudNode</code> — running / stopped status</li>
+            <li><code>Stop-Service SourceBoxSentryCloudNode</code> / <code>Restart-Service SourceBoxSentryCloudNode</code></li>
+            <li><code>Get-Content -Wait C:\ProgramData\SourceBoxSentry\logs\cloudnode-service.<i>YYYY-MM-DD</i></code> — tail today's service log</li>
           </ul>
 
           <h3>Uninstalling</h3>
           <p>
-            Use <strong>Settings → Apps → Installed apps → OpenSentry CloudNode → Uninstall</strong>.
+            Use <strong>Settings → Apps → Installed apps → SourceBox Sentry CloudNode → Uninstall</strong>.
             That stops the service, removes the binary, removes the Windows Service
             registration, and removes everything under{' '}
-            <code>C:\ProgramData\OpenSentry\</code> — including your encrypted config,
+            <code>C:\ProgramData\SourceBoxSentry\</code> — including your encrypted config,
             recordings, and the auto-installed FFmpeg. After uninstall the machine is
             in a true "never installed" state.
           </p>
           <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
             Upgrades (re-running a newer MSI) preserve everything under ProgramData;
             only an explicit uninstall wipes it. The CLI{' '}
-            <code>opensentry-cloudnode uninstall</code> subcommand is for source-built
+            <code>sourcebox-sentry-cloudnode uninstall</code> subcommand is for source-built
             installs and redirects MSI users to Settings → Apps if you accidentally
             run it on an MSI machine.
           </p>
@@ -97,9 +97,9 @@ Set-Service -Name OpenSentryCloudNode -StartupType Automatic`}</code>
         CloudNode stores all configuration in a local SQLite database. Resolution order:
       </p>
       <ul>
-        <li><code>$OPENSENTRY_DATA_DIR/node.db</code> if the env var is set (Docker)</li>
+        <li><code>$SOURCEBOX_SENTRY_DATA_DIR/node.db</code> if the env var is set (Docker)</li>
         <li><code>./data/node.db</code> if it already exists (legacy / <code>cargo build</code> installs)</li>
-        <li><code>C:\ProgramData\OpenSentry\node.db</code> on Windows MSI installs</li>
+        <li><code>C:\ProgramData\SourceBoxSentry\node.db</code> on Windows MSI installs</li>
         <li><code>./data/node.db</code> otherwise (fresh manual install on Linux/macOS)</li>
       </ul>
       <p>The API key is encrypted at rest. Key settings:</p>
@@ -112,8 +112,8 @@ Set-Service -Name OpenSentryCloudNode -StartupType Automatic`}</code>
 
       <h3>Running</h3>
       <div className="docs-code-block">
-        <code>{os === 'windows' ? '.\\opensentry-cloudnode.exe' : './opensentry-cloudnode'}</code>
-        <button className="docs-copy-btn" onClick={() => copyToClipboard(os === 'windows' ? '.\\opensentry-cloudnode.exe' : './opensentry-cloudnode')}>Copy</button>
+        <code>{os === 'windows' ? '.\\sourcebox-sentry-cloudnode.exe' : './sourcebox-sentry-cloudnode'}</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard(os === 'windows' ? '.\\sourcebox-sentry-cloudnode.exe' : './sourcebox-sentry-cloudnode')}>Copy</button>
       </div>
       <p>CloudNode auto-detects connected USB cameras and starts streaming immediately.</p>
 

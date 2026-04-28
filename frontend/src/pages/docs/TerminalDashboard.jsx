@@ -49,8 +49,8 @@ function TerminalDashboard() {
       <h3>Log levels</h3>
       <p>The dashboard respects <code>RUST_LOG</code>. Set it before starting to see more or less detail:</p>
       <div className="docs-code-block">
-        <code>RUST_LOG=debug ./opensentry-cloudnode</code>
-        <button className="docs-copy-btn" onClick={() => copyToClipboard('RUST_LOG=debug ./opensentry-cloudnode')}>Copy</button>
+        <code>RUST_LOG=debug ./sourcebox-sentry-cloudnode</code>
+        <button className="docs-copy-btn" onClick={() => copyToClipboard('RUST_LOG=debug ./sourcebox-sentry-cloudnode')}>Copy</button>
       </div>
     </section>
   )

@@ -14,7 +14,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 REPO="SourceBox-LLC/opensentry-cloud-node"
-INSTALL_DIR="${OPENSENTRY_INSTALL_DIR:-$HOME/.opensentry}"
+INSTALL_DIR="${SOURCEBOX_SENTRY_INSTALL_DIR:-$HOME/.sourcebox-sentry}"
 
 # ── Banner ──────────────────────────────────────────────────────────
 echo ""
@@ -35,7 +35,7 @@ case "$OS" in
         echo "For Windows, download the MSI installer from the latest release:"
         echo "  https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest"
         echo ""
-        echo "(Run the MSI, then 'opensentry-cloudnode setup' from an admin PowerShell.)"
+        echo "(Run the MSI, then 'sourcebox-sentry-cloudnode setup' from an admin PowerShell.)"
         exit 1
         ;;
 esac
@@ -172,12 +172,12 @@ if [ -n "$DOWNLOAD_URL" ]; then
                 ;;
             *)
                 # Assume raw binary
-                cp "$TMPFILE" "$INSTALL_DIR/opensentry-cloudnode"
+                cp "$TMPFILE" "$INSTALL_DIR/sourcebox-sentry-cloudnode"
                 ;;
         esac
 
         rm -f "$TMPFILE"
-        chmod +x "$INSTALL_DIR/opensentry-cloudnode" 2>/dev/null || true
+        chmod +x "$INSTALL_DIR/sourcebox-sentry-cloudnode" 2>/dev/null || true
 
         echo -e "${GREEN}Downloaded successfully.${NC}"
     else
@@ -282,8 +282,8 @@ if [ -z "$DOWNLOAD_URL" ]; then
     echo -e "${DIM}Building (~10-15 min on Raspberry Pi 4)...${NC}"
     (cd "$CLONE_DIR" && cargo build --release --quiet)
 
-    cp "$CLONE_DIR/target/release/opensentry-cloudnode" "$INSTALL_DIR/opensentry-cloudnode"
-    chmod +x "$INSTALL_DIR/opensentry-cloudnode"
+    cp "$CLONE_DIR/target/release/sourcebox-sentry-cloudnode" "$INSTALL_DIR/sourcebox-sentry-cloudnode"
+    chmod +x "$INSTALL_DIR/sourcebox-sentry-cloudnode"
 
     echo -e "${GREEN}Build complete.${NC}"
 fi
@@ -416,7 +416,7 @@ if [ "$IS_REGISTERED" = false ] && [ -r /dev/tty ] && [ -t 1 ]; then
         # Run from $HOME so node.db lands at the canonical location that
         # the systemd unit (below) uses as WorkingDirectory.  The wizard
         # creates ./data/ relative to CWD.
-        if (cd "$HOME" && "$INSTALL_DIR/opensentry-cloudnode" setup </dev/tty); then
+        if (cd "$HOME" && "$INSTALL_DIR/sourcebox-sentry-cloudnode" setup </dev/tty); then
             SETUP_RAN=true
             # Re-detect registration — if setup succeeded we should now
             # find node.db where we expect it.
@@ -426,10 +426,10 @@ if [ "$IS_REGISTERED" = false ] && [ -r /dev/tty ] && [ -t 1 ]; then
             fi
         else
             echo -e "  ${YELLOW}Setup wizard exited with an error.  You can re-run it later:${NC}"
-            echo -e "  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
+            echo -e "  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode setup${NC}"
         fi
     else
-        echo -e "  ${DIM}Skipped.  Run later:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
+        echo -e "  ${DIM}Skipped.  Run later:  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode setup${NC}"
     fi
 fi
 
@@ -440,7 +440,7 @@ fi
 # place (we have everything we need) and to no otherwise (service
 # would immediately fail on "no credentials").
 install_systemd_service() {
-    local svc_name="opensentry-cloudnode"
+    local svc_name="sourcebox-sentry-cloudnode"
     local svc_file="/etc/systemd/system/${svc_name}.service"
     local run_user="${SUDO_USER:-$USER}"
     # WorkingDirectory must contain (or create) ./data where node.db
@@ -477,7 +477,7 @@ Environment=NO_COLOR=1
 Environment=TERM=dumb
 Environment=RUST_LOG=info
 WorkingDirectory=${work_dir}
-ExecStart=${INSTALL_DIR}/opensentry-cloudnode run
+ExecStart=${INSTALL_DIR}/sourcebox-sentry-cloudnode run
 StandardOutput=journal
 StandardError=journal
 Restart=on-failure
@@ -535,7 +535,7 @@ if [ "$PLATFORM" = "linux" ] && check_cmd systemctl && [ -d /etc/systemd/system 
     # system service in an unattended install.
     if [ -t 1 ] && [ -r /dev/tty ]; then
         UNIT_EXISTS=false
-        [ -f /etc/systemd/system/opensentry-cloudnode.service ] && UNIT_EXISTS=true
+        [ -f /etc/systemd/system/sourcebox-sentry-cloudnode.service ] && UNIT_EXISTS=true
 
         if [ "$UNIT_EXISTS" = true ]; then
             # Re-run of installer: always overwrite the unit so bug fixes
@@ -552,7 +552,7 @@ if [ "$PLATFORM" = "linux" ] && check_cmd systemctl && [ -d /etc/systemd/system 
             else
                 echo ""
                 echo -e "  ${YELLOW}systemd unit exists but node isn't registered — skipping restart.${NC}"
-                echo -e "  ${DIM}Register first:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
+                echo -e "  ${DIM}Register first:  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode setup${NC}"
             fi
         elif [ "$IS_REGISTERED" = true ]; then
             # Fresh install, registration in place — this is the happy
@@ -596,21 +596,21 @@ if [ "$SERVICE_RUNNING" = true ]; then
     echo -e "  ${GREEN}${BOLD}CloudNode is streaming.${NC}"
     echo -e "  ${DIM}View your cameras at ${CYAN}https://opensentry-command.fly.dev${NC}"
     echo ""
-    echo -e "  ${DIM}Live logs:  ${CYAN}journalctl -u opensentry-cloudnode -f${NC}"
+    echo -e "  ${DIM}Live logs:  ${CYAN}journalctl -u sourcebox-sentry-cloudnode -f${NC}"
 elif [ "$IS_REGISTERED" = true ]; then
     # Registered but service not installed/running — hand over the
     # two commands that get them there.
     echo -e "  ${BOLD}Next steps:${NC}"
     echo ""
-    echo -e "  Start CloudNode:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode${NC}"
+    echo -e "  Start CloudNode:  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode${NC}"
     echo ""
     echo -e "  ${DIM}Or install the systemd service: re-run this installer.${NC}"
 else
     # Not registered yet — setup was declined or failed.
     echo -e "  ${BOLD}Next steps:${NC}"
     echo ""
-    echo -e "  1. Register:         ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode setup${NC}"
-    echo -e "  2. Start streaming:  ${CYAN}cd ~ && ${INSTALL_DIR}/opensentry-cloudnode${NC}"
+    echo -e "  1. Register:         ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode setup${NC}"
+    echo -e "  2. Start streaming:  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode${NC}"
     echo ""
     echo -e "  ${DIM}Get your node ID + API key at ${CYAN}https://opensentry-command.fly.dev${NC}"
 fi
@@ -619,9 +619,9 @@ echo ""
 if [ "$IN_PATH" = false ]; then
     echo -e "  ${DIM}Tip: Add to PATH for easier access:${NC}"
     if [ "$PLATFORM" = "macos" ]; then
-        echo -e "  ${CYAN}echo 'export PATH=\"\$HOME/.opensentry:\$PATH\"' >> ~/.zshrc${NC}"
+        echo -e "  ${CYAN}echo 'export PATH=\"\$HOME/.sourcebox-sentry:\$PATH\"' >> ~/.zshrc${NC}"
     else
-        echo -e "  ${CYAN}echo 'export PATH=\"\$HOME/.opensentry:\$PATH\"' >> ~/.bashrc${NC}"
+        echo -e "  ${CYAN}echo 'export PATH=\"\$HOME/.sourcebox-sentry:\$PATH\"' >> ~/.bashrc${NC}"
     fi
     echo ""
 fi

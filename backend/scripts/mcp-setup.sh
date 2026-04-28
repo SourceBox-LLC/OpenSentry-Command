@@ -58,10 +58,10 @@ SKIPPED_CLIENTS=()
 # nothing if none. Refusing to write when the client is up avoids its own
 # file-watcher stomping our write with stale in-memory state -- that's the
 # bug the PS version of this script hit in the field.
-# Tests can bypass by setting OPENSENTRY_MCP_ALLOW_RUNNING=1.
+# Tests can bypass by setting SOURCEBOX_SENTRY_MCP_ALLOW_RUNNING=1.
 client_running_pid() {
     local name="$1"
-    if [[ "${OPENSENTRY_MCP_ALLOW_RUNNING:-0}" == "1" ]]; then
+    if [[ "${SOURCEBOX_SENTRY_MCP_ALLOW_RUNNING:-0}" == "1" ]]; then
         return 0
     fi
     local procs=""

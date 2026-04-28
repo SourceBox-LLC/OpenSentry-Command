@@ -24,7 +24,7 @@ sudo usermod -a -G video $USER
       <p><strong>macOS:</strong> grant camera access in <strong>System Settings &gt; Privacy & Security &gt; Camera</strong> — you'll need to approve the terminal app running CloudNode.</p>
 
       <h3>FFmpeg not found</h3>
-      <p><strong>Windows:</strong> re-run <code>opensentry-cloudnode setup</code>. The wizard downloads a portable FFmpeg into <code>./ffmpeg/bin/</code> if it's missing.</p>
+      <p><strong>Windows:</strong> re-run <code>sourcebox-sentry-cloudnode setup</code>. The wizard downloads a portable FFmpeg into <code>./ffmpeg/bin/</code> if it's missing.</p>
       <p><strong>Linux / macOS:</strong> install via your package manager:</p>
       <div className="docs-code-block">
         <code>{`sudo apt install ffmpeg        # Ubuntu / Debian
@@ -89,7 +89,7 @@ brew install ffmpeg            # macOS`}</code>
         <li><strong>NVIDIA:</strong> install the NVIDIA driver + <code>nvidia-cuda-toolkit</code>; confirm <code>nvidia-smi</code> works</li>
         <li><strong>Intel QSV:</strong> install <code>intel-media-va-driver</code> (or <code>intel-media-va-driver-non-free</code> for newer CPUs)</li>
         <li><strong>AMD AMF:</strong> only works on Windows with the AMD driver installed</li>
-        <li><strong>Force software:</strong> set <code>OPENSENTRY_ENCODER=libx264</code> to skip HW probe entirely</li>
+        <li><strong>Force software:</strong> set <code>SOURCEBOX_SENTRY_ENCODER=libx264</code> to skip HW probe entirely</li>
       </ul>
 
       <h3>High CPU usage</h3>

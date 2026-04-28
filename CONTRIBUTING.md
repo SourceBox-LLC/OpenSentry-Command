@@ -61,7 +61,7 @@ npm run dev                   # http://localhost:5173
 ```bash
 cd OpenSentry-CloudNode
 cargo build --release
-./target/release/opensentry-cloudnode setup
+./target/release/sourcebox-sentry-cloudnode setup
 ```
 
 See the [CloudNode README](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) for full setup instructions.

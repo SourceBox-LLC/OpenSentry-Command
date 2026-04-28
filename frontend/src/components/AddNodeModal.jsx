@@ -45,9 +45,9 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
     macos: `curl -fsSL ${base}/install.sh | bash`,
   }
   const MSI_DOWNLOAD_URL =
-    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi'
+    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi'
 
-  const exe = os === 'windows' ? 'opensentry-cloudnode.exe' : 'opensentry-cloudnode'
+  const exe = os === 'windows' ? 'sourcebox-sentry-cloudnode.exe' : 'sourcebox-sentry-cloudnode'
   const quickSetupCmd = credentials
     ? `${exe} setup --url "${base}" --node-id ${credentials.node_id} --key ${credentials.api_key}`
     : ''

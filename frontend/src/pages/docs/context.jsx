@@ -10,7 +10,7 @@
 // `OsTabs` reads from this context internally so callers don't have to thread
 // anything through. The Getting-Started and CloudNode-Setup sections both
 // render an OsTabs instance — they share a single `os` value, so flipping
-// the tab in one updates the other (and the inline ``opensentry-cloudnode``
+// the tab in one updates the other (and the inline ``sourcebox-sentry-cloudnode``
 // invocation a few lines below it).
 //
 // Keeping this in /pages/docs/context.jsx (not /hooks/) signals that it's
@@ -57,7 +57,7 @@ export function DocsProvider({ children }) {
     macos: `curl -fsSL ${base}/install.sh | bash`,
   }
   const msiDownloadUrl =
-    "https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/opensentry-cloudnode-windows-x86_64.msi"
+    "https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi"
 
   const value = {
     os,
@@ -147,7 +147,7 @@ export function OsTabs({ id }) {
             <p style={{ marginTop: "0.75rem", fontSize: "0.9rem", color: "var(--text-muted)" }}>
               Run the MSI (UAC prompt; SmartScreen → <strong>More info → Run anyway</strong>),
               then open PowerShell as Administrator and run{" "}
-              <code>opensentry-cloudnode setup</code>. The MSI registers
+              <code>sourcebox-sentry-cloudnode setup</code>. The MSI registers
               a Windows Service that auto-starts on boot.
             </p>
           </div>

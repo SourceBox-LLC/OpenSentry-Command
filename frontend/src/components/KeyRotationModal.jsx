@@ -132,10 +132,10 @@ function KeyRotationModal({ isOpen, onClose, node, onRotate }) {
                 Run the setup wizard on your device to update the API key:
               </p>
               <div className="command-box">
-                <code>opensentry-cloudnode setup</code>
+                <code>sourcebox-sentry-cloudnode setup</code>
                 <button
                   className="btn btn-small copy-command-btn"
-                  onClick={() => handleCopy("opensentry-cloudnode setup")}
+                  onClick={() => handleCopy("sourcebox-sentry-cloudnode setup")}
                 >
                   Copy
                 </button>
