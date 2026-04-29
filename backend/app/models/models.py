@@ -1,14 +1,15 @@
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import (
-    Column,
-    String,
-    Text,
-    DateTime,
-    Integer,
+    BigInteger,
     Boolean,
+    Column,
+    DateTime,
     ForeignKey,
     Index,
+    Integer,
     LargeBinary,
+    String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -205,6 +206,17 @@ class CameraNode(Base):
     node_version = Column(String(50), nullable=True)
     version_checked_at = Column(DateTime, nullable=True)
 
+    # Filesystem-aware storage stats reported by CloudNode on heartbeat
+    # (v0.1.41+).  Used by Settings → Camera Nodes to render a per-node
+    # usage bar (used vs configured cap) and warn when the underlying
+    # host disk is filling up.  All four are nullable so v0.1.40 and
+    # earlier nodes still register / heartbeat without failing migration.
+    storage_used_bytes = Column(BigInteger, nullable=True)
+    storage_max_bytes = Column(BigInteger, nullable=True)
+    storage_disk_free_bytes = Column(BigInteger, nullable=True)
+    storage_disk_total_bytes = Column(BigInteger, nullable=True)
+    storage_reported_at = Column(DateTime, nullable=True)
+
     cameras = relationship(
         "Camera", back_populates="node", cascade="all, delete-orphan"
     )
@@ -244,6 +256,15 @@ class CameraNode(Base):
             "version_checked_at": self.version_checked_at.isoformat()
             if self.version_checked_at
             else None,
+            "storage": {
+                "used_bytes": self.storage_used_bytes,
+                "max_bytes": self.storage_max_bytes,
+                "disk_free_bytes": self.storage_disk_free_bytes,
+                "disk_total_bytes": self.storage_disk_total_bytes,
+                "reported_at": self.storage_reported_at.isoformat()
+                if self.storage_reported_at
+                else None,
+            } if self.storage_reported_at else None,
         }
 
 

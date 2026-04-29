@@ -384,6 +384,86 @@ def test_heartbeat_persists_node_version(admin_client):
         session.close()
 
 
+def test_heartbeat_persists_storage_stats(admin_client):
+    """v0.1.41+ CloudNodes report filesystem-aware storage stats on
+    every heartbeat. The dashboard's per-node usage bar reads from
+    these columns; if persistence breaks, the bar goes blank."""
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.41")
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={
+            "node_id": node_id,
+            "node_version": "0.1.41",
+            "storage_stats": {
+                "used_bytes": 5 * 1024 * 1024 * 1024,    # 5 GB used
+                "max_bytes": 64 * 1024 * 1024 * 1024,    # 64 GB cap
+                "disk_free_bytes": 100 * 1024 * 1024 * 1024,  # 100 GB free
+                "disk_total_bytes": 500 * 1024 * 1024 * 1024,  # 500 GB total
+            },
+        },
+    )
+    assert hb.status_code == 200
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        assert node.storage_used_bytes == 5 * 1024 * 1024 * 1024
+        assert node.storage_max_bytes == 64 * 1024 * 1024 * 1024
+        assert node.storage_disk_free_bytes == 100 * 1024 * 1024 * 1024
+        assert node.storage_disk_total_bytes == 500 * 1024 * 1024 * 1024
+        assert node.storage_reported_at is not None
+        # to_dict surfaces the storage block for GET /api/nodes consumers.
+        d = node.to_dict()
+        assert d["storage"]["used_bytes"] == 5 * 1024 * 1024 * 1024
+        assert d["storage"]["max_bytes"] == 64 * 1024 * 1024 * 1024
+    finally:
+        session.close()
+
+
+def test_heartbeat_without_storage_stats_preserves_last_known(admin_client):
+    """A heartbeat from a v0.1.40-or-older CloudNode (no storage_stats
+    block) must NOT clobber the last-known reading to NULL.  Otherwise
+    a brief downgrade or hand-built test client would empty the
+    dashboard bar.
+    """
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.41")
+
+    # First heartbeat: full stats.
+    admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={
+            "node_id": node_id,
+            "node_version": "0.1.41",
+            "storage_stats": {
+                "used_bytes": 1000,
+                "max_bytes": 5000,
+                "disk_free_bytes": 50000,
+                "disk_total_bytes": 100000,
+            },
+        },
+    )
+
+    # Second heartbeat: no storage block (simulates legacy node).
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id, "node_version": "0.1.40"},
+    )
+    assert hb.status_code == 200
+
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        # Last-known stats preserved — not overwritten with NULL.
+        assert node.storage_used_bytes == 1000
+        assert node.storage_max_bytes == 5000
+    finally:
+        session.close()
+
+
 def test_heartbeat_rejects_too_old_version(admin_client, monkeypatch):
     """Same gate on heartbeat as on register — a node downgraded below
     MIN can't pretend it's still healthy."""

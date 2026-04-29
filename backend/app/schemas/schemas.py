@@ -63,6 +63,24 @@ class CameraStatus(BaseModel):
     last_error: Optional[str] = Field(None, max_length=500)
 
 
+class NodeStorageStats(BaseModel):
+    """Filesystem-aware storage snapshot from CloudNode.
+
+    Reported on every heartbeat by v0.1.41+ nodes; the dashboard
+    renders the per-node usage bar from these numbers and warns the
+    operator when ``disk_free_bytes`` drops below the safety floor.
+    Optional throughout because (1) older CloudNodes don't send the
+    block at all, and (2) a single field can be unknown
+    (``disk_free_bytes = 0`` means "couldn't identify the disk" in
+    Docker etc.) without invalidating the rest.
+    """
+
+    used_bytes: Optional[int] = Field(None, ge=0)
+    max_bytes: Optional[int] = Field(None, ge=0)
+    disk_free_bytes: Optional[int] = Field(None, ge=0)
+    disk_total_bytes: Optional[int] = Field(None, ge=0)
+
+
 class NodeHeartbeat(BaseModel):
     node_id: str = Field(..., max_length=50)
     local_ip: Optional[str] = Field(None, max_length=45)
@@ -71,6 +89,10 @@ class NodeHeartbeat(BaseModel):
     # so the backend always knows what's actually running (e.g. after the
     # operator updates CloudNode without re-registering).
     node_version: Optional[str] = Field(None, max_length=50)
+    # Filesystem-aware storage snapshot (v0.1.41+).  Optional so
+    # heartbeats from older CloudNodes that don't send the block
+    # still pass validation.
+    storage_stats: Optional[NodeStorageStats] = None
 
 
 class NodeCreate(BaseModel):

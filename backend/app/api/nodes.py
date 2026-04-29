@@ -404,6 +404,18 @@ async def node_heartbeat(
     node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
     node.local_ip = data.local_ip or node.local_ip
 
+    # Persist filesystem-aware storage stats from CloudNode v0.1.41+.
+    # Older nodes omit the block; we leave the existing values untouched
+    # in that case so the dashboard's last-known reading isn't clobbered
+    # back to NULL on a brief downgrade or hand-built test client.
+    if data.storage_stats is not None:
+        s = data.storage_stats
+        node.storage_used_bytes = s.used_bytes
+        node.storage_max_bytes = s.max_bytes
+        node.storage_disk_free_bytes = s.disk_free_bytes
+        node.storage_disk_total_bytes = s.disk_total_bytes
+        node.storage_reported_at = node.last_seen
+
     camera_updates = data.cameras or []
     if camera_updates:
         camera_ids = [cs.camera_id for cs in camera_updates]

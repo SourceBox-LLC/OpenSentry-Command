@@ -7,6 +7,7 @@ import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
+import NodeStorageBar from "../components/NodeStorageBar.jsx"
 
 function formatRelativeTime(dateString) {
   if (!dateString) return ""
@@ -397,6 +398,7 @@ function SettingsPage() {
                         </div>
                       </div>
                     )}
+                    <NodeStorageBar storage={node.storage} />
                   </div>
                   <div className="node-actions">
                     <button
