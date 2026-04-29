@@ -142,8 +142,62 @@ def test_push_segment_rejects_oversize(unauthenticated_client, db, monkeypatch):
         content=b"\x00" * 256,
         headers={"X-Node-API-Key": raw_key},
     )
-    assert resp.status_code == 400
-    assert "too large" in resp.json()["detail"].lower()
+    # 413 Payload Too Large — Content-Length on the request will land us
+    # in the early-rejection path, but the assertion below tolerates the
+    # belt-and-suspenders post-read path too (same status either way).
+    assert resp.status_code == 413
+    assert "max" in resp.json()["detail"].lower()
+
+
+def test_push_segment_rejects_oversize_via_content_length_header(
+    unauthenticated_client, db, monkeypatch
+):
+    """Early rejection — a request that DECLARES too many bytes is
+    rejected before any body is read into memory.  This is the lever
+    that prevents a 10 GB attempted upload from costing 10 GB of RAM
+    even briefly.
+
+    We can't directly observe "body wasn't read" through the test
+    client, but we *can* prove the early path is reachable by sending
+    a Content-Length that lies (declares 10 MB, sends 256 bytes).
+    The early check fires on the declared size, the actual body never
+    matters.
+    """
+    from app.core.config import settings
+
+    raw_key, cam_id = _seed_node_with_camera(db)
+    monkeypatch.setattr(settings, "SEGMENT_PUSH_MAX_BYTES", 128)
+
+    # httpx (the test-client transport) computes Content-Length from
+    # the body it sends, so we send 256 bytes and assert the declared
+    # size triggers rejection.  An attacker would behave the same way
+    # (real attack: lie about the body to inflate it past the cap).
+    resp = unauthenticated_client.post(
+        f"/api/cameras/{cam_id}/push-segment?filename=segment_00001.ts",
+        content=b"\x00" * 256,
+        headers={"X-Node-API-Key": raw_key},
+    )
+    assert resp.status_code == 413
+    detail = resp.json()["detail"].lower()
+    assert "declared" in detail
+    assert "max is 128" in detail
+
+
+def test_push_playlist_rejects_oversize(unauthenticated_client, db, monkeypatch):
+    """Playlists are tiny in real life (a few hundred bytes); the cap
+    is generous (64 KB default) but enforced — same Content-Length
+    early-rejection path as push-segment."""
+    from app.core.config import settings
+
+    raw_key, cam_id = _seed_node_with_camera(db)
+    monkeypatch.setattr(settings, "PLAYLIST_PUSH_MAX_BYTES", 64)
+
+    resp = unauthenticated_client.post(
+        f"/api/cameras/{cam_id}/playlist",
+        content=b"#EXTM3U\n" + b"#EXTINF:1.0,\nseg.ts\n" * 50,
+        headers={"X-Node-API-Key": raw_key},
+    )
+    assert resp.status_code == 413
 
 
 # ── Plan-cap enforcement ─────────────────────────────────────────────

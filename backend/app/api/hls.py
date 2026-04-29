@@ -38,6 +38,51 @@ _RE_SEGMENT_URI = re.compile(
 _RE_CODECS = re.compile(r"^#EXT-X-CODECS:.*$", re.MULTILINE)
 _RE_SEGMENT_FILENAME = re.compile(r"^segment_\d+\.ts$")
 
+
+async def _read_capped_body(request: Request, max_bytes: int) -> bytes:
+    """Read the request body with an upper-bound size enforcement.
+
+    Two layers of protection:
+      1. **Pre-read** check on the ``Content-Length`` header.  An
+         honest client (CloudNode pushes via reqwest, which always
+         sets Content-Length on non-chunked bodies) gets rejected
+         with HTTP 413 BEFORE any bytes land in memory.  This is
+         the lever that makes a 10 GB attempted upload cost zero
+         memory at the server.
+      2. **Post-read** check on the actual body length.  Belt-and-
+         suspenders for chunked-transfer requests that omit
+         Content-Length, or for clients that lie.  Bytes are read
+         (Starlette has no streaming-cap primitive available here)
+         but the cap still fires before the body is forwarded into
+         the cache.
+
+    Returns the validated body bytes.  Raises HTTPException(413) on
+    either path; HTTPException(400) if Content-Length is malformed.
+    """
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            declared_int = int(declared)
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail="Invalid Content-Length header"
+            )
+        if declared_int > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Body declared {declared_int} bytes; max is {max_bytes}"
+                ),
+            )
+
+    body = await request.body()
+    if len(body) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Body is {len(body)} bytes; max is {max_bytes}",
+        )
+    return body
+
 # ── Rewritten playlist cache ──────────────────────────────────────────
 # Populated by POST /playlist (CloudNode push). Browser GET requests
 # serve the cached string instantly — no I/O per poll.
@@ -537,9 +582,7 @@ async def push_segment(
     if not _RE_SEGMENT_FILENAME.match(filename):
         raise HTTPException(status_code=400, detail="Invalid segment filename")
 
-    body = await request.body()
-    if len(body) > settings.SEGMENT_PUSH_MAX_BYTES:
-        raise HTTPException(status_code=400, detail="Segment too large")
+    body = await _read_capped_body(request, settings.SEGMENT_PUSH_MAX_BYTES)
 
     # Cache the segment.  setdefault is atomic on CPython dicts; avoids
     # the check-then-insert race that would drop segments if two async
@@ -584,10 +627,13 @@ async def update_hls_playlist(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
+    body = await _read_capped_body(request, settings.PLAYLIST_PUSH_MAX_BYTES)
     try:
-        playlist_content = (await request.body()).decode("utf-8")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid playlist content: {e}")
+        playlist_content = body.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid playlist content: {e}"
+        )
 
     # Pre-compute the rewritten playlist with proxy segment URLs
     # and cache it. Browser polls will serve this instantly.

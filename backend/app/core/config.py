@@ -38,9 +38,19 @@ class Config:
     SEGMENT_CACHE_MAX_PER_CAMERA: int = int(
         os.getenv("SEGMENT_CACHE_MAX_PER_CAMERA", "60")
     )
-    # Max size of a single pushed segment (safety valve).
+    # Max size of a single pushed segment (safety valve).  Enforced
+    # via Content-Length BEFORE the body is read, plus a post-read
+    # check for chunked transfers.
     SEGMENT_PUSH_MAX_BYTES: int = int(
         os.getenv("SEGMENT_PUSH_MAX_BYTES", str(2 * 1024 * 1024))
+    )
+    # Max size of a single pushed HLS playlist (m3u8).  A real
+    # playlist is typically 1-2 KB; 64 KB leaves comfortable headroom
+    # for unusually long segment lists or paranoid future formats
+    # without letting an attacker burn unbounded memory pushing
+    # garbage into /playlist.
+    PLAYLIST_PUSH_MAX_BYTES: int = int(
+        os.getenv("PLAYLIST_PUSH_MAX_BYTES", str(64 * 1024))
     )
     # How often (in playlist updates) to run cache eviction.
     CLEANUP_INTERVAL: int = int(os.getenv("CLEANUP_INTERVAL", "20"))
