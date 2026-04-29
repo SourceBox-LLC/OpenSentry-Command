@@ -10,7 +10,6 @@
 import hashlib
 import uuid
 
-import pytest
 
 from app.models.models import AuditLog, Camera, CameraNode
 

@@ -20,7 +20,7 @@ from app.core.plans import (
 )
 from app.core.versions import check_node_version
 from app.models.models import CameraNode, Camera, Setting
-from app.schemas.schemas import NodeRegister, NodeHeartbeat, CameraReport, NodeCreate
+from app.schemas.schemas import NodeRegister, NodeHeartbeat, NodeCreate
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])

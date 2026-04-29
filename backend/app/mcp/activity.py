@@ -7,13 +7,11 @@ and persists completed events to the database for audit.
 """
 
 import asyncio
-import json
 import logging
 import threading
 import time
-import uuid
 from collections import deque
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Optional
 

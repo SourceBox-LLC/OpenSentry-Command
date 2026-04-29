@@ -1,6 +1,5 @@
 """Tests for motion detection event endpoints."""
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from app.models.models import MotionEvent
 from app.api.motion import motion_broadcaster

@@ -2,7 +2,6 @@
 
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import patch
 
 from app.api.ws import _handle_motion_event
 from app.models.models import Camera, CameraNode, MotionEvent

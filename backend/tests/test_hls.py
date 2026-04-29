@@ -22,7 +22,6 @@ Covers:
 import hashlib
 import uuid
 
-import pytest
 
 from app.models.models import Camera, CameraNode
 

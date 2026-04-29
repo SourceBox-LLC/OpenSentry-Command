@@ -7,7 +7,6 @@ These don't hit sentry.io — they exercise the local control flow:
   hands the event to the transport
 """
 
-import os
 from unittest.mock import patch
 
 import pytest

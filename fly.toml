@@ -16,20 +16,13 @@ primary_region = "sjc"
   destination = "/data"
 
 [deploy]
-  # Single machine + single persistent volume (`opensentry_data` at
-  # /data, holding the SQLite DB).  Rolling deploys can't work here
-  # — there's only one volume attachment slot, so a new machine
-  # cannot be brought up alongside the old one (Fly errors with
-  # "creating a new machine in group 'app' requires an unattached
-  # 'opensentry_data' volume").
-  #
-  # `immediate` tells Fly to stop the existing machine, free the
-  # volume, and reattach it to the new machine on the same deploy.
-  # Cost: ~30-60s of downtime per deploy.
-  #
-  # NOTE: `max_unavailable` is rolling-only — flyctl warns and
-  # ignores it under `immediate`, so don't add it back.
-  #
+  # CI uses build-image-then-`fly machine update` (see
+  # .github/workflows/deploy.yml) which doesn't honour this strategy
+  # — it goes straight to the in-place machine API.  This block
+  # only matters if someone runs plain `fly deploy` manually.
+  # `immediate` is the closest match for our single-machine +
+  # single-volume topology: rolling tries to provision a parallel
+  # machine and errors on the volume's single attachment slot.
   # The path to zero-downtime deploys is migrating off
   # SQLite-on-a-single-volume (Postgres or LiteFS).
   strategy = "immediate"

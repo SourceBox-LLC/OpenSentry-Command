@@ -8,7 +8,7 @@ from app.core.clerk import clerk
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.plans import enforce_camera_cap
-from app.models.models import Setting, CameraNode, Camera, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup
+from app.models.models import Setting, CameraNode, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup
 
 logger = logging.getLogger(__name__)
 

@@ -5,13 +5,10 @@ Sets up an in-memory SQLite database and a FastAPI test client
 with Clerk auth bypassed (mocked).
 """
 
-import hashlib
 import os
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Must set env vars BEFORE importing app modules so config.py picks them up.

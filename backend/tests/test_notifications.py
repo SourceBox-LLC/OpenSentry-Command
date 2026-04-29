@@ -11,7 +11,6 @@ Exercises:
   - offline sweep that flips stale 'online' rows
 """
 
-import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -27,7 +26,6 @@ from app.api.notifications import (
 )
 from app.main import run_offline_sweep
 from app.models.models import Camera, CameraNode, Notification, Setting, UserNotificationState
-from tests.conftest import TestSession
 
 
 @pytest.fixture(autouse=True)

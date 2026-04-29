@@ -1,6 +1,5 @@
 """Camera and settings endpoint tests."""
 
-from app.models.models import Camera, CameraNode
 
 
 def test_list_cameras_empty(admin_client):
