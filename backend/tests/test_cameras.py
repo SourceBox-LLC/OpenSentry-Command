@@ -1,5 +1,7 @@
 """Camera and settings endpoint tests."""
 
+from app.models.models import Setting
+
 
 
 def test_list_cameras_empty(admin_client):
@@ -114,6 +116,78 @@ def test_update_notification_settings_requires_admin(viewer_client):
     assert resp.status_code in (401, 403)
 
 
+# ─── Danger zone (wipe-logs, full-reset) ─────────────────────────────
+#
+# These two endpoints are destructive and gated on a paid plan.  The
+# audit flagged that the gate read ONLY the JWT `features` claim,
+# which has up to ~1 minute of refresh lag after a Clerk plan change.
+# A user who downgrades from Pro → Free would still pass the JWT
+# check during that window and could fire the destructive action
+# despite no longer having entitlement.  v0.1.40+ adds a server-side
+# double-check via effective_plan_for_caps (DB-resolved current
+# plan).  These tests pin both sides of the gate.
+
+
+def _force_org_plan(monkeypatch, plan_slug: str) -> None:
+    """Override the DB-resolved plan that the danger-zone helper sees.
+
+    Patches ``effective_plan_for_caps`` at its definition site so the
+    test doesn't need a Clerk SDK or a populated webhook cache.
+    """
+    from app.core import plans as plans_mod
+    monkeypatch.setattr(
+        plans_mod, "effective_plan_for_caps", lambda _db, _org: plan_slug
+    )
+
+
+def test_wipe_logs_requires_paid_plan_in_db_not_just_jwt(
+    admin_client, monkeypatch
+):
+    """admin_client's JWT has features=['admin'], so the JWT gate
+    passes.  But if the DB-resolved plan is free_org (e.g. user just
+    downgraded but the JWT hasn't refreshed), the second check
+    rejects with 403.  Stops the post-downgrade exploit window."""
+    _force_org_plan(monkeypatch, "free_org")
+
+    resp = admin_client.post("/api/settings/danger/wipe-logs")
+    assert resp.status_code == 403
+    assert "paid" in resp.json()["detail"].lower()
+
+
+def test_wipe_logs_succeeds_when_db_plan_is_paid(admin_client, monkeypatch):
+    """Both gates pass: JWT has admin, DB says pro.  Wipe goes through."""
+    _force_org_plan(monkeypatch, "pro")
+
+    resp = admin_client.post("/api/settings/danger/wipe-logs")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "deleted_logs" in body
+
+
+def test_full_reset_requires_paid_plan_in_db_not_just_jwt(
+    admin_client, monkeypatch
+):
+    """Same exploit window as wipe-logs but for full_reset, which is
+    the more destructive of the two — wipes nodes, cameras, settings,
+    audit log."""
+    _force_org_plan(monkeypatch, "free_org")
+
+    resp = admin_client.post("/api/settings/danger/full-reset")
+    assert resp.status_code == 403
+    assert "paid" in resp.json()["detail"].lower()
+
+
+def test_full_reset_succeeds_when_db_plan_is_paid(admin_client, monkeypatch):
+    _force_org_plan(monkeypatch, "pro_plus")
+
+    resp = admin_client.post("/api/settings/danger/full-reset")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "nodes_deleted" in body
+
+
 def test_camera_groups_crud(admin_client):
     """Create, list, and delete camera groups."""
     from app.core.auth import require_view
@@ -139,3 +213,4 @@ def test_camera_groups_crud(admin_client):
     # Verify deleted
     resp = admin_client.get("/api/camera-groups")
     assert len(resp.json()) == 0
+

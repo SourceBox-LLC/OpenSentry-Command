@@ -238,12 +238,32 @@ def _validate_frontend_url(url: str) -> str | None:
 
 frontend_url = _validate_frontend_url(frontend_url)
 
-# CORS configuration - include both local and production URLs
+# CORS configuration.
+#
+# Localhost origins are always allowed — developer-convenience baseline
+# so `npm run dev` against a Fly-hosted backend works without env config.
+# Production origins are sourced from CORS_ALLOWED_ORIGINS (comma-
+# separated) so adding a preview/staging origin doesn't require a code
+# change.  Default value is the canonical Fly URL so a missing env var
+# during a fresh deploy doesn't lock everyone out.
+#
+# FRONTEND_URL stays honoured for backwards compatibility (some
+# deployment scripts set it directly).  Each entry runs through
+# _validate_frontend_url so a malformed value produces a single
+# warning and is dropped, instead of silently widening CORS.
 cors_origins = [
     "http://localhost:5173",
     "http://localhost:8000",
-    "https://opensentry-command.fly.dev",
 ]
+
+extra_origins_raw = os.getenv(
+    "CORS_ALLOWED_ORIGINS",
+    "https://opensentry-command.fly.dev",
+)
+for raw in extra_origins_raw.split(","):
+    validated = _validate_frontend_url(raw)
+    if validated and validated not in cors_origins:
+        cors_origins.append(validated)
 
 if frontend_url and frontend_url not in cors_origins:
     cors_origins.append(frontend_url)

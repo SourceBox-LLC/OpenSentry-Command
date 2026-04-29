@@ -528,6 +528,50 @@ async def report_camera_codec(
 # ── Danger Zone ──────────────────────────────────────────────────────
 
 
+def _require_active_paid_plan(user: AuthUser, db: Session) -> None:
+    """Gate destructive danger-zone endpoints on BOTH the JWT-claimed
+    feature AND the DB-resolved plan.
+
+    The JWT ``features`` claim is what Clerk asserts the user has on
+    their current session token — it refreshes ~once per minute,
+    which means a user who downgrades from Pro → Free retains the
+    ``admin`` feature in their token for up to that window.  Without
+    this server-side double-check, a recently-downgraded user could
+    fire ``/wipe-logs`` or ``/full-reset`` on the strength of a
+    soon-to-be-stale claim, and the destructive action would land
+    despite their active plan no longer permitting it.
+
+    ``effective_plan_for_caps`` reads the DB-cached ``org_plan``
+    setting which the Clerk webhook handler keeps current within
+    seconds of an upgrade/downgrade.  That's the authoritative
+    answer for "is this org currently on a paid plan, right now,
+    not at the time the JWT was issued."
+
+    Raises 403 if either check fails.  Both are required: the JWT
+    check is the cheap pre-filter, the DB check is the
+    point-of-truth.
+    """
+    from app.core.plans import effective_plan_for_caps, PAID_PLAN_SLUGS
+
+    if "admin" not in user.features:
+        raise HTTPException(
+            status_code=403,
+            detail="Danger zone requires a Pro or Pro Plus plan.",
+        )
+
+    current_plan = effective_plan_for_caps(db, user.org_id)
+    if current_plan not in PAID_PLAN_SLUGS:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Danger zone requires an active paid plan; the current "
+                "billing record for this organization doesn't include "
+                "this feature.  If you just upgraded, sign out and back "
+                "in to refresh your session."
+            ),
+        )
+
+
 @router.post("/settings/danger/wipe-logs")
 @limiter.limit("5/hour")
 async def wipe_stream_logs(
@@ -536,11 +580,7 @@ async def wipe_stream_logs(
     db: Session = Depends(get_db),
 ):
     """Permanently delete all stream access logs for this organization."""
-    if "admin" not in user.features:
-        raise HTTPException(
-            status_code=403,
-            detail="Danger zone requires a Pro or Pro Plus plan.",
-        )
+    _require_active_paid_plan(user, db)
     from app.models import StreamAccessLog
 
     count = db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
@@ -574,11 +614,7 @@ async def full_reset(
     Full organization reset: wipe all nodes (with CloudNode notification),
     clear stream logs, clear settings.
     """
-    if "admin" not in user.features:
-        raise HTTPException(
-            status_code=403,
-            detail="Danger zone requires a Pro or Pro Plus plan.",
-        )
+    _require_active_paid_plan(user, db)
     from app.models import StreamAccessLog, CameraNode
     from app.api.hls import cleanup_camera_cache
 
