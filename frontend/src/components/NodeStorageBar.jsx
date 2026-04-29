@@ -34,6 +34,7 @@ function NodeStorageBar({ storage }) {
   const used = storage.used_bytes ?? 0
   const max = storage.max_bytes ?? 0
   const diskFree = storage.disk_free_bytes ?? 0
+  const diskTotal = storage.disk_total_bytes ?? 0
 
   // 100% means "at cap" — clamp so the bar doesn't overflow visually
   // when the writer sneaks past the cap between retention ticks.
@@ -105,6 +106,25 @@ function NodeStorageBar({ storage }) {
           }}
         >
           Over cap — retention is deleting oldest recordings to free space.
+        </p>
+      )}
+      {diskTotal > 0 && (
+        // Host disk subtitle — surfaces the actual filesystem state at all
+        // times, not just when the safety floor trips.  Gives operators
+        // context about how much headroom is on the host (e.g. cap is
+        // 64 GB but only 30 GB of host disk is free → operator should
+        // either lower the cap or upgrade disk).  Hidden when disk_total
+        // is 0 (sysinfo couldn't identify the disk — Docker rootfs, FUSE)
+        // since "0 / 0" is meaningless.
+        <p
+          style={{
+            fontSize: "0.78rem",
+            color: "var(--text-muted, #888)",
+            marginTop: "0.35rem",
+            marginBottom: 0,
+          }}
+        >
+          Host disk: {formatGb(diskFree)} free of {formatGb(diskTotal)}
         </p>
       )}
       {diskCritical && (
