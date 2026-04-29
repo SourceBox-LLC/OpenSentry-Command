@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    name: Run Tests
+    name: Backend tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,10 +26,45 @@ jobs:
         working-directory: backend
         run: uv run pytest -v
 
+  frontend:
+    name: Frontend audit + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # `npm audit` flags vulnerabilities in production dependencies.
+      # Threshold = high so low/moderate findings (transitive dev-only
+      # CVEs that don't reach prod, advisories with no fix yet, etc.)
+      # don't block legitimate deploys.  High + critical findings DO
+      # block — those are real and need a fix or a documented
+      # `--omit=optional` / override / waiver.
+      #
+      # `--omit=dev` skips devDependencies because they don't ship
+      # to production; the prod bundle is what reaches a user.
+      - name: npm audit (production deps only, high+critical)
+        working-directory: frontend
+        run: npm audit --audit-level=high --omit=dev
+
+      # Build now so a syntax or type error fails CI here rather than
+      # mid-deploy.  Catches the same class of bug as backend pytest.
+      - name: Build production bundle
+        working-directory: frontend
+        run: npm run build
+
   deploy:
     name: Deploy to Fly.io
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, frontend]
     concurrency:
       group: deploy
       cancel-in-progress: true
