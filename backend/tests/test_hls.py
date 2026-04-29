@@ -485,6 +485,206 @@ def test_playlist_rewrite_is_idempotent_across_pushes(
     assert "#EXT-X-CODECS:" not in second
 
 
+# ── Viewer-hour cap enforcement ──────────────────────────────────────
+#
+# Free orgs get 30 viewer-hours/month, Pro 300, Pro Plus 1500.  When an
+# org exceeds its cap, GET /segment must 429 — otherwise users stream
+# unlimited live video on the Free tier and the whole plan ladder
+# collapses.  Money-flavored: silently broken cap = silent revenue loss.
+
+
+def test_segment_delivery_blocks_when_over_viewer_hour_cap(
+    admin_client, unauthenticated_client, db, monkeypatch
+):
+    """Push a segment, then make the org appear to have used 31 hours
+    on the Free plan (cap = 30h).  The segment GET should 429."""
+    raw_key, cam_id = _seed_node_with_camera(db)
+
+    # Push so the cache has a segment to potentially serve.
+    pushed_bytes = b"\xfa\xfa\xfa" * 64
+    push = unauthenticated_client.post(
+        f"/api/cameras/{cam_id}/push-segment?filename=segment_00001.ts",
+        content=pushed_bytes,
+        headers={"X-Node-API-Key": raw_key},
+    )
+    assert push.status_code == 200
+
+    # Force the effective plan to free_org (admin_client fixture is on
+    # pro, which has a much larger cap that we'd have to inject more
+    # viewer-seconds to exceed).  effective_plan_for_caps is what the
+    # endpoint reads, NOT user.plan from the JWT — the test mirrors
+    # production behaviour by overriding the DB-resolved plan.
+    from app.core import plans as plans_mod
+    monkeypatch.setattr(
+        plans_mod, "effective_plan_for_caps", lambda _db, _org: "free_org"
+    )
+
+    # Inject 31h of viewer-seconds (Free cap is 30h).  Bypassing the DB
+    # warm-cache via the in-memory _cached_viewer_seconds dict is the
+    # fastest way to put the org over cap.
+    from app.api import hls as hls_mod
+    over_cap_seconds = 31 * 3600
+    ym = hls_mod._current_year_month()
+    hls_mod._cached_viewer_seconds[("org_test123", ym)] = over_cap_seconds
+
+    try:
+        resp = admin_client.get(f"/api/cameras/{cam_id}/segment/segment_00001.ts")
+        assert resp.status_code == 429
+        body = resp.json()
+        assert "viewer-hour" in body["detail"].lower()
+    finally:
+        # Clean up so the next test isn't influenced.
+        hls_mod._cached_viewer_seconds.pop(("org_test123", ym), None)
+
+
+def test_segment_delivery_allowed_when_under_viewer_hour_cap(
+    admin_client, unauthenticated_client, db, monkeypatch
+):
+    """Same setup as above but at 29h — under the 30h Free cap.
+    Segment must serve normally."""
+    raw_key, cam_id = _seed_node_with_camera(db)
+
+    pushed_bytes = b"\xab" * 256
+    unauthenticated_client.post(
+        f"/api/cameras/{cam_id}/push-segment?filename=segment_00001.ts",
+        content=pushed_bytes,
+        headers={"X-Node-API-Key": raw_key},
+    )
+
+    from app.core import plans as plans_mod
+    monkeypatch.setattr(
+        plans_mod, "effective_plan_for_caps", lambda _db, _org: "free_org"
+    )
+
+    from app.api import hls as hls_mod
+    under_cap_seconds = 29 * 3600
+    ym = hls_mod._current_year_month()
+    hls_mod._cached_viewer_seconds[("org_test123", ym)] = under_cap_seconds
+
+    try:
+        resp = admin_client.get(f"/api/cameras/{cam_id}/segment/segment_00001.ts")
+        assert resp.status_code == 200
+        assert resp.content == pushed_bytes
+    finally:
+        hls_mod._cached_viewer_seconds.pop(("org_test123", ym), None)
+
+
+# ── Playlist rewriter unit tests ─────────────────────────────────────
+#
+# The integration tests above exercise `_rewrite_playlist` end-to-end
+# through the HTTP layer.  These hit the function directly so a regex
+# regression lands a sharp local failure (the function is the heart of
+# stream rewriting — every browser playlist fetch is gated on it).
+
+
+def test_rewrite_playlist_strips_bare_basename_prefix():
+    from app.api.hls import _rewrite_playlist
+    out = _rewrite_playlist("#EXTM3U\n#EXTINF:2.0,\nsegment_00042.ts\n")
+    assert "segment/segment_00042.ts" in out
+
+
+def test_rewrite_playlist_strips_forward_slash_path_prefix():
+    from app.api.hls import _rewrite_playlist
+    out = _rewrite_playlist(
+        "#EXTM3U\n#EXTINF:2.0,\n./data/hls/cam_id/segment_00042.ts\n"
+    )
+    assert "segment/segment_00042.ts" in out
+    assert "./data/" not in out
+
+
+def test_rewrite_playlist_strips_backslash_path_prefix():
+    """Windows CloudNodes can write backslash-separated paths into the
+    playlist (e.g. ``data\\hls\\cam_id\\segment_00042.ts``).  The
+    rewriter must strip backslash prefixes too — otherwise the browser
+    fetch URL contains an embedded backslash and 404s."""
+    from app.api.hls import _rewrite_playlist
+    out = _rewrite_playlist(
+        "#EXTM3U\n#EXTINF:2.0,\n.\\data\\hls\\cam_id\\segment_00042.ts\n"
+    )
+    assert "segment/segment_00042.ts" in out
+    assert "\\" not in out  # no stray backslash survives
+
+
+def test_rewrite_playlist_does_not_rewrite_tag_lines_quoting_segments():
+    """``#EXT-X-MAP:URI="segment_init.ts"`` is a tag line that
+    references a segment-shaped name in a quoted attribute.  The
+    rewriter must NOT touch it — only the bare URI lines should be
+    proxied through ``segment/``.  The negative lookahead ``(?!#)``
+    in _RE_SEGMENT_URI is what gates this."""
+    from app.api.hls import _rewrite_playlist
+    src = (
+        "#EXTM3U\n"
+        '#EXT-X-MAP:URI="segment_init.ts"\n'
+        "#EXTINF:2.0,\n"
+        "segment_00001.ts\n"
+    )
+    out = _rewrite_playlist(src)
+    # Tag line untouched
+    assert '#EXT-X-MAP:URI="segment_init.ts"' in out
+    # Bare URI line rewritten
+    assert "segment/segment_00001.ts" in out
+
+
+def test_rewrite_playlist_strips_codecs_tag():
+    """``#EXT-X-CODECS`` is only valid in master playlists; injecting it
+    into a media playlist makes hls.js attempt master parsing and never
+    fire MANIFEST_PARSED."""
+    from app.api.hls import _rewrite_playlist
+    out = _rewrite_playlist(
+        "#EXTM3U\n"
+        '#EXT-X-CODECS:"avc1.42e01e,mp4a.40.2"\n'
+        "#EXTINF:2.0,\n"
+        "segment_00001.ts\n"
+    )
+    assert "#EXT-X-CODECS" not in out
+
+
+def test_rewrite_playlist_idempotent():
+    """Already-rewritten ``segment/<name>`` lines must not double-prefix
+    on a second pass — i.e. no ``segment/segment/segment_00001.ts``."""
+    from app.api.hls import _rewrite_playlist
+    src = "#EXTM3U\n#EXTINF:2.0,\nsegment_00001.ts\n"
+    once = _rewrite_playlist(src)
+    twice = _rewrite_playlist(once)
+    assert once == twice
+    assert "segment/segment/" not in twice
+
+
+def test_rewrite_playlist_handles_trailing_whitespace():
+    """CRLF line endings, trailing tabs/spaces — the regex tolerates
+    them so the emitted URI is clean."""
+    from app.api.hls import _rewrite_playlist
+    # CRLF
+    out = _rewrite_playlist("#EXTM3U\r\n#EXTINF:2.0,\r\nsegment_00001.ts\r\n")
+    assert "segment/segment_00001.ts" in out
+    # Trailing space + tab
+    out = _rewrite_playlist("#EXTM3U\n#EXTINF:2.0,\nsegment_00001.ts \t\n")
+    assert "segment/segment_00001.ts" in out
+
+
+def test_rewrite_playlist_preserves_non_segment_lines():
+    """Comments, EXTINF tags, and the EXTM3U header must pass through
+    unchanged."""
+    from app.api.hls import _rewrite_playlist
+    src = (
+        "#EXTM3U\n"
+        "#EXT-X-VERSION:3\n"
+        "#EXT-X-TARGETDURATION:2\n"
+        "#EXT-X-MEDIA-SEQUENCE:42\n"
+        "#EXTINF:2.000,\n"
+        "segment_00042.ts\n"
+    )
+    out = _rewrite_playlist(src)
+    for line in [
+        "#EXTM3U",
+        "#EXT-X-VERSION:3",
+        "#EXT-X-TARGETDURATION:2",
+        "#EXT-X-MEDIA-SEQUENCE:42",
+        "#EXTINF:2.000,",
+    ]:
+        assert line in out
+
+
 def test_stream_without_push_returns_404(admin_client, db):
     """No cached playlist → 404.  The viewer learns the stream hasn't
     started yet rather than getting a bogus empty playlist."""

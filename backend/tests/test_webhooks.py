@@ -168,6 +168,63 @@ def test_payment_failed_does_not_clear_past_due(webhook_client, db):
     assert Setting.get(db, TEST_ORG_ID, "payment_past_due") == "true"
 
 
+# ─── Idempotency ───────────────────────────────────────────────────
+
+def test_duplicate_svix_id_is_no_op(webhook_client, db):
+    """Svix retries the same message (same svix-id) on any non-2xx /
+    network failure.  Without idempotency the handler would re-run all
+    side effects on each retry — re-set member limits, re-fire
+    enforce_camera_cap.  This test posts the same payload twice and
+    asserts the second call returns ``status: duplicate`` without
+    re-processing.
+
+    This is the audit-flagged "money-flavored" failure mode: a Clerk
+    retry of subscription.updated could double-count plan changes."""
+    from app.models.models import ProcessedWebhook
+
+    # First delivery — processes normally.
+    payload = json.dumps({
+        "type": "subscription.created",
+        "data": {
+            "payer": {"organization_id": TEST_ORG_ID},
+            "items": [{"status": "active", "plan": {"slug": "pro"}}],
+        },
+    })
+    msg_id = "msg_dedup_test_42"
+    ts = datetime.now(tz=timezone.utc)
+    sig = Webhook(TEST_WEBHOOK_SECRET).sign(msg_id, ts, payload)
+    headers = {
+        "svix-id": msg_id,
+        "svix-timestamp": str(int(ts.timestamp())),
+        "svix-signature": sig,
+        "content-type": "application/json",
+    }
+
+    first = webhook_client.post("/api/webhooks/clerk", content=payload, headers=headers)
+    assert first.status_code == 200
+    assert first.json() == {"received": True}
+    assert Setting.get(db, TEST_ORG_ID, "org_plan") == "pro"
+    assert (
+        db.query(ProcessedWebhook).filter_by(svix_msg_id=msg_id).count() == 1
+    )
+
+    # Now flip the persisted plan so we can detect re-processing.  If
+    # the handler runs again on the second delivery, it would overwrite
+    # this back to "pro".
+    Setting.set(db, TEST_ORG_ID, "org_plan", "pro_plus")
+
+    # Second delivery — same msg_id, same payload.
+    second = webhook_client.post("/api/webhooks/clerk", content=payload, headers=headers)
+    assert second.status_code == 200
+    assert second.json()["status"] == "duplicate"
+    # Plan stayed at pro_plus — second handler did NOT re-run.
+    assert Setting.get(db, TEST_ORG_ID, "org_plan") == "pro_plus"
+    # Still exactly one row.
+    assert (
+        db.query(ProcessedWebhook).filter_by(svix_msg_id=msg_id).count() == 1
+    )
+
+
 # ─── Security ──────────────────────────────────────────────────────
 
 def test_invalid_signature_rejected(webhook_client, db):

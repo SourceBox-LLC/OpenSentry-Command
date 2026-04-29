@@ -4,6 +4,7 @@ import { useAuth, useOrganization, CreateOrganization } from "@clerk/clerk-react
 import Layout from "./components/Layout.jsx"
 import PublicLayout from "./components/PublicLayout.jsx"
 import LoadingSpinner from "./components/LoadingSpinner.jsx"
+import ErrorBoundary from "./components/ErrorBoundary.jsx"
 
 // Lazy-load pages to reduce initial bundle size
 const LandingPage = lazy(() => import("./pages/LandingPage.jsx"))
@@ -90,8 +91,9 @@ function RequireAdmin({ children }) {
 
 function App() {
   return (
-    <Suspense fallback={<div className="loading-container"><LoadingSpinner /></div>}>
-      <Routes>
+    <ErrorBoundary>
+      <Suspense fallback={<div className="loading-container"><LoadingSpinner /></div>}>
+        <Routes>
         {/* Public routes with PublicLayout */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingPage />} />
@@ -153,8 +155,9 @@ function App() {
             }
           />
         </Route>
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   )
 }
 

@@ -7,6 +7,7 @@ from sqlalchemy import (
     Integer,
     Boolean,
     ForeignKey,
+    Index,
     LargeBinary,
     UniqueConstraint,
 )
@@ -258,6 +259,20 @@ class StreamAccessLog(Base):
     ip_address = Column(String(45))
     user_agent = Column(String(500))
     accessed_at = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
+
+    # Composite index for the hot audit-log query pattern in
+    # api/audit.py: WHERE org_id = ? AND accessed_at >= ? ORDER BY
+    # accessed_at DESC (and the activity-aggregate variants that
+    # filter org_id + accessed_at then group_by something else).
+    # Single-column indexes on each column already exist above, but a
+    # composite lets SQLite (and Postgres if we ever migrate) do a
+    # straight index range-scan instead of intersecting two
+    # single-column index hits, which materially matters once an org
+    # has > a few thousand log rows.  SQLAlchemy create_all() is
+    # idempotent — adding this index applies on the next boot.
+    __table_args__ = (
+        Index("ix_stream_access_logs_org_accessed", "org_id", "accessed_at"),
+    )
 
     def to_dict(self):
         return {
@@ -566,6 +581,39 @@ class UserNotificationState(Base):
     __table_args__ = (
         # One read-state row per user per org.
         UniqueConstraint("clerk_user_id", "org_id", name="uq_user_notif_state_user_org"),
+    )
+
+
+class ProcessedWebhook(Base):
+    """Dedupe ledger for incoming Clerk webhooks.
+
+    Svix (Clerk's webhook signer) retries on any non-2xx response and on
+    network failure.  Without idempotency, a transient hiccup in our
+    handler can cause Clerk to redeliver the SAME ``user.created`` /
+    ``subscription.updated`` event, and the handler would re-run all
+    its side effects (re-set member limits, re-upsert plan settings,
+    re-fire enforce_camera_cap).  Most operations are upserts so
+    re-running is benign, but anything that reads-then-writes is at
+    risk of doubling — and the fix is cheap.
+
+    The ``svix_msg_id`` is the unique message identifier Svix sends in
+    the ``svix-id`` header on every delivery (same id across retries).
+    Insert at the end of successful handler execution; future retries
+    short-circuit on lookup.
+
+    Cleanup: a periodic sweep can drop rows older than 30 days
+    (Svix's max retry window is 5 days, so 30d is comfortable).
+    """
+
+    __tablename__ = "processed_webhooks"
+
+    id = Column(Integer, primary_key=True)
+    svix_msg_id = Column(String(255), nullable=False, unique=True, index=True)
+    event_type = Column(String(100), default="")
+    processed_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+        index=True,
     )
 
 

@@ -8,7 +8,7 @@ from app.core.clerk import clerk
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.plans import enforce_camera_cap
-from app.models.models import Setting, CameraNode, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup
+from app.models.models import Setting, CameraNode, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup, ProcessedWebhook
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,33 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
 
     event_type = event.get("type")
     data = event.get("data", {})
+
+    # ── Idempotency check ──────────────────────────────────────────
+    # Svix retries the same message (same svix-id) on any non-2xx or
+    # network failure.  Without this guard, a transient hiccup in our
+    # handler causes Clerk to redeliver and we re-run every side
+    # effect.  Most ops are upserts so it's mostly benign, but
+    # enforce_camera_cap is a read-then-write that can fire duplicate
+    # transition notifications, and a future non-idempotent handler
+    # added without this guard in mind would silently double-execute.
+    #
+    # Strategy: process-then-mark.  If the handler raises midway, the
+    # row isn't recorded and Svix retries — operations are designed
+    # to be safe to re-run, so the eventual consistency wins.  Only
+    # an already-recorded msg short-circuits.
+    svix_msg_id = headers.get("svix-id")
+    if svix_msg_id:
+        already = (
+            db.query(ProcessedWebhook)
+            .filter_by(svix_msg_id=svix_msg_id)
+            .first()
+        )
+        if already:
+            logger.info(
+                "Webhook %s already processed (event=%s) — skipping",
+                svix_msg_id, already.event_type or "?",
+            )
+            return {"status": "duplicate", "svix_id": svix_msg_id}
 
     logger.info("Webhook received: %s", event_type)
 
@@ -192,6 +219,27 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             logger.info(
                 "Org %s deleted — cleaned up %d nodes, %d cameras, %d groups, %d API keys",
                 org_id, len(nodes), camera_count, group_count, key_count,
+            )
+
+    # Mark this msg id as processed so Svix retries short-circuit.
+    # Done at the end so a handler that raises midway doesn't record
+    # itself as done — Svix retries, idempotent ops re-run, eventual
+    # consistency.
+    if svix_msg_id:
+        try:
+            db.add(ProcessedWebhook(
+                svix_msg_id=svix_msg_id, event_type=event_type or "",
+            ))
+            db.commit()
+        except Exception:
+            # Race: another worker recorded the same id between our
+            # check and our insert.  Unique-constraint failure is
+            # benign — both runs produce the same final state and the
+            # response below still tells Svix we're done.
+            db.rollback()
+            logger.info(
+                "Webhook %s dedup insert raced with concurrent worker — ignoring",
+                svix_msg_id,
             )
 
     return {"received": True}
