@@ -750,11 +750,12 @@ def get_node(
     description=(
         "Return the recording policy for a specific camera: whether 24/7 "
         "continuous recording is on, whether scheduled recording is on, and "
-        "the scheduled start/end times (HH:MM, UTC). Per-camera since "
-        "v0.1.43 — replaces the previous org-level get_recording_settings. "
-        "Use when the user asks 'is the garage cam recording right now?' "
-        "or before filing an incident if it's relevant whether the moment "
-        "was being recorded to disk on the CloudNode."
+        "the scheduled start/end times (HH:MM, interpreted in the org's "
+        "configured timezone — NOT UTC). Per-camera since v0.1.43 — "
+        "replaces the previous org-level get_recording_settings. Use when "
+        "the user asks 'is the garage cam recording right now?' or before "
+        "filing an incident if it's relevant whether the moment was being "
+        "recorded to disk on the CloudNode."
     ),
     annotations={"readOnlyHint": True},
 )
@@ -783,7 +784,11 @@ def get_camera_recording_policy(camera_id: str) -> dict:
         "(or set to null) is left unchanged — pass only what you want to "
         "update. Use when the user asks 'turn on recording for the garage "
         "cam' or 'set scheduled recording on the front door cam from 18:00 "
-        "to 06:00'. Times are HH:MM 24-hour UTC. Returns the new effective "
+        "to 06:00'. Times are HH:MM 24-hour, interpreted in the org's "
+        "configured timezone (NOT UTC) — pass exactly what the user said, "
+        "do not convert. Mutual-exclusion invariant: continuous_24_7 and "
+        "scheduled_recording can't both be true; the call returns "
+        "{error: 'modes_conflict'} if you try. Returns the new effective "
         "policy. Per-camera since v0.1.43."
     ),
 )
