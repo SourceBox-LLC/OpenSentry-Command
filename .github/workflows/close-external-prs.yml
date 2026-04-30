@@ -15,11 +15,34 @@ permissions:
 jobs:
   close:
     runs-on: ubuntu-latest
-    # Skip PRs from collaborators, members, and the repo owner.
+    # Don't close PRs from:
+    #
+    #   1. The core team (OWNER / MEMBER / COLLABORATOR by author_association).
+    #
+    #   2. Any GitHub App / bot (`user.type == 'Bot'`).  This covers
+    #      Dependabot, GitHub Actions, the GitHub Security Advisory bot,
+    #      and any future Claude / AI GitHub App the operator enables on
+    #      the repo.  Bots come from GitHub Apps that the repo owner has
+    #      to deliberately install, so the install itself is the trust
+    #      gate — once installed, their PRs should flow through.
+    #
+    #   3. The explicit `EXTRA_ALLOWLIST` of usernames below.  Needed
+    #      because Claude Code's GitHub integration opens PRs as the
+    #      configured user account (not a bot), and `author_association`
+    #      can come back as `CONTRIBUTOR` / `NONE` for the repo owner
+    #      themselves when the org/owner relationship doesn't register
+    #      on GitHub's contributor graph.  Without this, your own
+    #      Claude-authored PRs get auto-closed (see PR #9 as an example).
+    #
+    # Caught two real bugs at once when wiring this up: a high-severity
+    # Clerk auth-bypass advisory landed, Dependabot opened the security
+    # PR with the patch, and this workflow closed the PR 9 seconds later
+    # — leaving master vulnerable until the npm audit CI gate caught it
+    # on the next push and blocked the deploy.
     if: |
-      github.event.pull_request.author_association != 'OWNER' &&
-      github.event.pull_request.author_association != 'MEMBER' &&
-      github.event.pull_request.author_association != 'COLLABORATOR'
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) &&
+      github.event.pull_request.user.type != 'Bot' &&
+      !contains(fromJSON('["Sbussiso"]'), github.event.pull_request.user.login)
     steps:
       - name: Comment and close
         uses: actions/github-script@v7
