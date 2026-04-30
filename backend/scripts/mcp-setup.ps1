@@ -91,8 +91,31 @@ function ConvertTo-OscHashtable($obj) {
         return $h
     }
     # Arrays -- but NOT strings, which PS treats as char-iterable.
+    #
+    # CRITICAL: use [System.Collections.Generic.List[object]] here, NOT
+    # `@(...)`.  In PowerShell 5.1, an `object[]` array (which is what
+    # `@(...)` produces) inside an OrderedDictionary triggers a
+    # ConvertTo-Json bug where every string element gets serialized as
+    # `{"Length": N}` -- ConvertTo-Json walks each element looking for
+    # properties to emit and finds .Length on the string class.  A
+    # generic list keeps each item's runtime type stable through
+    # serialization.
+    #
+    # The leading comma (`return ,$list`) prevents PowerShell from
+    # unwrapping a single-element list back into a scalar at the call
+    # site, which would lose the array-ness for `"args": ["one-thing"]`.
+    #
+    # User report that surfaced this: running the auto-setup script
+    # against an existing claude_desktop_config.json with an MCP_DOCKER
+    # entry mangled `"args": ["mcp", "gateway", "run", ...]` into
+    # `"args": [{"Length":3}, {"Length":7}, ...]`, breaking Claude
+    # Desktop on next launch.
     if ($obj -is [System.Collections.IEnumerable] -and -not ($obj -is [string])) {
-        return @($obj | ForEach-Object { ConvertTo-OscHashtable $_ })
+        $list = [System.Collections.Generic.List[object]]::new()
+        foreach ($item in $obj) {
+            $list.Add((ConvertTo-OscHashtable $item))
+        }
+        return ,$list
     }
     return $obj
 }
@@ -306,6 +329,48 @@ function Configure-Client {
         }
     }
 
+    # Self-test: serialize and re-parse before writing.  If
+    # ConvertFrom-Json -> ConvertTo-OscHashtable -> ConvertTo-Json
+    # corrupts shapes (the canonical case being string elements in
+    # an `args` array becoming `{"Length": N}` objects under PS 5.1),
+    # abort rather than write the corrupted JSON to disk.  Catches
+    # the regression that broke a user's Claude Desktop config when
+    # the script silently mangled their MCP_DOCKER args array.
+    try {
+        $candidateJson = $config | ConvertTo-Json -Depth 100
+        $candidateParsed = $candidateJson | ConvertFrom-Json -ErrorAction Stop
+
+        if ($null -ne $candidateParsed.mcpServers) {
+            foreach ($srv in $candidateParsed.mcpServers.PSObject.Properties) {
+                $name = $srv.Name
+                $val = $srv.Value
+                if ($null -ne $val -and $null -ne $val.args) {
+                    # Coerce to array so .Count works whether args is a single
+                    # value or a real array.
+                    $argsArr = @($val.args)
+                    for ($i = 0; $i -lt $argsArr.Count; $i++) {
+                        $a = $argsArr[$i]
+                        # The canonical corruption: a string became
+                        # {Length: N}.  Detect by checking for that exact
+                        # property without the original string value being
+                        # recoverable.
+                        if ($a -is [pscustomobject] -and
+                            $a.PSObject.Properties.Name -contains 'Length' -and
+                            $a.PSObject.Properties.Count -eq 1) {
+                            throw "args[$i] of '$name' was corrupted by the JSON roundtrip (string -> {Length: $($a.Length)} object).  Aborting write to protect existing config."
+                        }
+                    }
+                }
+            }
+        }
+    } catch {
+        Write-Host "    Self-test failed for $Name : $_" -ForegroundColor Red
+        Write-Host "    Your config was NOT modified." -ForegroundColor DarkGray
+        Write-Host ""
+        $script:FailedClients += @{ Name = $Name; Reason = "self-test detected JSON roundtrip corruption: $($_.Exception.Message)" }
+        return
+    }
+
     # ALWAYS back up the file before we overwrite it -- even when parsing
     # succeeded, because a disk write can fail halfway through.
     if (Test-Path $ConfigPath) {
@@ -326,9 +391,11 @@ function Configure-Client {
     # with "Unexpected token ''... is not valid JSON". Using .NET directly
     # behaves the same on PS 5.1 and 7+.
     try {
-        $json = $config | ConvertTo-Json -Depth 100
+        # Reuse $candidateJson from the self-test above -- avoids re-running
+        # ConvertTo-Json (and its pretty-printing pass) twice for the same
+        # config object.
         $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-        [System.IO.File]::WriteAllText($ConfigPath, $json, $utf8NoBom)
+        [System.IO.File]::WriteAllText($ConfigPath, $candidateJson, $utf8NoBom)
         Write-Host "    Done -> $ConfigPath" -ForegroundColor Green
         $script:ConfiguredClients += $Name
     } catch {
