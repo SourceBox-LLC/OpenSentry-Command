@@ -391,7 +391,12 @@ function McpPage() {
     "claude-desktop": {
       label: "Claude Desktop",
       file: setupOs === "macos" ? "~/Library/Application Support/Claude/claude_desktop_config.json" : setupOs === "windows" ? "%APPDATA%\\Claude\\claude_desktop_config.json" : "~/.config/Claude/claude_desktop_config.json",
-      config: JSON.stringify({ mcpServers: { opensentry: { type: "http", url: MCP_URL, headers: { Authorization: `Bearer ${activeKey}` } } } }, null, 2),
+      // Claude Desktop's MCP loader doesn't accept the {type:"http",url}
+      // shape that Claude Code uses.  It only loads stdio servers, so
+      // we wrap the remote HTTP MCP server with the standard
+      // `mcp-remote` npx adapter which fronts it as a local stdio
+      // process.  Requires Node.js.
+      config: JSON.stringify({ mcpServers: { opensentry: { command: "npx", args: ["-y", "mcp-remote", MCP_URL, "--header", `Authorization:Bearer ${activeKey}`] } } }, null, 2),
     },
     cursor: {
       label: "Cursor",

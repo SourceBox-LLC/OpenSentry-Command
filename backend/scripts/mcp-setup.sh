@@ -239,11 +239,26 @@ configure_client() {
         echo -e "    ${DIM}Created directory: $dir${NC}"
     fi
 
+    # Claude Desktop's mcp-remote adapter needs Node.js.  Warn early
+    # rather than letting the user discover it via a cryptic
+    # "npx not found" error inside Claude Desktop after restart.
+    if [[ "$name" == "Claude Desktop" ]]; then
+        if ! command -v node &>/dev/null; then
+            echo -e "    ${YELLOW}Note: Node.js was not found on PATH.${NC}"
+            echo -e "    ${DIM}Claude Desktop uses mcp-remote (an npx package) to talk to${NC}"
+            echo -e "    ${DIM}SourceBox Sentry's HTTP MCP server.  Install Node.js from${NC}"
+            echo -e "    ${DIM}https://nodejs.org/ then restart Claude Desktop.${NC}"
+        fi
+    fi
+
     # Use Python to safely merge JSON. Exit codes:
     #   0 = wrote config successfully
     #   2 = existing file unparseable — we refused to overwrite
     #   other = I/O or unexpected failure
-    $PYTHON - "$config_path" "$SERVER_URL" "$API_KEY" << 'PYEOF'
+    #
+    # Pass the client name as a 4th arg so the embedded Python can pick
+    # the right config shape per client.
+    $PYTHON - "$config_path" "$SERVER_URL" "$API_KEY" "$name" << 'PYEOF'
 import json
 import shutil
 import sys
@@ -252,6 +267,7 @@ import os
 config_path = sys.argv[1]
 server_url = sys.argv[2]
 api_key = sys.argv[3]
+client_name = sys.argv[4]
 
 # Read existing config. If the file exists and is non-empty but unparseable,
 # ABORT instead of starting fresh — losing an existing .claude.json full of
@@ -286,14 +302,52 @@ if os.path.isfile(config_path):
 if not isinstance(config.get("mcpServers"), dict):
     config["mcpServers"] = {}
 
-# Add/update SourceBox Sentry entry.
-config["mcpServers"]["opensentry"] = {
-    "type": "http",
-    "url": server_url,
-    "headers": {
-        "Authorization": f"Bearer {api_key}"
+# Build the right config shape for this specific client.  Each MCP
+# client speaks a slightly different config schema and they are NOT
+# interchangeable -- writing the wrong shape silently produces an
+# entry the client refuses to load.
+#
+# Original bug: the script wrote {"type":"http", "url", "headers"} to
+# every client.  That shape is correct for Claude Code (which speaks
+# streamable HTTP MCP natively) but Claude Desktop's MCP loader
+# rejects it with "not valid MCP server configurations and were
+# skipped: opensentry".  Claude Desktop only loads stdio servers;
+# remote HTTP MCP servers need to be wrapped with the `mcp-remote`
+# adapter (npx package) which fronts the HTTP server as a local
+# stdio process.  Cursor accepts {"url", "headers"} (no "type" field).
+# Windsurf uses "serverUrl" instead of "url".
+if client_name == "Claude Code":
+    opensentry_config = {
+        "type": "http",
+        "url": server_url,
+        "headers": {"Authorization": f"Bearer {api_key}"},
     }
-}
+elif client_name == "Claude Desktop":
+    opensentry_config = {
+        "command": "npx",
+        "args": [
+            "-y", "mcp-remote", server_url,
+            "--header", f"Authorization:Bearer {api_key}",
+        ],
+    }
+elif client_name == "Cursor":
+    opensentry_config = {
+        "url": server_url,
+        "headers": {"Authorization": f"Bearer {api_key}"},
+    }
+elif client_name == "Windsurf":
+    opensentry_config = {
+        "serverUrl": server_url,
+        "headers": {"Authorization": f"Bearer {api_key}"},
+    }
+else:
+    opensentry_config = {
+        "type": "http",
+        "url": server_url,
+        "headers": {"Authorization": f"Bearer {api_key}"},
+    }
+
+config["mcpServers"]["opensentry"] = opensentry_config
 
 # Write back atomically — write to a tempfile in the same dir, then rename.
 # Avoids the "half-written config on crash" failure mode.

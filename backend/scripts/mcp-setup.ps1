@@ -320,12 +320,70 @@ function Configure-Client {
         $config["mcpServers"] = [ordered]@{}
     }
 
-    # Add/update SourceBox Sentry entry.
-    $config["mcpServers"]["opensentry"] = [ordered]@{
-        type = "http"
-        url = $ServerUrl
-        headers = [ordered]@{
-            Authorization = "Bearer $ApiKey"
+    # Build the right config shape for this specific client.  Each MCP
+    # client speaks a slightly different config schema and they are
+    # NOT interchangeable -- writing the wrong shape silently produces
+    # an entry the client refuses to load.
+    #
+    # Original bug: the script wrote `{type:"http", url, headers}` to
+    # every client.  That shape is correct for Claude Code (which
+    # speaks streamable HTTP MCP natively) but Claude Desktop's MCP
+    # loader rejects it with "not valid MCP server configurations and
+    # were skipped: opensentry".  Claude Desktop only loads stdio
+    # servers; remote HTTP MCP servers need to be wrapped with the
+    # `mcp-remote` adapter (npx package) which fronts the HTTP server
+    # as a local stdio process.  Cursor accepts `{url, headers}` (no
+    # `type` field).  Windsurf uses `serverUrl` instead of `url`.
+    $opensentryConfig = switch ($Name) {
+        'Claude Code' {
+            [ordered]@{
+                type = "http"
+                url = $ServerUrl
+                headers = [ordered]@{ Authorization = "Bearer $ApiKey" }
+            }
+        }
+        'Claude Desktop' {
+            # mcp-remote (npm: mcp-remote) wraps a remote HTTP MCP
+            # server as a local stdio process.  Requires Node.js on
+            # PATH; we warn separately if it's missing.
+            [ordered]@{
+                command = "npx"
+                args = @("-y", "mcp-remote", $ServerUrl, "--header", "Authorization:Bearer $ApiKey")
+            }
+        }
+        'Cursor' {
+            [ordered]@{
+                url = $ServerUrl
+                headers = [ordered]@{ Authorization = "Bearer $ApiKey" }
+            }
+        }
+        'Windsurf' {
+            [ordered]@{
+                serverUrl = $ServerUrl
+                headers = [ordered]@{ Authorization = "Bearer $ApiKey" }
+            }
+        }
+        default {
+            [ordered]@{
+                type = "http"
+                url = $ServerUrl
+                headers = [ordered]@{ Authorization = "Bearer $ApiKey" }
+            }
+        }
+    }
+
+    $config["mcpServers"]["opensentry"] = $opensentryConfig
+
+    # Claude Desktop's mcp-remote adapter needs Node.js.  Warn early
+    # rather than letting the user discover it via a cryptic
+    # "npx not found" error inside Claude Desktop after restart.
+    if ($Name -eq 'Claude Desktop') {
+        $nodeAvailable = $null -ne (Get-Command node -ErrorAction SilentlyContinue)
+        if (-not $nodeAvailable) {
+            Write-Host "    Note: Node.js was not found on PATH." -ForegroundColor Yellow
+            Write-Host "    Claude Desktop uses mcp-remote (an npx package) to talk to" -ForegroundColor DarkGray
+            Write-Host "    SourceBox Sentry's HTTP MCP server.  Install Node.js from" -ForegroundColor DarkGray
+            Write-Host "    https://nodejs.org/ then restart Claude Desktop." -ForegroundColor DarkGray
         }
     }
 
