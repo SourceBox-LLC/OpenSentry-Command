@@ -335,6 +335,24 @@ for idx in "${SELECTED[@]}"; do
     configure_client "${CLIENT_NAMES[$idx]}" "${CLIENT_CONFIGS[$idx]}"
 done
 
+# Wait for the user before exiting so a terminal launched just to run
+# this script doesn't slam shut on them mid-summary.  Skip when:
+#   - SOURCEBOX_SENTRY_MCP_NO_PAUSE=1 (CI / scripted callers)
+#   - We're not attached to a tty (curl|bash | piped output)
+wait_for_exit_key() {
+    if [[ "${SOURCEBOX_SENTRY_MCP_NO_PAUSE:-0}" == "1" ]]; then return; fi
+    # If neither stdin nor /dev/tty is usable, we're being piped or run
+    # under a context with no controlling terminal — don't block forever.
+    if [[ ! -t 0 ]] && [[ ! -e /dev/tty ]]; then return; fi
+    echo ""
+    echo -e "  ${DIM}Press Enter to close...${NC}"
+    if [[ -t 0 ]]; then
+        read -r _ || true
+    else
+        read -r _ </dev/tty || true
+    fi
+}
+
 # ── Summary ───────────────────────────────────────────
 #
 # Three possible end-states; pick the right banner + exit code for each.
@@ -394,6 +412,7 @@ if [[ $CONFIGURED_COUNT -eq 0 ]]; then
     echo -e "  ${DIM}Manage your MCP keys at:${NC}"
     echo -e "  ${CYAN}${DASHBOARD_URL}${NC}"
     echo ""
+    wait_for_exit_key
     exit 1
 elif [[ $SKIPPED_COUNT -gt 0 || $FAILED_COUNT -gt 0 ]]; then
     # At least one configured, but at least one didn't.  Don't claim
@@ -410,6 +429,7 @@ elif [[ $SKIPPED_COUNT -gt 0 || $FAILED_COUNT -gt 0 ]]; then
     # Exit 0 -- the script did configure something, the user just needs
     # a follow-up run for the rest.  Use the warning banner to make that
     # visible without breaking shell pipelines that key off exit codes.
+    wait_for_exit_key
     exit 0
 else
     # Clean success.
@@ -422,5 +442,6 @@ else
     echo -e "  ${DIM}Manage your MCP keys at:${NC}"
     echo -e "  ${CYAN}${DASHBOARD_URL}${NC}"
     echo ""
+    wait_for_exit_key
     exit 0
 fi

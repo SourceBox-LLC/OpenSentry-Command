@@ -345,6 +345,23 @@ foreach ($idx in $selected) {
     Configure-Client -Name $c.Name -ConfigPath $c.Path
 }
 
+# Wait for the user before exiting so the terminal window doesn't slam
+# shut on them mid-summary.  Only relevant when the script was launched
+# into a fresh PowerShell window (double-click, "Run" dialog, or a
+# parent process that runs powershell.exe and exits) -- in those cases
+# the host closes as soon as the script returns.  Skip when:
+#   - SOURCEBOX_SENTRY_MCP_NO_PAUSE=1 (CI / scripted callers)
+#   - We're not in an interactive console (piped stdin, no UI)
+function Wait-ForExitKey {
+    if ($env:SOURCEBOX_SENTRY_MCP_NO_PAUSE -eq '1') { return }
+    if (-not [Environment]::UserInteractive) { return }
+    if ($Host.Name -ne 'ConsoleHost') { return }
+
+    Write-Host ""
+    Write-Host "  Press Enter to close..." -ForegroundColor DarkGray
+    try { $null = Read-Host } catch { }
+}
+
 # -- Summary -------------------------------------------
 #
 # Three possible end-states; pick the right banner + exit code for each.
@@ -399,6 +416,7 @@ if ($configuredCount -eq 0) {
     $dashUrl = $ServerUrl -replace "/mcp$", "/mcp"
     Write-Host "  $dashUrl" -ForegroundColor Cyan
     Write-Host ""
+    Wait-ForExitKey
     exit 1
 } elseif ($skippedCount -gt 0 -or $failedCount -gt 0) {
     # At least one configured, but at least one didn't.  Don't claim
@@ -416,6 +434,7 @@ if ($configuredCount -eq 0) {
     # Exit 0 -- the script did configure something, the user just needs
     # a follow-up run for the rest.  Use the warning banner to make that
     # visible without breaking shell pipelines that key off exit codes.
+    Wait-ForExitKey
     exit 0
 } else {
     # Clean success.
@@ -429,5 +448,6 @@ if ($configuredCount -eq 0) {
     $dashUrl = $ServerUrl -replace "/mcp$", "/mcp"
     Write-Host "  $dashUrl" -ForegroundColor Cyan
     Write-Host ""
+    Wait-ForExitKey
     exit 0
 }
