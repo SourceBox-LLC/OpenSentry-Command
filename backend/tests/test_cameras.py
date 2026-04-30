@@ -140,6 +140,40 @@ def test_patch_recording_policy_persists_continuous(admin_client, db):
     assert body["recording_policy"]["scheduled_recording"] is False
 
 
+def test_patch_recording_policy_rejects_both_modes_on(admin_client, db):
+    """continuous_24_7 and scheduled_recording are mutually exclusive
+    — the heartbeat handler would silently ignore scheduled when
+    continuous is also on, which is confusing UX.  The frontend
+    auto-clears the other mode when the operator toggles one on, so
+    this 422 only fires for direct API / MCP callers.
+    """
+    cam_id = _seed_camera(db, camera_id="cam_rec_conflict")
+    # First, get continuous on.
+    resp = admin_client.patch(
+        f"/api/cameras/{cam_id}/recording-settings",
+        json={"continuous_24_7": True},
+    )
+    assert resp.status_code == 200
+
+    # Now try to ALSO turn scheduled on without clearing continuous.
+    resp = admin_client.patch(
+        f"/api/cameras/{cam_id}/recording-settings",
+        json={"scheduled_recording": True},
+    )
+    assert resp.status_code == 422
+    assert "cannot both" in resp.json()["detail"].lower()
+
+    # The proper way: switch modes by passing both fields.
+    resp = admin_client.patch(
+        f"/api/cameras/{cam_id}/recording-settings",
+        json={"continuous_24_7": False, "scheduled_recording": True},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recording_policy"]["continuous_24_7"] is False
+    assert body["recording_policy"]["scheduled_recording"] is True
+
+
 def test_patch_recording_policy_validates_hhmm(admin_client, db):
     """A malformed scheduled_start should 422 — never silently store
     garbage that the heartbeat handler then has to defend against."""

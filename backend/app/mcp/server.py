@@ -817,6 +817,30 @@ def set_camera_recording_policy(
                     "expected": "HH:MM 24-hour, e.g. 08:30",
                 }
 
+        # Mutual-exclusion invariant: continuous and scheduled can't
+        # both be on (heartbeat would silently ignore scheduled).
+        # See update_camera_recording_policy in api/cameras.py for the
+        # canonical comment.  An agent that wants to switch modes has
+        # to pass the OFF for the previous mode in the same call.
+        next_continuous = (
+            continuous_24_7
+            if continuous_24_7 is not None
+            else camera.continuous_24_7
+        )
+        next_scheduled = (
+            scheduled_recording
+            if scheduled_recording is not None
+            else camera.scheduled_recording
+        )
+        if next_continuous and next_scheduled:
+            return {
+                "error": "modes_conflict",
+                "message": (
+                    "continuous_24_7 and scheduled_recording can't both "
+                    "be true. Pass one as false in the same call to switch."
+                ),
+            }
+
         if continuous_24_7 is not None:
             camera.continuous_24_7 = continuous_24_7
         if scheduled_recording is not None:

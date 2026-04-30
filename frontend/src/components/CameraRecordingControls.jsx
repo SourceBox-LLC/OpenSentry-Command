@@ -67,18 +67,35 @@ function CameraRecordingControls({ camera, onUpdated }) {
     }
   }
 
+  // Continuous and Scheduled are mutually exclusive — having both on
+  // means scheduled is silently ignored (the heartbeat handler picks
+  // continuous in that case), which is a confusing UI state.  Toggling
+  // one ON explicitly turns the other OFF in the same PATCH.  The
+  // backend enforces the same invariant as a 422 — see
+  // `update_camera_recording_policy` in api/cameras.py — so a direct
+  // API caller can't bypass the rule either.
   const onToggleContinuous = () => {
-    persist({ ...local, continuous_24_7: !local.continuous_24_7 })
+    const turningOn = !local.continuous_24_7
+    persist({
+      ...local,
+      continuous_24_7: turningOn,
+      // When turning continuous ON, ensure scheduled is OFF.
+      // When turning continuous OFF, leave scheduled alone.
+      ...(turningOn ? { scheduled_recording: false } : {}),
+    })
   }
 
   const onToggleScheduled = () => {
-    // Default the window to a reasonable 8am–5pm if scheduled is being
-    // turned on for the first time and no window has been set.
+    const turningOn = !local.scheduled_recording
     const next = {
       ...local,
-      scheduled_recording: !local.scheduled_recording,
+      scheduled_recording: turningOn,
+      // When turning scheduled ON, ensure continuous is OFF.
+      ...(turningOn ? { continuous_24_7: false } : {}),
     }
-    if (!local.scheduled_recording) {
+    // Default the window to a reasonable 8am–5pm if scheduled is being
+    // turned on for the first time and no window has been set.
+    if (turningOn) {
       next.scheduled_start = local.scheduled_start || "08:00"
       next.scheduled_end = local.scheduled_end || "17:00"
     }

@@ -180,6 +180,39 @@ async def update_camera_recording_policy(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
+    # Apply the patch into local variables first so we can validate
+    # the *resulting* state before commit.  The two recording-mode
+    # toggles are mutually exclusive (see invariant comment below);
+    # rejecting the bad combination here means the DB never has an
+    # impossible row, even if a direct API caller tries to set both.
+    next_continuous = (
+        data.continuous_24_7
+        if data.continuous_24_7 is not None
+        else camera.continuous_24_7
+    )
+    next_scheduled = (
+        data.scheduled_recording
+        if data.scheduled_recording is not None
+        else camera.scheduled_recording
+    )
+
+    # Invariant: at most ONE recording mode active at a time.  The
+    # heartbeat handler treats `continuous_24_7 OR (scheduled AND
+    # in-window)` so both-true silently makes scheduled a no-op,
+    # which is confusing UX — better to fail loud here and force the
+    # caller to pick a mode.  Frontend toggles the other off
+    # automatically when the user flips one on, so this 422 only
+    # fires for direct API / MCP calls that pass both true.
+    if next_continuous and next_scheduled:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "continuous_24_7 and scheduled_recording cannot both be "
+                "true. Pick one mode — continuous OR scheduled — or "
+                "turn the existing one off in the same PATCH."
+            ),
+        )
+
     if data.continuous_24_7 is not None:
         camera.continuous_24_7 = data.continuous_24_7
     if data.scheduled_recording is not None:
