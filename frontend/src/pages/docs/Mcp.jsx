@@ -154,9 +154,15 @@ function Mcp() {
       <div className="docs-mcp-tools">
         <div className="docs-endpoint">
           <span className="docs-endpoint-method get">READ</span>
-          <span className="docs-endpoint-path">get_recording_settings</span>
+          <span className="docs-endpoint-path">get_camera_recording_policy</span>
         </div>
-        <p>The org's recording configuration: whether 24/7 continuous recording is on, whether scheduled recording is on, and the scheduled start/end times. Use when the user asks "are we recording right now?", or before filing an incident if it matters whether the moment was being recorded to disk on the CloudNode.</p>
+        <p>A single camera's recording policy: <code>continuous_24_7</code>, <code>scheduled_recording</code>, and the scheduled start/end times (HH:MM in the org's timezone). Per-camera since v0.1.43 — replaced the previous org-level <code>get_recording_settings</code>. Use when the user asks "is the garage cam recording right now?" or before filing an incident if it matters whether the moment was being archived locally.</p>
+
+        <div className="docs-endpoint">
+          <span className="docs-endpoint-method post">WRITE</span>
+          <span className="docs-endpoint-path">set_camera_recording_policy</span>
+        </div>
+        <p>Set the recording policy for a specific camera. Any field omitted is left unchanged (PATCH semantics). Use when the user asks "turn on recording for the garage cam" or "set the front door cam to record from 6pm to 6am". Times are HH:MM 24-hour in the org's timezone. Continuous and scheduled are mutually exclusive — passing both as <code>true</code> returns <code>{"{error: 'modes_conflict'}"}</code>.</p>
 
         <div className="docs-endpoint">
           <span className="docs-endpoint-method get">READ</span>

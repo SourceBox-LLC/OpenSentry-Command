@@ -66,7 +66,10 @@ motion:
   cooldown_secs: 30    # minimum seconds between motion events per camera
 
 storage:
-  max_size_gb: 20      # oldest recordings/snapshots evicted when over`}</code>
+  max_size_gb: 64      # oldest recordings/snapshots evicted when over;
+                       # the setup wizard suggests a disk-aware default
+                       # (~80% of free disk, 5-64 GB clamp) — operator
+                       # confirms or overrides at install time`}</code>
         <button className="docs-copy-btn" onClick={() => copyToClipboard(`node_id: "node_abc123"
 api_key: "nak_your_key_here"
 api_url: "https://opensentry-command.fly.dev"
@@ -77,16 +80,20 @@ motion:
   cooldown_secs: 30
 
 storage:
-  max_size_gb: 20`)}>Copy</button>
+  max_size_gb: 64`)}>Copy</button>
       </div>
 
       <h3>Credential storage</h3>
       <p>
         The node API key is encrypted at rest in the SQLite DB using AES-256-GCM
-        with a machine-derived key (SHA-256 of hostname + application salt). The
-        database is <strong>not portable</strong> — copying <code>node.db</code> to a
-        different host will make the stored key unreadable. Re-run <code>setup</code>
-        after moving to a new machine.
+        with a machine-derived key — SHA-256 of the OS-managed machine
+        identifier (<code>/etc/machine-id</code> on Linux,
+        <code>HKLM\\SOFTWARE\\Microsoft\\Cryptography\\MachineGuid</code> on
+        Windows, <code>IOPlatformUUID</code> on macOS) plus a domain-separation
+        tag. These are 128-bit values set once at OS install time, unique per
+        host, and not user-modifiable. The database is <strong>not portable</strong>
+        — copying <code>node.db</code> to a different host will make the stored
+        key unreadable. Re-run <code>setup</code> after moving to a new machine.
       </p>
 
       <h3>Resetting a node</h3>

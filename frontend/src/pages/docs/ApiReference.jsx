@@ -97,7 +97,16 @@ function ApiReference() {
       <p>Create a new node. Returns the API key (shown once).</p>
 
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/settings</span></div>
-      <p>Get recording settings (schedule, continuous mode).</p>
+      <p>Org-level settings: notifications + timezone. Recording is per-camera since v0.1.43 — see the camera endpoints below.</p>
+
+      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/settings/timezone</span></div>
+      <p>Set the org's IANA timezone (e.g. <code>"America/Los_Angeles"</code>). Drives the wall-clock interpretation of per-camera scheduled-recording windows. Admin only. 422 on unknown zones.</p>
+
+      <div className="docs-endpoint"><span className="docs-endpoint-method patch">PATCH</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/recording-settings</span></div>
+      <p>Update a camera's recording policy. Optional fields: <code>continuous_24_7</code>, <code>scheduled_recording</code>, <code>scheduled_start</code>, <code>scheduled_end</code> (HH:MM 24-hour in the org's timezone). The two modes are mutually exclusive — passing both as <code>true</code> returns 422. Admin only.</p>
+
+      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/recording</span></div>
+      <p>Manual record button — thin wrapper that flips <code>continuous_24_7</code> on the camera. The heartbeat reconciler picks it up within one tick. Body: <code>{"{recording: bool}"}</code>. Admin only.</p>
 
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/audit/stream-logs</span></div>
       <p>Stream access history. Admin only. Filterable by camera and user.</p>

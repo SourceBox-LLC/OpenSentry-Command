@@ -27,7 +27,8 @@ function Dashboard() {
       <p>Configure your org, nodes, and recording policy. Admin-only.</p>
       <ul>
         <li><strong>Node Management</strong> — Create nodes, copy API keys at creation time, rotate keys, delete nodes (cascades to cameras).</li>
-        <li><strong>Recording Settings</strong> — Toggle continuous 24/7 or scheduled recording and define the time window. See the <a href="#recording">Recording</a> section below.</li>
+        <li><strong>Per-camera recording</strong> — each camera card inside its node has Continuous 24/7 + Scheduled Recording toggles (mutually exclusive). The node card shows a storage usage bar against the operator-chosen cap. See the <a href="#recording">Recording</a> section below.</li>
+        <li><strong>Time Zone</strong> — set the org's IANA timezone so scheduled-recording windows are interpreted as local wall-clock time, not UTC. DST handled automatically.</li>
         <li><strong>Organization</strong> — Invite members, manage roles (Admin vs Member), view resource usage relative to plan caps.</li>
         <li><strong>Subscription</strong> — Current plan, usage bars for cameras and nodes, and an upgrade/downgrade flow.</li>
         <li><strong>Danger Zone</strong> — Wipe stream logs or perform a full organization reset. Pro/Pro Plus only and each action requires a typed confirmation.</li>
