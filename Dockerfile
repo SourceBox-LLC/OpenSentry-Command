@@ -53,4 +53,14 @@ EXPOSE 8000
 # Run FastAPI directly using the venv created during build
 # Working directory is /app, so app.main:app resolves to /app/app/main.py
 # Note: uv sync creates .venv at /app/.venv
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "65"]
+#
+# --forwarded-allow-ips="*" tells uvicorn to trust the X-Forwarded-Proto
+# (and friends) header from any source. Required because we're behind
+# Fly's edge proxy: without this, uvicorn defaults to trusting only
+# 127.0.0.1, ignores the "https" forwarded scheme, and any FastAPI
+# redirect (e.g. /mcp -> /mcp/ for the mounted MCP app) is emitted as
+# http:// instead of https://. Strict HTTPS clients like mcp-remote
+# refuse the HTTPS->HTTP downgrade and the request fails with
+# "Unexpected content type: text/html". "*" is safe here because Fly's
+# private network ensures only their edge can reach this container.
+CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "65", "--forwarded-allow-ips=*"]

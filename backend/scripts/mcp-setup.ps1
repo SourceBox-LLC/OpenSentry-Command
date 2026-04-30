@@ -11,6 +11,19 @@ param(
     [string]$ServerUrl
 )
 
+# Normalize: ensure trailing slash on the server URL.  FastAPI mounts
+# the MCP app at "/mcp" with internal path="/", so a POST to "/mcp"
+# (no slash) emits a 307 redirect to "/mcp/".  Strict-HTTPS clients
+# like mcp-remote can't follow that redirect cleanly when the proxy
+# emits the redirect with http:// scheme (Fly's edge upgrades it
+# transparently, the client doesn't), so we hand them the
+# redirect-free URL up front.  The server-side --forwarded-allow-ips
+# fix in the Dockerfile makes the redirect itself correct, but having
+# both means even an old-server new-client mismatch still works.
+if ($ServerUrl -and -not $ServerUrl.EndsWith('/')) {
+    $ServerUrl = $ServerUrl + '/'
+}
+
 if (-not $ApiKey -or -not $ServerUrl) {
     Write-Host ""
     Write-Host "  Error: Missing arguments" -ForegroundColor Red

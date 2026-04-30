@@ -10,7 +10,12 @@ import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 import IncidentReportModal from "../components/IncidentReportModal.jsx"
 
-const MCP_URL = `${window.location.origin}/mcp`
+// Trailing slash is intentional: FastAPI mounts the MCP app at "/mcp"
+// with internal path="/", so requests to "/mcp" 307-redirect to "/mcp/".
+// We give clients the redirect-free URL up front so even clients that
+// drop request bodies on redirect (or refuse the proxy's https->http
+// downgrade if --forwarded-allow-ips isn't set) still work.
+const MCP_URL = `${window.location.origin}/mcp/`
 const API_URL = import.meta.env.VITE_API_URL || ""
 
 const TOOLS = [

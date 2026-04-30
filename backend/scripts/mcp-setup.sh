@@ -19,6 +19,17 @@ NC='\033[0m'
 API_KEY="${1:-}"
 SERVER_URL="${2:-}"
 
+# Normalize: ensure trailing slash on the server URL.  FastAPI mounts
+# the MCP app at "/mcp" with internal path="/", so a POST to "/mcp"
+# (no slash) emits a 307 redirect to "/mcp/".  Strict-HTTPS clients
+# like mcp-remote can't follow that redirect cleanly when the proxy
+# emits the redirect with http:// scheme (Fly's edge upgrades it
+# transparently, the client doesn't), so we hand them the
+# redirect-free URL up front.
+if [[ -n "$SERVER_URL" && "${SERVER_URL: -1}" != "/" ]]; then
+    SERVER_URL="${SERVER_URL}/"
+fi
+
 if [[ -z "$API_KEY" || -z "$SERVER_URL" ]]; then
     echo -e "${RED}${BOLD}Error:${NC} Missing arguments"
     echo ""
