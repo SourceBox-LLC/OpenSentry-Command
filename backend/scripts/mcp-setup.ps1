@@ -400,7 +400,13 @@ function Configure-Client {
 
         if ($null -ne $candidateParsed.mcpServers) {
             foreach ($srv in $candidateParsed.mcpServers.PSObject.Properties) {
-                $name = $srv.Name
+                # IMPORTANT: do NOT name this `$name` -- PowerShell variables
+                # are case-insensitive, and `$name` is the same slot as the
+                # outer function parameter `$Name`.  Reassigning it inside
+                # this loop quietly clobbers the client name that the
+                # summary block reads later, so the user sees
+                # "Configured: * opensentry" instead of "* Claude Desktop".
+                $srvName = $srv.Name
                 $val = $srv.Value
                 if ($null -ne $val -and $null -ne $val.args) {
                     # Coerce to array so .Count works whether args is a single
@@ -415,7 +421,7 @@ function Configure-Client {
                         if ($a -is [pscustomobject] -and
                             $a.PSObject.Properties.Name -contains 'Length' -and
                             $a.PSObject.Properties.Count -eq 1) {
-                            throw "args[$i] of '$name' was corrupted by the JSON roundtrip (string -> {Length: $($a.Length)} object).  Aborting write to protect existing config."
+                            throw "args[$i] of '$srvName' was corrupted by the JSON roundtrip (string -> {Length: $($a.Length)} object).  Aborting write to protect existing config."
                         }
                     }
                 }
