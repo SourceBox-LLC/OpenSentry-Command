@@ -440,11 +440,25 @@ function AdminPage() {
                 <option value="list_nodes">list_nodes</option>
                 <option value="get_node">get_node</option>
                 <option value="list_camera_groups">list_camera_groups</option>
-                <option value="get_camera_recording_policy">get_camera_recording_policy</option>
-                <option value="set_camera_recording_policy">set_camera_recording_policy</option>
                 <option value="get_stream_logs">get_stream_logs</option>
                 <option value="get_stream_stats">get_stream_stats</option>
                 <option value="get_system_status">get_system_status</option>
+              </optgroup>
+              <optgroup label="Recording Tools">
+                <option value="get_camera_recording_policy">get_camera_recording_policy</option>
+                <option value="set_camera_recording_policy">set_camera_recording_policy</option>
+              </optgroup>
+              <optgroup label="Incident Tools">
+                <option value="list_incidents">list_incidents</option>
+                <option value="get_incident">get_incident</option>
+                <option value="get_incident_snapshot">get_incident_snapshot</option>
+                <option value="get_incident_clip">get_incident_clip</option>
+                <option value="create_incident">create_incident</option>
+                <option value="add_observation">add_observation</option>
+                <option value="attach_snapshot">attach_snapshot</option>
+                <option value="attach_clip">attach_clip</option>
+                <option value="update_incident">update_incident</option>
+                <option value="finalize_incident">finalize_incident</option>
               </optgroup>
             </select>
           </div>
