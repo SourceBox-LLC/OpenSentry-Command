@@ -33,9 +33,17 @@ Write-Host ""
 
 # -- Helpers -------------------------------------------
 
-# Tracks clients we refused to touch because they were running. Listed at the
-# end so the user knows exactly which ones to quit and re-run for.
+# Per-client outcome tracking.  Used to compute the final summary and exit
+# code — without this the script previously printed "Setup Complete" in
+# green even when every selected client was skipped or failed, which lied
+# to the user about what actually happened.
+#
+#   ConfiguredClients : write succeeded, AI client now wired up
+#   SkippedClients    : refused because the client process was running
+#   FailedClients     : read/parse/write error — array of @{Name; Reason}
+$script:ConfiguredClients = @()
 $script:SkippedClients = @()
+$script:FailedClients = @()
 
 # Process names to check per client. Claude Desktop ships a bundled Claude Code
 # experience so the same `Claude.exe` process touches `.claude.json` too --
@@ -260,6 +268,7 @@ function Configure-Client {
             Write-Host "    Failed to read $ConfigPath : $_" -ForegroundColor Red
             Write-Host "    Skipping $Name -- your file was not modified." -ForegroundColor Yellow
             Write-Host ""
+            $script:FailedClients += @{ Name = $Name; Reason = "could not read $ConfigPath" }
             return
         }
 
@@ -273,6 +282,7 @@ function Configure-Client {
                 Write-Host "    Skipping $Name to avoid overwriting your existing data." -ForegroundColor Yellow
                 Write-Host "    Fix the file manually (or delete it) and re-run." -ForegroundColor DarkGray
                 Write-Host ""
+                $script:FailedClients += @{ Name = $Name; Reason = "existing config is not valid JSON" }
                 return
             }
         } else {
@@ -320,9 +330,11 @@ function Configure-Client {
         $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
         [System.IO.File]::WriteAllText($ConfigPath, $json, $utf8NoBom)
         Write-Host "    Done -> $ConfigPath" -ForegroundColor Green
+        $script:ConfiguredClients += $Name
     } catch {
         Write-Host "    Failed to configure $Name : $_" -ForegroundColor Red
         Write-Host "    Your backup is at $ConfigPath.bak" -ForegroundColor DarkGray
+        $script:FailedClients += @{ Name = $Name; Reason = "write failed: $($_.Exception.Message)" }
     }
 
     Write-Host ""
@@ -334,6 +346,24 @@ foreach ($idx in $selected) {
 }
 
 # -- Summary -------------------------------------------
+#
+# Three possible end-states; pick the right banner + exit code for each.
+# Previously the script always said "Setup Complete" in green even when
+# every selected client got skipped (because the client was running) --
+# the user thought their AI tools were wired up when nothing changed.
+
+$configuredCount = $script:ConfiguredClients.Count
+$skippedCount = $script:SkippedClients.Count
+$failedCount = $script:FailedClients.Count
+
+# Per-bucket details first so the user sees what happened before the banner.
+if ($script:ConfiguredClients.Count -gt 0) {
+    Write-Host "  Configured:" -ForegroundColor Green
+    foreach ($c in $script:ConfiguredClients) {
+        Write-Host "    * $c" -ForegroundColor Green
+    }
+    Write-Host ""
+}
 
 if ($script:SkippedClients.Count -gt 0) {
     Write-Host "  Skipped (still running):" -ForegroundColor Yellow
@@ -345,13 +375,59 @@ if ($script:SkippedClients.Count -gt 0) {
     Write-Host ""
 }
 
-Write-Host "  Setup Complete" -ForegroundColor Green
-Write-Host ""
-Write-Host "  Your AI tools can now access your SourceBox Sentry cameras." -ForegroundColor DarkGray
-Write-Host "  Restart the clients you configured so they pick up the new MCP server." -ForegroundColor DarkGray
-Write-Host "  Try asking: `"List my cameras`" or `"Show me what the front door sees`"" -ForegroundColor DarkGray
-Write-Host ""
-Write-Host "  Manage your MCP keys at:" -ForegroundColor DarkGray
-$dashUrl = $ServerUrl -replace "/mcp$", "/mcp"
-Write-Host "  $dashUrl" -ForegroundColor Cyan
-Write-Host ""
+if ($script:FailedClients.Count -gt 0) {
+    Write-Host "  Failed:" -ForegroundColor Red
+    foreach ($f in $script:FailedClients) {
+        Write-Host "    * $($f.Name) -- $($f.Reason)" -ForegroundColor Red
+    }
+    Write-Host ""
+}
+
+# Final banner + exit code.
+if ($configuredCount -eq 0) {
+    # Nothing was configured.  Could be 100% skipped, 100% failed, or a
+    # mix -- either way the script did not do its job and the exit code
+    # has to reflect that for any non-interactive caller.
+    Write-Host "  Setup did NOT complete" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  No clients were configured." -ForegroundColor DarkGray
+    if ($skippedCount -gt 0) {
+        Write-Host "  Quit the running clients listed above and re-run." -ForegroundColor DarkGray
+    }
+    Write-Host ""
+    Write-Host "  Manage your MCP keys at:" -ForegroundColor DarkGray
+    $dashUrl = $ServerUrl -replace "/mcp$", "/mcp"
+    Write-Host "  $dashUrl" -ForegroundColor Cyan
+    Write-Host ""
+    exit 1
+} elseif ($skippedCount -gt 0 -or $failedCount -gt 0) {
+    # At least one configured, but at least one didn't.  Don't claim
+    # green-checkmark success; tell the user clearly that some clients
+    # need a re-run.
+    Write-Host "  Setup completed with warnings" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  $configuredCount of $($configuredCount + $skippedCount + $failedCount) clients configured." -ForegroundColor DarkGray
+    Write-Host "  Restart the configured clients so they pick up the new MCP server." -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Manage your MCP keys at:" -ForegroundColor DarkGray
+    $dashUrl = $ServerUrl -replace "/mcp$", "/mcp"
+    Write-Host "  $dashUrl" -ForegroundColor Cyan
+    Write-Host ""
+    # Exit 0 -- the script did configure something, the user just needs
+    # a follow-up run for the rest.  Use the warning banner to make that
+    # visible without breaking shell pipelines that key off exit codes.
+    exit 0
+} else {
+    # Clean success.
+    Write-Host "  Setup Complete" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  Your AI tools can now access your SourceBox Sentry cameras." -ForegroundColor DarkGray
+    Write-Host "  Restart the clients you configured so they pick up the new MCP server." -ForegroundColor DarkGray
+    Write-Host "  Try asking: `"List my cameras`" or `"Show me what the front door sees`"" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Manage your MCP keys at:" -ForegroundColor DarkGray
+    $dashUrl = $ServerUrl -replace "/mcp$", "/mcp"
+    Write-Host "  $dashUrl" -ForegroundColor Cyan
+    Write-Host ""
+    exit 0
+}

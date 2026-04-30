@@ -51,8 +51,17 @@ fi
 
 # ── Detect MCP Clients ────────────────────────────────
 
-# Tracks clients we refused to touch because they were running.
+# Per-client outcome tracking.  Used to compute the final summary and exit
+# code — without this the script previously printed "Setup Complete" in
+# green even when every selected client was skipped or failed, which lied
+# to the user about what actually happened.
+#
+#   CONFIGURED_CLIENTS : write succeeded, AI client now wired up
+#   SKIPPED_CLIENTS    : refused because the client process was running
+#   FAILED_CLIENTS     : read/parse/write error, "name|reason" entries
+CONFIGURED_CLIENTS=()
 SKIPPED_CLIENTS=()
+FAILED_CLIENTS=()
 
 # Echoes the PID of a running matching process for the named client, or
 # nothing if none. Refusing to write when the client is up avoids its own
@@ -310,11 +319,14 @@ PYEOF
 
     if [[ $rc -eq 0 ]]; then
         echo -e "    ${GREEN}Done${NC} ${DIM}→ $config_path${NC}"
+        CONFIGURED_CLIENTS+=("$name")
     elif [[ $rc -eq 2 ]]; then
         # Parse-failure abort message is already on stderr above — just note the skip.
         echo -e "    ${YELLOW}Skipped $name (existing config not valid JSON).${NC}"
+        FAILED_CLIENTS+=("$name|existing config is not valid JSON")
     else
         echo -e "    ${RED}Failed to configure $name (exit $rc)${NC}"
+        FAILED_CLIENTS+=("$name|I/O error during read or write (exit $rc)")
     fi
     echo ""
 }
@@ -324,8 +336,27 @@ for idx in "${SELECTED[@]}"; do
 done
 
 # ── Summary ───────────────────────────────────────────
+#
+# Three possible end-states; pick the right banner + exit code for each.
+# Previously the script always said "Setup Complete" in green even when
+# every selected client got skipped (because the client was running) --
+# the user thought their AI tools were wired up when nothing changed.
 
-if [[ ${#SKIPPED_CLIENTS[@]} -gt 0 ]]; then
+CONFIGURED_COUNT=${#CONFIGURED_CLIENTS[@]}
+SKIPPED_COUNT=${#SKIPPED_CLIENTS[@]}
+FAILED_COUNT=${#FAILED_CLIENTS[@]}
+TOTAL_COUNT=$((CONFIGURED_COUNT + SKIPPED_COUNT + FAILED_COUNT))
+
+# Per-bucket details first so the user sees what happened before the banner.
+if [[ $CONFIGURED_COUNT -gt 0 ]]; then
+    echo -e "  ${GREEN}${BOLD}Configured:${NC}"
+    for c in "${CONFIGURED_CLIENTS[@]}"; do
+        echo -e "    ${GREEN}* $c${NC}"
+    done
+    echo ""
+fi
+
+if [[ $SKIPPED_COUNT -gt 0 ]]; then
     echo -e "  ${YELLOW}${BOLD}Skipped (still running):${NC}"
     for s in "${SKIPPED_CLIENTS[@]}"; do
         echo -e "    ${YELLOW}* $s${NC}"
@@ -335,12 +366,61 @@ if [[ ${#SKIPPED_CLIENTS[@]} -gt 0 ]]; then
     echo ""
 fi
 
-echo -e "  ${GREEN}${BOLD}Setup Complete${NC}"
-echo ""
-echo -e "  ${DIM}Your AI tools can now access your SourceBox Sentry cameras.${NC}"
-echo -e "  ${DIM}Restart the clients you configured so they pick up the new MCP server.${NC}"
-echo -e "  ${DIM}Try asking: \"List my cameras\" or \"Show me what the front door sees\"${NC}"
-echo ""
-echo -e "  ${DIM}Manage your MCP keys at:${NC}"
-echo -e "  ${CYAN}${SERVER_URL%/mcp}/mcp${NC}"
-echo ""
+if [[ $FAILED_COUNT -gt 0 ]]; then
+    echo -e "  ${RED}${BOLD}Failed:${NC}"
+    for f in "${FAILED_CLIENTS[@]}"; do
+        # Entries are stored as "name|reason" so we can show both.
+        name="${f%%|*}"
+        reason="${f#*|}"
+        echo -e "    ${RED}* $name -- $reason${NC}"
+    done
+    echo ""
+fi
+
+# Final banner + exit code.
+DASHBOARD_URL="${SERVER_URL%/mcp}/mcp"
+
+if [[ $CONFIGURED_COUNT -eq 0 ]]; then
+    # Nothing was configured.  Could be 100% skipped, 100% failed, or a
+    # mix -- either way the script did not do its job and the exit code
+    # has to reflect that for any non-interactive caller.
+    echo -e "  ${RED}${BOLD}Setup did NOT complete${NC}"
+    echo ""
+    echo -e "  ${DIM}No clients were configured.${NC}"
+    if [[ $SKIPPED_COUNT -gt 0 ]]; then
+        echo -e "  ${DIM}Quit the running clients listed above and re-run.${NC}"
+    fi
+    echo ""
+    echo -e "  ${DIM}Manage your MCP keys at:${NC}"
+    echo -e "  ${CYAN}${DASHBOARD_URL}${NC}"
+    echo ""
+    exit 1
+elif [[ $SKIPPED_COUNT -gt 0 || $FAILED_COUNT -gt 0 ]]; then
+    # At least one configured, but at least one didn't.  Don't claim
+    # green-checkmark success; tell the user clearly that some clients
+    # need a re-run.
+    echo -e "  ${YELLOW}${BOLD}Setup completed with warnings${NC}"
+    echo ""
+    echo -e "  ${DIM}${CONFIGURED_COUNT} of ${TOTAL_COUNT} clients configured.${NC}"
+    echo -e "  ${DIM}Restart the configured clients so they pick up the new MCP server.${NC}"
+    echo ""
+    echo -e "  ${DIM}Manage your MCP keys at:${NC}"
+    echo -e "  ${CYAN}${DASHBOARD_URL}${NC}"
+    echo ""
+    # Exit 0 -- the script did configure something, the user just needs
+    # a follow-up run for the rest.  Use the warning banner to make that
+    # visible without breaking shell pipelines that key off exit codes.
+    exit 0
+else
+    # Clean success.
+    echo -e "  ${GREEN}${BOLD}Setup Complete${NC}"
+    echo ""
+    echo -e "  ${DIM}Your AI tools can now access your SourceBox Sentry cameras.${NC}"
+    echo -e "  ${DIM}Restart the clients you configured so they pick up the new MCP server.${NC}"
+    echo -e "  ${DIM}Try asking: \"List my cameras\" or \"Show me what the front door sees\"${NC}"
+    echo ""
+    echo -e "  ${DIM}Manage your MCP keys at:${NC}"
+    echo -e "  ${CYAN}${DASHBOARD_URL}${NC}"
+    echo ""
+    exit 0
+fi
