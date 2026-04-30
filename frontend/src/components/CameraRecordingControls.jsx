@@ -112,7 +112,7 @@ function CameraRecordingControls({ camera, onUpdated }) {
         {camera.name || camera.camera_id}
       </div>
 
-      <label
+      <div
         style={{
           display: "flex",
           alignItems: "center",
@@ -120,19 +120,22 @@ function CameraRecordingControls({ camera, onUpdated }) {
           fontSize: "0.85rem",
           color: "var(--text-muted, #888)",
           marginBottom: "0.4rem",
-          cursor: saving ? "wait" : "pointer",
         }}
       >
         <span>Continuous 24/7</span>
-        <input
-          type="checkbox"
-          checked={local.continuous_24_7}
-          onChange={onToggleContinuous}
+        <button
+          type="button"
+          className={`toggle-switch ${local.continuous_24_7 ? "active" : ""}`}
+          onClick={onToggleContinuous}
           disabled={saving}
-        />
-      </label>
+          aria-label={`Toggle continuous recording for ${camera.name || camera.camera_id}`}
+          aria-pressed={local.continuous_24_7}
+        >
+          <span className="toggle-knob" />
+        </button>
+      </div>
 
-      <label
+      <div
         style={{
           display: "flex",
           alignItems: "center",
@@ -140,17 +143,20 @@ function CameraRecordingControls({ camera, onUpdated }) {
           fontSize: "0.85rem",
           color: "var(--text-muted, #888)",
           marginBottom: local.scheduled_recording ? "0.4rem" : 0,
-          cursor: saving ? "wait" : "pointer",
         }}
       >
         <span>Scheduled Recording</span>
-        <input
-          type="checkbox"
-          checked={local.scheduled_recording}
-          onChange={onToggleScheduled}
+        <button
+          type="button"
+          className={`toggle-switch ${local.scheduled_recording ? "active" : ""}`}
+          onClick={onToggleScheduled}
           disabled={saving}
-        />
-      </label>
+          aria-label={`Toggle scheduled recording for ${camera.name || camera.camera_id}`}
+          aria-pressed={local.scheduled_recording}
+        >
+          <span className="toggle-knob" />
+        </button>
+      </div>
 
       {local.scheduled_recording && (
         <div
