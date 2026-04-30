@@ -486,8 +486,15 @@ async def node_heartbeat(
     # so a manual record-button press, a Continuous-24/7 toggle, or
     # the start of a scheduled window all propagate to the node within
     # one tick (~30s) without any imperative WebSocket commands.
+    #
+    # Resolve the org's timezone ONCE per heartbeat (not per camera) —
+    # all cameras under one org share the same wall-clock semantics
+    # and the lookup is a Setting.get behind a Python dict.  Default
+    # is UTC for orgs that haven't explicitly set one (matches v0.1.43
+    # behaviour so existing schedules don't shift on upgrade).
+    tz = _resolve_org_timezone(db, node.org_id)
     recording_state = {
-        c.camera_id: _camera_should_record_now(c) for c in node_cameras
+        c.camera_id: _camera_should_record_now(c, tz) for c in node_cameras
     }
 
     response = {
@@ -502,7 +509,29 @@ async def node_heartbeat(
     return response
 
 
-def _camera_should_record_now(camera: Camera) -> bool:
+def _resolve_org_timezone(db: Session, org_id: str):
+    """Return the IANA ``ZoneInfo`` for the org, defaulting to UTC.
+
+    Stored as a Setting row keyed on ``timezone``.  Validated at the
+    PATCH endpoint, but we still defend against bad strings here
+    (operator could hand-edit the DB, or the row could pre-date a
+    tighter validator) by falling back to UTC rather than raising
+    out of the heartbeat handler — an error here would 500 every
+    heartbeat for the affected org and stop their recording entirely.
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    tz_name = Setting.get(db, org_id, "timezone", "UTC") or "UTC"
+    try:
+        return ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        logger.warning(
+            "Org %s has invalid timezone setting %r — falling back to UTC",
+            org_id, tz_name,
+        )
+        return ZoneInfo("UTC")
+
+
+def _camera_should_record_now(camera: Camera, tz) -> bool:
     """Return True if `camera` should be recording right now per its
     saved policy.
 
@@ -510,8 +539,8 @@ def _camera_should_record_now(camera: Camera) -> bool:
       - ``continuous_24_7`` true              → record (overrides everything)
       - ``scheduled_recording`` true AND
         scheduled_start/end configured AND
-        current wall-clock time is in the
-        [start, end) window                   → record
+        current wall-clock time (in the org's
+        timezone) is in the [start, end) window → record
       - otherwise                              → don't record
 
     Suspended-by-plan cameras still return whatever their policy says
@@ -521,11 +550,14 @@ def _camera_should_record_now(camera: Camera) -> bool:
     when an org upgrades, which is a separate decision the operator
     might want to make explicitly.
 
-    Time semantics: we compare against server-local wall-clock (UTC,
-    since the backend runs in UTC).  If a future user reports their
-    schedule firing at the wrong hour because they're in PT, we'd
-    add a per-org timezone setting and convert here.  Today: UTC HH:MM,
-    documented in the docs.
+    Timezone semantics: ``tz`` is the org's IANA ZoneInfo (resolved
+    once per heartbeat in the caller).  The HH:MM strings on the
+    Camera row are interpreted in that timezone, and DST transitions
+    are handled by ZoneInfo for free — a "08:00–17:00" schedule in
+    America/Los_Angeles fires at the right local hour year-round
+    without any operator intervention.  Defaults to UTC if the org
+    hasn't set a timezone (back-compat with v0.1.43 nodes that
+    pre-date the per-org timezone setting).
     """
     if camera.continuous_24_7:
         return True
@@ -542,7 +574,7 @@ def _camera_should_record_now(camera: Camera) -> bool:
     except (ValueError, AttributeError):
         return False
 
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=tz)
     cur_minutes = now.hour * 60 + now.minute
     start_minutes = start_h * 60 + start_m
     end_minutes = end_h * 60 + end_m

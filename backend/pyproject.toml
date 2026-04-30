@@ -22,6 +22,13 @@ dependencies = [
     "websockets>=12.0",
     "fastmcp>=3.0.0",
     "sentry-sdk[fastapi]>=2.14.0",
+    # IANA timezone database for Python's stdlib `zoneinfo`.
+    # Required on Windows (where the OS doesn't ship the database) and
+    # on slim Linux containers (alpine + python:slim) where /usr/share/
+    # zoneinfo isn't included.  No-op overhead on systems that already
+    # have the database.  Used by the heartbeat handler's per-camera
+    # scheduled-recording check to interpret HH:MM in the org's tz.
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

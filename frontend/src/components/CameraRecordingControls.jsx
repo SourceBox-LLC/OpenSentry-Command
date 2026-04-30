@@ -25,7 +25,7 @@ import { updateCameraRecordingPolicy } from "../services/api"
  * the lag where a user clicks twice because nothing visually
  * changed for half a second.
  */
-function CameraRecordingControls({ camera, onUpdated }) {
+function CameraRecordingControls({ camera, onUpdated, timezone }) {
   const { getToken } = useAuth()
   const policy = camera.recording_policy || {
     continuous_24_7: false,
@@ -176,44 +176,57 @@ function CameraRecordingControls({ camera, onUpdated }) {
       </div>
 
       {local.scheduled_recording && (
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "center",
-            fontSize: "0.85rem",
-            marginTop: "0.3rem",
-          }}
-        >
-          <input
-            type="time"
-            value={local.scheduled_start || ""}
-            onChange={(e) => onChangeTime("scheduled_start", e.target.value)}
-            disabled={saving}
+        <div style={{ marginTop: "0.3rem" }}>
+          <div
             style={{
-              padding: "0.25rem 0.5rem",
-              background: "var(--bg-secondary, #1a1a1a)",
-              border: "1px solid var(--border, #333)",
-              borderRadius: "4px",
-              color: "var(--text-primary, #fff)",
+              display: "flex",
+              gap: "0.5rem",
+              alignItems: "center",
               fontSize: "0.85rem",
             }}
-          />
-          <span style={{ color: "var(--text-muted, #888)" }}>to</span>
-          <input
-            type="time"
-            value={local.scheduled_end || ""}
-            onChange={(e) => onChangeTime("scheduled_end", e.target.value)}
-            disabled={saving}
-            style={{
-              padding: "0.25rem 0.5rem",
-              background: "var(--bg-secondary, #1a1a1a)",
-              border: "1px solid var(--border, #333)",
-              borderRadius: "4px",
-              color: "var(--text-primary, #fff)",
-              fontSize: "0.85rem",
-            }}
-          />
+          >
+            <input
+              type="time"
+              value={local.scheduled_start || ""}
+              onChange={(e) => onChangeTime("scheduled_start", e.target.value)}
+              disabled={saving}
+              style={{
+                padding: "0.25rem 0.5rem",
+                background: "var(--bg-secondary, #1a1a1a)",
+                border: "1px solid var(--border, #333)",
+                borderRadius: "4px",
+                color: "var(--text-primary, #fff)",
+                fontSize: "0.85rem",
+              }}
+            />
+            <span style={{ color: "var(--text-muted, #888)" }}>to</span>
+            <input
+              type="time"
+              value={local.scheduled_end || ""}
+              onChange={(e) => onChangeTime("scheduled_end", e.target.value)}
+              disabled={saving}
+              style={{
+                padding: "0.25rem 0.5rem",
+                background: "var(--bg-secondary, #1a1a1a)",
+                border: "1px solid var(--border, #333)",
+                borderRadius: "4px",
+                color: "var(--text-primary, #fff)",
+                fontSize: "0.85rem",
+              }}
+            />
+          </div>
+          {timezone && (
+            <p
+              style={{
+                fontSize: "0.75rem",
+                color: "var(--text-muted, #888)",
+                marginTop: "0.25rem",
+                marginBottom: 0,
+              }}
+            >
+              Times in {timezone}. Change in Settings → Time Zone.
+            </p>
+          )}
         </div>
       )}
     </div>

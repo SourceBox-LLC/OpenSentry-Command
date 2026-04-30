@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateNotificationSettings, getCameras } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateNotificationSettings, updateOrgTimezone, getCameras } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
@@ -49,6 +49,12 @@ function SettingsPage() {
   const [notifications, setNotifications] = useState(null)
   const [notificationsSaving, setNotificationsSaving] = useState(false)
   const [settingsLoading, setSettingsLoading] = useState(false)
+  // Per-org timezone for scheduled-recording window interpretation.
+  // IANA name; defaults to "UTC" until the operator picks one.  We
+  // suggest the browser's tz on first interaction so the operator
+  // doesn't have to think about it.
+  const [orgTimezone, setOrgTimezone] = useState("UTC")
+  const [timezoneSaving, setTimezoneSaving] = useState(false)
 
   // Upgrade modal
   const [upgradeFeature, setUpgradeFeature] = useState(null)
@@ -86,11 +92,28 @@ function SettingsPage() {
           node_transition_notifications: true,
         },
       )
+      setOrgTimezone(data.timezone || "UTC")
     } catch (err) {
       console.error("Failed to load settings:", err)
       showToast("Failed to load settings", "error")
     } finally {
       setSettingsLoading(false)
+    }
+  }
+
+  const saveTimezone = async (tzName) => {
+    const previous = orgTimezone
+    setOrgTimezone(tzName)
+    setTimezoneSaving(true)
+    try {
+      const token = await getToken()
+      await updateOrgTimezone(() => Promise.resolve(token), tzName)
+      showToast(`Timezone set to ${tzName}`, "success")
+    } catch (err) {
+      setOrgTimezone(previous)
+      showToast(err.message || "Failed to save timezone", "error")
+    } finally {
+      setTimezoneSaving(false)
     }
   }
 
@@ -396,6 +419,7 @@ function SettingsPage() {
                         <CameraRecordingControls
                           key={cam.camera_id}
                           camera={cam}
+                          timezone={orgTimezone}
                           onUpdated={(newPolicy) => {
                             // Mirror the server's authoritative state
                             // into the local cameras list so a re-render
@@ -559,6 +583,81 @@ function SettingsPage() {
           </div>
         </div>
       )}
+
+      <div className="settings-section">
+        <h2>Time Zone</h2>
+        <p className="section-description">
+          The wall-clock time used to interpret per-camera scheduled
+          recording windows. Pick the zone where your cameras live so
+          "08:00–17:00" means 8am to 5pm local — DST is handled
+          automatically. Defaults to UTC for new orgs.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <select
+            value={orgTimezone}
+            onChange={(e) => saveTimezone(e.target.value)}
+            disabled={timezoneSaving}
+            style={{
+              flex: 1,
+              padding: "0.5rem 0.75rem",
+              background: "var(--bg-secondary, #1a1a1a)",
+              color: "var(--text-primary, #fff)",
+              border: "1px solid var(--border, #333)",
+              borderRadius: "6px",
+              fontSize: "0.95rem",
+              cursor: timezoneSaving ? "wait" : "pointer",
+            }}
+          >
+            {/* List built from Intl.supportedValuesOf when available
+                (Chrome 99+, Firefox 99+, Safari 15.4+).  Falls back
+                to a curated list of common zones for older browsers. */}
+            {(typeof Intl !== "undefined" && Intl.supportedValuesOf
+              ? Intl.supportedValuesOf("timeZone")
+              : [
+                  "UTC",
+                  "America/Los_Angeles",
+                  "America/Denver",
+                  "America/Chicago",
+                  "America/New_York",
+                  "America/Sao_Paulo",
+                  "Europe/London",
+                  "Europe/Paris",
+                  "Europe/Berlin",
+                  "Asia/Tokyo",
+                  "Asia/Singapore",
+                  "Australia/Sydney",
+                ]
+            ).map((tz) => (
+              <option key={tz} value={tz}>
+                {tz}
+              </option>
+            ))}
+          </select>
+          {orgTimezone === "UTC" && (
+            <button
+              type="button"
+              onClick={() => {
+                const browserTz =
+                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+                if (browserTz !== "UTC") saveTimezone(browserTz)
+              }}
+              disabled={timezoneSaving}
+              style={{
+                padding: "0.5rem 0.9rem",
+                background: "var(--accent-green, #22c55e)",
+                color: "var(--bg-primary, #0a0a0a)",
+                border: "none",
+                borderRadius: "6px",
+                fontWeight: 600,
+                fontSize: "0.85rem",
+                cursor: timezoneSaving ? "wait" : "pointer",
+              }}
+            >
+              Use browser ({Intl.DateTimeFormat().resolvedOptions().timeZone})
+            </button>
+          )}
+        </div>
+      </div>
 
       {planInfo && (
         <div className="settings-section">

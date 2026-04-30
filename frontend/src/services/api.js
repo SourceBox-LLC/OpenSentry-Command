@@ -152,6 +152,16 @@ export async function updateNotificationSettings(getToken, settings) {
   })
 }
 
+// Per-org timezone (v0.1.43+ scheduled-recording feature).  IANA
+// names like "America/Los_Angeles" or "UTC".  Backend validates
+// against zoneinfo.available_timezones — typos 422 here, not later.
+export async function updateOrgTimezone(getToken, tzName) {
+  return fetchWithAuth("/api/settings/timezone", getToken, {
+    method: "POST",
+    body: JSON.stringify({ timezone: tzName })
+  })
+}
+
 export async function getCameraGroups(getToken) {
   return fetchWithAuth("/api/camera-groups", getToken)
 }

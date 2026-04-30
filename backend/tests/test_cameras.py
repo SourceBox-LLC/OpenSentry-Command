@@ -221,49 +221,139 @@ def test_camera_should_record_now_window_logic():
     recording for everyone."""
     from app.api.nodes import _camera_should_record_now
     from app.models.models import Camera
-    from datetime import datetime, timezone
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
     from unittest.mock import patch
 
+    utc = ZoneInfo("UTC")
     cam = Camera(
         camera_id="x", org_id="o", name="x",
         continuous_24_7=False, scheduled_recording=False,
     )
     # Empty policy → no recording.
-    assert _camera_should_record_now(cam) is False
+    assert _camera_should_record_now(cam, utc) is False
 
     # Continuous overrides scheduled.
     cam.continuous_24_7 = True
-    assert _camera_should_record_now(cam) is True
+    assert _camera_should_record_now(cam, utc) is True
 
-    # Scheduled, in-window.
+    # Scheduled, in-window (UTC).
     cam.continuous_24_7 = False
     cam.scheduled_recording = True
     cam.scheduled_start = "08:00"
     cam.scheduled_end = "17:00"
-    fake_now = datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc)
+    fake_now = datetime(2026, 4, 29, 12, 0, tzinfo=utc)
     with patch("app.api.nodes.datetime") as mock_dt:
         mock_dt.now.return_value = fake_now
-        assert _camera_should_record_now(cam) is True
+        assert _camera_should_record_now(cam, utc) is True
 
     # Scheduled, out-of-window.
-    fake_now = datetime(2026, 4, 29, 18, 30, tzinfo=timezone.utc)
+    fake_now = datetime(2026, 4, 29, 18, 30, tzinfo=utc)
     with patch("app.api.nodes.datetime") as mock_dt:
         mock_dt.now.return_value = fake_now
-        assert _camera_should_record_now(cam) is False
+        assert _camera_should_record_now(cam, utc) is False
 
     # Wrap-around overnight schedule (22:00–06:00).  Inside window.
     cam.scheduled_start = "22:00"
     cam.scheduled_end = "06:00"
-    fake_now = datetime(2026, 4, 29, 23, 30, tzinfo=timezone.utc)
+    fake_now = datetime(2026, 4, 29, 23, 30, tzinfo=utc)
     with patch("app.api.nodes.datetime") as mock_dt:
         mock_dt.now.return_value = fake_now
-        assert _camera_should_record_now(cam) is True
+        assert _camera_should_record_now(cam, utc) is True
 
     # Wrap-around, before window.
-    fake_now = datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc)
+    fake_now = datetime(2026, 4, 29, 12, 0, tzinfo=utc)
     with patch("app.api.nodes.datetime") as mock_dt:
         mock_dt.now.return_value = fake_now
-        assert _camera_should_record_now(cam) is False
+        assert _camera_should_record_now(cam, utc) is False
+
+
+def test_post_org_timezone_persists_and_validates(admin_client, db):
+    """The org timezone POST should accept IANA names, persist them
+    via the Setting kv table, and reject typos / made-up zones with
+    a 422 so a bad value can't land in the DB and silently break
+    the heartbeat handler's window check.
+    """
+    from app.models.models import Setting
+
+    # Happy path.
+    resp = admin_client.post(
+        "/api/settings/timezone",
+        json={"timezone": "America/Los_Angeles"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["timezone"] == "America/Los_Angeles"
+    assert (
+        Setting.get(db, "org_test123", "timezone") == "America/Los_Angeles"
+    )
+
+    # Made-up zone.
+    resp = admin_client.post(
+        "/api/settings/timezone", json={"timezone": "Mars/Olympus_Mons"},
+    )
+    assert resp.status_code == 422
+
+    # Empty body.
+    resp = admin_client.post("/api/settings/timezone", json={"timezone": ""})
+    assert resp.status_code == 422
+
+
+def test_get_settings_includes_timezone(admin_client, db):
+    """``GET /api/settings`` exposes the org's timezone alongside
+    notifications.  Defaults to UTC for a fresh org so the frontend
+    has something to render before the operator picks one."""
+    resp = admin_client.get("/api/settings")
+    assert resp.status_code == 200
+    body = resp.json()
+    # Default for a fresh org with no Setting row yet.
+    assert body["timezone"] == "UTC"
+
+    # After setting it, the getter should reflect the choice.
+    from app.models.models import Setting
+    Setting.set(db, "org_test123", "timezone", "Europe/London")
+    resp = admin_client.get("/api/settings")
+    assert resp.json()["timezone"] == "Europe/London"
+
+
+def test_camera_should_record_now_honours_org_timezone():
+    """A schedule of 08:00–17:00 in Los Angeles fires at 8am LA time,
+    not 8am UTC.  This is the whole point of the per-org timezone —
+    operators get to think in their local wall clock.
+    """
+    from app.api.nodes import _camera_should_record_now
+    from app.models.models import Camera
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from unittest.mock import patch
+
+    la = ZoneInfo("America/Los_Angeles")
+    cam = Camera(
+        camera_id="x", org_id="o", name="x",
+        continuous_24_7=False, scheduled_recording=True,
+        scheduled_start="08:00", scheduled_end="17:00",
+    )
+
+    # 12:00 UTC on 2026-06-15 = 05:00 PDT (summer, UTC-7).
+    # 5am is BEFORE the 08:00 LA window → should NOT record.
+    fake_now = datetime(2026, 6, 15, 12, 0, tzinfo=ZoneInfo("UTC"))
+    with patch("app.api.nodes.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now.astimezone(la)
+        assert _camera_should_record_now(cam, la) is False
+
+    # 18:00 UTC on 2026-06-15 = 11:00 PDT.  Inside window.
+    fake_now = datetime(2026, 6, 15, 18, 0, tzinfo=ZoneInfo("UTC"))
+    with patch("app.api.nodes.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now.astimezone(la)
+        assert _camera_should_record_now(cam, la) is True
+
+    # DST sanity: same wall-clock hour in winter (PST, UTC-8).
+    # 18:00 UTC on 2026-12-15 = 10:00 PST.  Inside window.
+    # Without DST handling, naive UTC arithmetic would put this at
+    # the wrong wall-clock hour.  ZoneInfo handles it for free.
+    fake_now = datetime(2026, 12, 15, 18, 0, tzinfo=ZoneInfo("UTC"))
+    with patch("app.api.nodes.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now.astimezone(la)
+        assert _camera_should_record_now(cam, la) is True
 
 
 # ─── Danger zone (wipe-logs, full-reset) ─────────────────────────────

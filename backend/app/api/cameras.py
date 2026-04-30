@@ -337,11 +337,13 @@ async def assign_camera_group(
 async def get_all_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
-    """Get org-level settings (notifications).  Recording config moved
-    per-camera in v0.1.43 — see `Camera.recording_policy` in the
-    `/api/cameras` response and the `PATCH /api/cameras/{id}/
-    recording-settings` endpoint to update it."""
+    """Get org-level settings (notifications + timezone).  Recording
+    config moved per-camera in v0.1.43 — see ``Camera.recording_policy``
+    in the ``/api/cameras`` response and the
+    ``PATCH /api/cameras/{id}/recording-settings`` endpoint to update it.
+    """
     vals = Setting.get_many(db, user.org_id, _NOTIFICATION_SETTING_DEFAULTS)
+    timezone_name = Setting.get(db, user.org_id, "timezone", "UTC") or "UTC"
     return {
         "notifications": {
             "motion_notifications": vals["motion_notifications"] == "true",
@@ -350,7 +352,63 @@ async def get_all_settings(
             "node_transition_notifications": vals["node_transition_notifications"]
             == "true",
         },
+        # IANA timezone name (e.g. "America/Los_Angeles", "UTC").
+        # Drives the wall-clock interpretation of per-camera
+        # `scheduled_start` / `scheduled_end` in the heartbeat
+        # handler — see `_camera_should_record_now` in api/nodes.py.
+        # Defaults to "UTC" for orgs that haven't set one (back-compat
+        # with v0.1.43 nodes that pre-date the per-org timezone).
+        "timezone": timezone_name,
     }
+
+
+@router.post("/settings/timezone")
+@limiter.limit("30/minute")
+async def update_org_timezone(
+    request: Request,
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Set the org's IANA timezone name (e.g. "America/Los_Angeles").
+
+    The heartbeat handler's per-camera scheduled-recording window check
+    uses this to interpret HH:MM start/end times as the operator's
+    local wall clock instead of UTC.  DST transitions are handled by
+    Python's ``zoneinfo`` for free — a "08:00–17:00" schedule in
+    America/Los_Angeles fires at 8am local year-round, no operator
+    intervention needed at the spring-forward / fall-back boundaries.
+
+    Validates against the IANA database (``zoneinfo.available_timezones``)
+    so a typo or made-up zone name 422s rather than landing in the DB
+    and silently breaking the schedule for the affected org.
+    """
+    from zoneinfo import available_timezones
+    body = await request.json()
+    tz_name = (body.get("timezone") or "").strip()
+    if not tz_name:
+        raise HTTPException(
+            status_code=422,
+            detail="`timezone` is required (IANA name like 'America/Los_Angeles' or 'UTC')",
+        )
+    if tz_name not in available_timezones():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown timezone {tz_name!r}. Use an IANA name like "
+                "'America/Los_Angeles', 'Europe/London', or 'UTC'."
+            ),
+        )
+    Setting.set(db, user.org_id, "timezone", tz_name)
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="timezone_updated",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"timezone": tz_name},
+        request=request,
+    )
+    return {"success": True, "timezone": tz_name}
 
 
 # Notification preferences.  GET is view-level (every member needs to
