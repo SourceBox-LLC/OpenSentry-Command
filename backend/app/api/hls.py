@@ -157,12 +157,15 @@ def get_viewer_seconds_used(org_id: str) -> int:
 
     Used by the cap-enforcement check in the segment route and by the
     ``/api/nodes/plan`` response so the dashboard can show live usage.
+
+    Delegates to ``_warm_cached_viewer_seconds`` so a cold cache (e.g.
+    right after a deploy / Fly machine restart) lazily reads the real
+    DB total instead of returning 0.  Without that warm step the
+    dashboard would show "0 hours used" until the operator clicked a
+    camera (which triggers the segment-serve hot path that does its
+    own warm), looking exactly like the counter had been reset.
     """
-    key = (org_id, _current_year_month())
-    with _viewer_usage_lock:
-        cached = _cached_viewer_seconds.get(key, 0)
-        pending = _pending_viewer_seconds.get(key, 0)
-    return cached + pending
+    return _warm_cached_viewer_seconds(org_id)
 
 
 def _warm_cached_viewer_seconds(org_id: str) -> int:

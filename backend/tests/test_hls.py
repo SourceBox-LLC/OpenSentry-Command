@@ -493,6 +493,44 @@ def test_playlist_rewrite_is_idempotent_across_pushes(
 # collapses.  Money-flavored: silently broken cap = silent revenue loss.
 
 
+def test_get_viewer_seconds_used_warms_cache_from_db(db):
+    """Regression: after a deploy / app restart the in-memory cache
+    is empty.  ``get_viewer_seconds_used`` must lazy-load from the
+    OrgMonthlyUsage row instead of returning 0.
+
+    The dashboard's "viewer hours this month" widget calls this on
+    every page load via /api/nodes/plan; if it returns 0 from a cold
+    cache, the operator sees their counter "reset" after every
+    deploy (which is what surfaced the bug)."""
+    from app.api import hls as hls_mod
+    from app.models.models import OrgMonthlyUsage
+
+    org_id = "org_warm_test"
+    ym = hls_mod._current_year_month()
+
+    # Seed a real OrgMonthlyUsage row that pre-dates this process.
+    db.add(OrgMonthlyUsage(
+        org_id=org_id, year_month=ym, viewer_seconds=12345,
+    ))
+    db.commit()
+
+    # Cache is empty for this org because the conftest reset wipes
+    # release_cache (different module) — but viewer_seconds caches
+    # also start empty in tests.  Be defensive: explicitly clear so
+    # this test isn't influenced by other tests' leftover state.
+    with hls_mod._viewer_usage_lock:
+        hls_mod._cached_viewer_seconds.pop((org_id, ym), None)
+        hls_mod._pending_viewer_seconds.pop((org_id, ym), None)
+
+    # Cold-cache read should still return the DB value, not 0.
+    used = hls_mod.get_viewer_seconds_used(org_id)
+    assert used == 12345, (
+        f"cold-cache read returned {used} — get_viewer_seconds_used "
+        "must warm from DB before reading or the dashboard widget "
+        "shows 0 after every deploy"
+    )
+
+
 def test_segment_delivery_blocks_when_over_viewer_hour_cap(
     admin_client, unauthenticated_client, db, monkeypatch
 ):
