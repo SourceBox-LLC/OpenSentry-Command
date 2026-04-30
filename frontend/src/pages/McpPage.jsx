@@ -22,7 +22,7 @@ const TOOLS = [
   { name: "list_nodes", desc: "List camera nodes with status" },
   { name: "get_node", desc: "Get details for a specific node" },
   { name: "list_camera_groups", desc: "List camera groups" },
-  { name: "get_recording_settings", desc: "View current recording config" },
+  { name: "get_camera_recording_policy", desc: "View one camera's recording policy (continuous / scheduled / off)" },
   { name: "get_stream_logs", desc: "View stream access history" },
   { name: "get_stream_stats", desc: "Get aggregated stream statistics" },
   { name: "get_system_status", desc: "System overview: cameras, nodes, plan" },
@@ -31,6 +31,7 @@ const TOOLS = [
   { name: "attach_snapshot", desc: "Capture a snapshot and attach it as evidence", write: true },
   { name: "update_incident", desc: "Change an incident's status, severity, or summary", write: true },
   { name: "finalize_incident", desc: "Write the long-form incident report", write: true },
+  { name: "set_camera_recording_policy", desc: "Toggle a camera between continuous / scheduled / off (mutually exclusive)", write: true },
 ]
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }

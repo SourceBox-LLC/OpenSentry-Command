@@ -440,7 +440,8 @@ function AdminPage() {
                 <option value="list_nodes">list_nodes</option>
                 <option value="get_node">get_node</option>
                 <option value="list_camera_groups">list_camera_groups</option>
-                <option value="get_recording_settings">get_recording_settings</option>
+                <option value="get_camera_recording_policy">get_camera_recording_policy</option>
+                <option value="set_camera_recording_policy">set_camera_recording_policy</option>
                 <option value="get_stream_logs">get_stream_logs</option>
                 <option value="get_stream_stats">get_stream_stats</option>
                 <option value="get_system_status">get_system_status</option>

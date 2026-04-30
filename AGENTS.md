@@ -392,7 +392,7 @@ Scope modes:
 | `list_camera_groups` | Camera groups for the org |
 | `list_nodes` | CloudNodes + their status |
 | `get_node` | One node by id |
-| `get_recording_settings` | Current recording config |
+| `get_camera_recording_policy` | One camera's recording policy (continuous / scheduled / off) |
 | `get_stream_logs` | Stream access audit entries |
 | `get_stream_stats` | Aggregated views by camera/user/day |
 | `get_system_status` | Org-wide snapshot (cameras on/offline, plan, nodes) |
@@ -401,7 +401,7 @@ Scope modes:
 | `get_incident_snapshot` | Fetch a previously attached snapshot JPEG |
 | `get_incident_clip` | Metadata about a previously attached clip |
 
-**Write tools (`MCP_WRITE_TOOLS`, 6):**
+**Write tools (`MCP_WRITE_TOOLS`, 7):**
 
 | Tool | Purpose |
 |------|---------|
@@ -411,6 +411,7 @@ Scope modes:
 | `attach_clip` | Save the recent live buffer as a video clip (pulls from in-memory HLS cache) |
 | `update_incident` | Change status / severity / summary / report body (revisions) |
 | `finalize_incident` | Write the markdown report body for the first time |
+| `set_camera_recording_policy` | Flip a camera between continuous / scheduled / off (mutually exclusive; HH:MM windows in org timezone) |
 
 ## CORS
 

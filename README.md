@@ -187,9 +187,11 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/settings` | User | All settings |
-| GET | `/api/settings/recording` | User | Recording settings |
-| POST | `/api/settings/recording` | Admin | Update recording settings |
+| GET | `/api/settings` | User | All settings (notifications + timezone; recording is per-camera) |
+| POST | `/api/settings/notifications` | Admin | Update notification toggles |
+| POST | `/api/settings/timezone` | Admin | Set the org's IANA timezone (drives scheduled-recording windows) |
+| PATCH | `/api/cameras/{camera_id}/recording-settings` | Admin | Per-camera recording policy (continuous_24_7 / scheduled_recording, mutually exclusive) |
+| POST | `/api/cameras/{camera_id}/recording` | Admin | Manual record button — thin wrapper that flips `continuous_24_7` |
 | POST | `/api/settings/danger/wipe-logs` | Admin | Permanently delete all stream + MCP + audit logs (Pro/Pro Plus only) |
 | POST | `/api/settings/danger/full-reset` | Admin | Wipe all nodes, cameras, logs, and settings for the org (Pro/Pro Plus only) |
 
