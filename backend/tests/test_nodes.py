@@ -384,6 +384,43 @@ def test_heartbeat_persists_node_version(admin_client):
         session.close()
 
 
+def test_heartbeat_returns_recording_state_per_camera(admin_client, db):
+    """v0.1.43+ heartbeat response carries an authoritative per-camera
+    recording_state map.  CloudNode reconciles to this map every tick.
+    Pin the response shape and the per-camera computation: continuous
+    cameras report true, default cameras report false."""
+    from app.models.models import Camera, CameraNode
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.43")
+
+    # Seed two cameras: one with continuous on, one default-off.
+    session = TestSession()
+    try:
+        node = session.query(CameraNode).filter_by(node_id=node_id).first()
+        session.add(Camera(
+            camera_id="cam_recording", org_id="org_test123",
+            node_id=node.id, name="rec-cam", continuous_24_7=True,
+        ))
+        session.add(Camera(
+            camera_id="cam_idle", org_id="org_test123",
+            node_id=node.id, name="idle-cam",
+        ))
+        session.commit()
+    finally:
+        session.close()
+
+    hb = admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={"node_id": node_id, "node_version": "0.1.43"},
+    )
+    assert hb.status_code == 200
+    body = hb.json()
+    assert "recording_state" in body
+    rec_state = body["recording_state"]
+    assert rec_state["cam_recording"] is True
+    assert rec_state["cam_idle"] is False
+
+
 def test_heartbeat_persists_storage_stats(admin_client):
     """v0.1.41+ CloudNodes report filesystem-aware storage stats on
     every heartbeat. The dashboard's per-node usage bar reads from

@@ -69,7 +69,7 @@ MCP_READ_TOOLS: frozenset[str] = frozenset({
     "list_nodes",
     "get_node",
     # System / recording
-    "get_recording_settings",
+    "get_camera_recording_policy",
     "get_stream_logs",
     "get_stream_stats",
     "get_system_status",
@@ -87,6 +87,7 @@ MCP_WRITE_TOOLS: frozenset[str] = frozenset({
     "attach_clip",
     "update_incident",
     "finalize_incident",
+    "set_camera_recording_policy",
 })
 
 MCP_ALL_TOOLS: frozenset[str] = MCP_READ_TOOLS | MCP_WRITE_TOOLS
@@ -745,25 +746,94 @@ def get_node(
 # ---------------------------------------------------------------------------
 
 @mcp.tool(
-    name="get_recording_settings",
+    name="get_camera_recording_policy",
     description=(
-        "Return the org's recording configuration: whether 24/7 continuous "
-        "recording is on, whether scheduled recording is on, and the "
-        "scheduled start/end times. Use when the user asks 'are we recording "
-        "right now?', or before filing an incident if it's relevant whether "
-        "the moment was being recorded to disk on the CloudNode."
+        "Return the recording policy for a specific camera: whether 24/7 "
+        "continuous recording is on, whether scheduled recording is on, and "
+        "the scheduled start/end times (HH:MM, UTC). Per-camera since "
+        "v0.1.43 — replaces the previous org-level get_recording_settings. "
+        "Use when the user asks 'is the garage cam recording right now?' "
+        "or before filing an incident if it's relevant whether the moment "
+        "was being recorded to disk on the CloudNode."
     ),
     annotations={"readOnlyHint": True},
 )
 @tracked
-def get_recording_settings() -> dict:
+def get_camera_recording_policy(camera_id: str) -> dict:
     org_id, db = _auth()
     try:
+        camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=org_id).first()
+        if not camera:
+            return {"error": "camera_not_found", "camera_id": camera_id}
         return {
-            "continuous_24_7": Setting.get(db, org_id, "continuous_24_7", "false") == "true",
-            "scheduled_recording": Setting.get(db, org_id, "scheduled_recording", "false") == "true",
-            "scheduled_start": Setting.get(db, org_id, "scheduled_start", "00:00"),
-            "scheduled_end": Setting.get(db, org_id, "scheduled_end", "06:00"),
+            "camera_id": camera_id,
+            "continuous_24_7": bool(camera.continuous_24_7),
+            "scheduled_recording": bool(camera.scheduled_recording),
+            "scheduled_start": camera.scheduled_start,
+            "scheduled_end": camera.scheduled_end,
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool(
+    name="set_camera_recording_policy",
+    description=(
+        "Set the recording policy for a specific camera. Any field omitted "
+        "(or set to null) is left unchanged — pass only what you want to "
+        "update. Use when the user asks 'turn on recording for the garage "
+        "cam' or 'set scheduled recording on the front door cam from 18:00 "
+        "to 06:00'. Times are HH:MM 24-hour UTC. Returns the new effective "
+        "policy. Per-camera since v0.1.43."
+    ),
+)
+@tracked
+def set_camera_recording_policy(
+    camera_id: str,
+    continuous_24_7: bool | None = None,
+    scheduled_recording: bool | None = None,
+    scheduled_start: str | None = None,
+    scheduled_end: str | None = None,
+) -> dict:
+    import re
+    org_id, db = _auth()
+    try:
+        camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=org_id).first()
+        if not camera:
+            return {"error": "camera_not_found", "camera_id": camera_id}
+
+        # Validate HH:MM strings before assigning so a bad value from
+        # an AI agent doesn't end up in the DB and silently break the
+        # heartbeat handler's window check.
+        for label, val in (("scheduled_start", scheduled_start),
+                           ("scheduled_end", scheduled_end)):
+            if val is not None and val != "" and not re.match(
+                r"^([01]\d|2[0-3]):[0-5]\d$", val
+            ):
+                return {
+                    "error": "invalid_time_format",
+                    "field": label,
+                    "value": val,
+                    "expected": "HH:MM 24-hour, e.g. 08:30",
+                }
+
+        if continuous_24_7 is not None:
+            camera.continuous_24_7 = continuous_24_7
+        if scheduled_recording is not None:
+            camera.scheduled_recording = scheduled_recording
+        if scheduled_start is not None:
+            camera.scheduled_start = scheduled_start or None
+        if scheduled_end is not None:
+            camera.scheduled_end = scheduled_end or None
+
+        db.commit()
+        return {
+            "success": True,
+            "camera_id": camera_id,
+            "continuous_24_7": bool(camera.continuous_24_7),
+            "scheduled_recording": bool(camera.scheduled_recording),
+            "scheduled_start": camera.scheduled_start,
+            "scheduled_end": camera.scheduled_end,
         }
     finally:
         db.close()

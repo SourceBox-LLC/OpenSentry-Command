@@ -53,6 +53,28 @@ class Camera(Base):
     # Default False so fresh installs and unaffected rows behave normally.
     disabled_by_plan = Column(Boolean, nullable=False, default=False, server_default="0")
 
+    # Per-camera recording policy (v0.1.43+).  The heartbeat handler
+    # computes this camera's target recording state per-tick from
+    # ``continuous_24_7 OR (scheduled_recording AND in-window)`` and
+    # echoes it back to CloudNode in the heartbeat response, which
+    # reconciles its in-memory recording set to match.
+    #
+    # Replaces the previous org-level `Setting` rows for the same
+    # toggles, which never actually drove anything (they persisted
+    # but no consumer read them to start recording).  Per-camera is
+    # both more flexible (privacy in bedroom + always-on in garage)
+    # and the granularity that matches how recording_state is keyed
+    # at runtime.
+    continuous_24_7 = Column(Boolean, nullable=False, default=False, server_default="0")
+    scheduled_recording = Column(Boolean, nullable=False, default=False, server_default="0")
+    # "HH:MM" 24-hour strings; nullable so a fresh row doesn't have to
+    # commit to a window before the operator opens the toggle.  When
+    # ``scheduled_recording`` is true and either field is null, the
+    # heartbeat handler treats the camera as "scheduled but not
+    # configured" and skips recording — same effect as off.
+    scheduled_start = Column(String(5), nullable=True)
+    scheduled_end = Column(String(5), nullable=True)
+
     group = relationship("CameraGroup", back_populates="cameras")
     node = relationship("CameraNode", back_populates="cameras")
 
@@ -76,6 +98,13 @@ class Camera(Base):
         return {
             "camera_id": self.camera_id,
             "name": self.name,
+            # Parent node's *string* node_id (not the DB integer FK) so
+            # frontend code can join cameras to nodes without a second
+            # round-trip.  None when the camera row exists without a
+            # registered node — vanishingly rare, but the cap-check
+            # path can briefly leave a Camera with node_id=None during
+            # node deletion.
+            "node_id": self.node.node_id if self.node else None,
             "node_type": self.node_type,
             "capabilities": self.capabilities.split(",") if self.capabilities else [],
             "group": self.group.name if self.group else None,
@@ -86,6 +115,12 @@ class Camera(Base):
             # Push-segment returns 402 while this is set; frontend shows a
             # locked-by-plan badge and an upgrade CTA.
             "disabled_by_plan": bool(self.disabled_by_plan),
+            "recording_policy": {
+                "continuous_24_7": bool(self.continuous_24_7),
+                "scheduled_recording": bool(self.scheduled_recording),
+                "scheduled_start": self.scheduled_start,
+                "scheduled_end": self.scheduled_end,
+            },
         }
 
 

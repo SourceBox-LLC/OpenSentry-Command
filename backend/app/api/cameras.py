@@ -11,8 +11,8 @@ from app.core.limiter import limiter
 from app.models.models import Camera, CameraGroup, Setting, AuditLog
 from app.schemas.schemas import (
     CameraGroupCreate,
+    CameraRecordingPolicy,
     NotificationSettings,
-    RecordingSettings,
 )
 
 
@@ -121,48 +121,100 @@ async def toggle_recording(
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Start or stop recording on the camera node.  Admin-only —
-    recording state changes are operational decisions, not view-only."""
-    from app.models.models import CameraNode
-    from app.api.ws import manager
+    """Start or stop continuous recording on this camera (manual
+    record button on the dashboard).  Admin-only — recording state
+    changes are operational decisions, not view-only.
 
+    Implementation note: as of v0.1.43 this is a thin wrapper that
+    flips ``continuous_24_7`` on the Camera row.  The heartbeat
+    handler reconciles CloudNode's in-memory recording state from
+    that field every ~30s, so a manual press here lands within one
+    heartbeat (no separate WebSocket command needed, no in-memory
+    state that gets lost when the node restarts).
+    """
     body = await request.json()
-    recording = body.get("recording", False)
+    recording = bool(body.get("recording", False))
 
     camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
-    if not camera.node_id:
-        raise HTTPException(status_code=400, detail="Camera has no assigned node")
 
-    node = db.query(CameraNode).filter_by(id=camera.node_id).first()
-    if not node:
-        raise HTTPException(status_code=400, detail="Camera node not found")
-    if not manager.is_connected(node.node_id):
-        raise HTTPException(status_code=503, detail="Camera node is offline")
+    camera.continuous_24_7 = recording
+    db.commit()
 
-    command = "start_recording" if recording else "stop_recording"
-    try:
-        result = await manager.send_command(
-            node.node_id,
-            command,
-            {"camera_id": camera_id},
-            timeout=10.0,
-        )
-        write_audit(
-            db,
-            org_id=user.org_id,
-            event="recording_toggled",
-            user_id=user.user_id,
-            username=audit_label(user),
-            details={"camera_id": camera_id, "recording": bool(recording)},
-            request=request,
-        )
-        return result
-    except TimeoutError:
-        raise HTTPException(status_code=504, detail="Recording command timed out")
-    except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="recording_toggled",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"camera_id": camera_id, "recording": recording},
+        request=request,
+    )
+    return {"success": True, "camera_id": camera_id, "recording": recording}
+
+
+@router.patch("/cameras/{camera_id}/recording-settings")
+@limiter.limit("30/minute")
+async def update_camera_recording_policy(
+    camera_id: str,
+    data: CameraRecordingPolicy,
+    request: Request,
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update the per-camera recording policy.
+
+    Replaces the (never-actually-wired) org-level
+    ``POST /api/settings/recording`` endpoint with a per-camera one.
+    Each field is optional so a PATCH can flip just one toggle without
+    re-asserting the others — the operator toggling Continuous 24/7
+    on doesn't need to also pass `scheduled_recording: false` etc.
+
+    The chosen state is persisted on the Camera row; the heartbeat
+    handler computes the camera's *current* desired recording state
+    on each tick (continuous OR (scheduled AND in-window)) and the
+    CloudNode reconciler applies it.
+    """
+    camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
+    if not camera:
+        raise HTTPException(status_code=404, detail="Camera not found")
+
+    if data.continuous_24_7 is not None:
+        camera.continuous_24_7 = data.continuous_24_7
+    if data.scheduled_recording is not None:
+        camera.scheduled_recording = data.scheduled_recording
+    if data.scheduled_start is not None:
+        camera.scheduled_start = data.scheduled_start or None
+    if data.scheduled_end is not None:
+        camera.scheduled_end = data.scheduled_end or None
+
+    db.commit()
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="camera_recording_policy_updated",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={
+            "camera_id": camera_id,
+            "continuous_24_7": camera.continuous_24_7,
+            "scheduled_recording": camera.scheduled_recording,
+            "scheduled_start": camera.scheduled_start,
+            "scheduled_end": camera.scheduled_end,
+        },
+        request=request,
+    )
+    return {
+        "success": True,
+        "camera_id": camera_id,
+        "recording_policy": {
+            "continuous_24_7": camera.continuous_24_7,
+            "scheduled_recording": camera.scheduled_recording,
+            "scheduled_start": camera.scheduled_start,
+            "scheduled_end": camera.scheduled_end,
+        },
+    }
 
 
 # Camera Groups
@@ -252,25 +304,12 @@ async def assign_camera_group(
 async def get_all_settings(
     user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
 ):
-    """Get all settings for the user's organization."""
-    vals = Setting.get_many(
-        db,
-        user.org_id,
-        {
-            "scheduled_recording": "false",
-            "scheduled_start": "06:00",
-            "scheduled_end": "17:00",
-            "continuous_24_7": "false",
-            **_NOTIFICATION_SETTING_DEFAULTS,
-        },
-    )
+    """Get org-level settings (notifications).  Recording config moved
+    per-camera in v0.1.43 — see `Camera.recording_policy` in the
+    `/api/cameras` response and the `PATCH /api/cameras/{id}/
+    recording-settings` endpoint to update it."""
+    vals = Setting.get_many(db, user.org_id, _NOTIFICATION_SETTING_DEFAULTS)
     return {
-        "recording": {
-            "scheduled_recording": vals["scheduled_recording"] == "true",
-            "scheduled_start": vals["scheduled_start"],
-            "scheduled_end": vals["scheduled_end"],
-            "continuous_24_7": vals["continuous_24_7"] == "true",
-        },
         "notifications": {
             "motion_notifications": vals["motion_notifications"] == "true",
             "camera_transition_notifications": vals["camera_transition_notifications"]
@@ -281,64 +320,9 @@ async def get_all_settings(
     }
 
 
-@router.get("/settings/recording")
-async def get_recording_settings(
-    user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
-):
-    """Get recording settings."""
-    vals = Setting.get_many(
-        db,
-        user.org_id,
-        {
-            "scheduled_recording": "false",
-            "scheduled_start": "06:00",
-            "scheduled_end": "17:00",
-            "continuous_24_7": "false",
-        },
-    )
-    return {
-        "scheduled_recording": vals["scheduled_recording"] == "true",
-        "scheduled_start": vals["scheduled_start"],
-        "scheduled_end": vals["scheduled_end"],
-        "continuous_24_7": vals["continuous_24_7"] == "true",
-    }
-
-
-@router.post("/settings/recording")
-@limiter.limit("30/minute")
-async def update_recording_settings(
-    data: RecordingSettings,
-    request: Request,
-    user: AuthUser = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """Update recording settings. Requires admin."""
-    Setting.set(
-        db, user.org_id, "scheduled_recording", str(data.scheduled_recording).lower()
-    )
-    Setting.set(db, user.org_id, "scheduled_start", str(data.scheduled_start))
-    Setting.set(db, user.org_id, "scheduled_end", str(data.scheduled_end))
-    Setting.set(db, user.org_id, "continuous_24_7", str(data.continuous_24_7).lower())
-    write_audit(
-        db,
-        org_id=user.org_id,
-        event="recording_settings_updated",
-        user_id=user.user_id,
-        username=audit_label(user),
-        details={
-            "scheduled_recording": bool(data.scheduled_recording),
-            "scheduled_start": str(data.scheduled_start),
-            "scheduled_end": str(data.scheduled_end),
-            "continuous_24_7": bool(data.continuous_24_7),
-        },
-        request=request,
-    )
-    return {"success": True}
-
-
-# Notification preferences — parallel to the recording settings pair.
-# GET is view-level (every member needs to know what's on), POST is
-# admin-only (same audit-worthy gate as the other per-org toggles).
+# Notification preferences.  GET is view-level (every member needs to
+# know what's on), POST is admin-only.  Recording settings used to live
+# alongside these as org-level toggles; v0.1.43 moved them per-camera.
 
 
 @router.get("/settings/notifications")

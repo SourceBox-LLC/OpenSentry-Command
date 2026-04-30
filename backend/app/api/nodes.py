@@ -467,27 +467,93 @@ async def node_heartbeat(
     # few seconds of a plan change and advisory on the node anyway.
     cached_plan = Setting.get(db, node.org_id, "org_plan", "free_org") or "free_org"
 
+    # Pull every camera on this node so we can compute both the
+    # disabled-by-plan list AND the recording-state map in one query.
+    node_cameras = db.query(Camera).filter_by(node_id=node.id).all()
+
     # List of camera_ids on THIS node that are currently suspended by the
     # plan cap. Used by the CloudNode to (a) show a "suspended" status on
     # those camera rows in the TUI and (b) stop pushing segments for them
     # so the log isn't flooded with 402s.  Scoped to this node's cameras
     # only — a sibling node in the same org handles its own disabled list.
-    disabled_cameras = [
-        c.camera_id
-        for c in db.query(Camera)
-        .filter_by(node_id=node.id, disabled_by_plan=True)
-        .all()
-    ]
+    disabled_cameras = [c.camera_id for c in node_cameras if c.disabled_by_plan]
+
+    # Per-camera recording state (v0.1.43+).  Authoritative answer to
+    # "should this camera be recording right now?", computed from the
+    # operator-set policy on each Camera row + the current wall-clock
+    # time (for the scheduled-window case).  CloudNode reconciles its
+    # in-memory recording_state set to match this map every heartbeat,
+    # so a manual record-button press, a Continuous-24/7 toggle, or
+    # the start of a scheduled window all propagate to the node within
+    # one tick (~30s) without any imperative WebSocket commands.
+    recording_state = {
+        c.camera_id: _camera_should_record_now(c) for c in node_cameras
+    }
 
     response = {
         "success": True,
         "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
         "plan": wire_plan_slug(cached_plan),
         "disabled_cameras": disabled_cameras,
+        "recording_state": recording_state,
     }
     if version_check["update_available"]:
         response["update_available"] = version_check["update_available"]
     return response
+
+
+def _camera_should_record_now(camera: Camera) -> bool:
+    """Return True if `camera` should be recording right now per its
+    saved policy.
+
+    Decision tree:
+      - ``continuous_24_7`` true              → record (overrides everything)
+      - ``scheduled_recording`` true AND
+        scheduled_start/end configured AND
+        current wall-clock time is in the
+        [start, end) window                   → record
+      - otherwise                              → don't record
+
+    Suspended-by-plan cameras still return whatever their policy says
+    here; the CloudNode is independently informed via
+    ``disabled_cameras`` and skips push-segment for them anyway.
+    Coupling those two would risk silently turning recording back on
+    when an org upgrades, which is a separate decision the operator
+    might want to make explicitly.
+
+    Time semantics: we compare against server-local wall-clock (UTC,
+    since the backend runs in UTC).  If a future user reports their
+    schedule firing at the wrong hour because they're in PT, we'd
+    add a per-org timezone setting and convert here.  Today: UTC HH:MM,
+    documented in the docs.
+    """
+    if camera.continuous_24_7:
+        return True
+    if not camera.scheduled_recording:
+        return False
+    if not camera.scheduled_start or not camera.scheduled_end:
+        return False
+
+    # Validated to HH:MM at PATCH time; this parse should never raise,
+    # but defend against hand-written DB rows.
+    try:
+        start_h, start_m = (int(p) for p in camera.scheduled_start.split(":"))
+        end_h, end_m = (int(p) for p in camera.scheduled_end.split(":"))
+    except (ValueError, AttributeError):
+        return False
+
+    now = datetime.now(tz=timezone.utc)
+    cur_minutes = now.hour * 60 + now.minute
+    start_minutes = start_h * 60 + start_m
+    end_minutes = end_h * 60 + end_m
+
+    # Wrap-around case: scheduled_end < scheduled_start means "overnight"
+    # (e.g. 22:00–06:00).  Inclusive of start, exclusive of end so a
+    # 08:00–08:00 schedule means "never," not "always."
+    if start_minutes <= end_minutes:
+        return start_minutes <= cur_minutes < end_minutes
+    else:
+        return cur_minutes >= start_minutes or cur_minutes < end_minutes
 
 
 @router.get("")

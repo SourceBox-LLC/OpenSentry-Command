@@ -17,7 +17,12 @@ def test_list_cameras_empty(admin_client):
 
 
 def test_get_settings(admin_client):
-    """Settings endpoint returns recording + notification sections."""
+    """`/api/settings` returns the org-level notification block.
+
+    Recording configuration moved per-camera in v0.1.43; the response
+    no longer includes a `recording` key.  Pin both: the
+    notifications block is intact, the recording block is gone.
+    """
     from app.core.auth import require_view
     from tests.conftest import _make_admin_user
     app = admin_client.app
@@ -27,39 +32,18 @@ def test_get_settings(admin_client):
     assert resp.status_code == 200
     data = resp.json()
 
-    # Should have recording settings
-    assert "recording" in data
-    recording = data["recording"]
-    assert "scheduled_recording" in recording
-    assert "continuous_24_7" in recording
+    # Recording config moved per-camera (Camera.recording_policy on
+    # /api/cameras + PATCH /api/cameras/{id}/recording-settings).
+    # The org-level `recording` key is gone.
+    assert "recording" not in data
 
-    # Should NOT have fake detection fields — these were removed because
-    # the backend never actually did motion/face/object recording.
-    assert "motion_recording" not in recording
-    assert "face_recording" not in recording
-    assert "object_recording" not in recording
-    assert "post_buffer" not in recording
-
-    # Should have notifications section with all three toggles defaulted on
-    # (backwards compat: orgs that pre-date the toggle default to everything
-    # enabled, same behaviour they had before).
+    # Notifications block intact.  All three default-on for orgs that
+    # pre-date the toggle.
     assert "notifications" in data
     notifications = data["notifications"]
     assert notifications["motion_notifications"] is True
     assert notifications["camera_transition_notifications"] is True
     assert notifications["node_transition_notifications"] is True
-
-
-def test_update_recording_settings(admin_client):
-    """Can update recording settings."""
-    resp = admin_client.post("/api/settings/recording", json={
-        "scheduled_recording": True,
-        "scheduled_start": "08:00",
-        "scheduled_end": "18:00",
-        "continuous_24_7": False,
-    })
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True
 
 
 def test_get_notification_settings_defaults_on(admin_client):
@@ -114,6 +98,138 @@ def test_update_notification_settings_requires_admin(viewer_client):
     # rejection path — viewer_client doesn't override require_admin so
     # the real dependency runs and rejects.
     assert resp.status_code in (401, 403)
+
+
+# ─── Per-camera recording policy (v0.1.43+) ──────────────────────────
+#
+# Recording configuration moved from org-level `/api/settings/recording`
+# (which never actually drove anything) to per-camera columns on the
+# Camera row + a PATCH endpoint.  Heartbeat handler reads them per
+# tick and tells CloudNode which cameras should be archiving via
+# `recording_state` in the response.
+
+
+def _seed_camera(db, *, camera_id="cam_rec_test", org_id="org_test123"):
+    """Create a node + camera for recording-policy tests."""
+    from app.models.models import CameraNode, Camera
+    node = CameraNode(
+        node_id=f"nd_{camera_id}", org_id=org_id,
+        api_key_hash="a" * 64, name=f"node-{camera_id}",
+    )
+    db.add(node)
+    db.flush()
+    db.add(Camera(
+        camera_id=camera_id, org_id=org_id,
+        node_id=node.id, name=camera_id,
+    ))
+    db.commit()
+    return camera_id
+
+
+def test_patch_recording_policy_persists_continuous(admin_client, db):
+    """PATCH flips continuous_24_7 and audit log + response reflect it."""
+    cam_id = _seed_camera(db)
+    resp = admin_client.patch(
+        f"/api/cameras/{cam_id}/recording-settings",
+        json={"continuous_24_7": True},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["recording_policy"]["continuous_24_7"] is True
+    # Other fields untouched (PATCH semantics, not PUT).
+    assert body["recording_policy"]["scheduled_recording"] is False
+
+
+def test_patch_recording_policy_validates_hhmm(admin_client, db):
+    """A malformed scheduled_start should 422 — never silently store
+    garbage that the heartbeat handler then has to defend against."""
+    cam_id = _seed_camera(db, camera_id="cam_rec_validate")
+    resp = admin_client.patch(
+        f"/api/cameras/{cam_id}/recording-settings",
+        json={"scheduled_recording": True, "scheduled_start": "not-a-time"},
+    )
+    assert resp.status_code == 422
+
+
+def test_patch_recording_policy_404_for_unknown_camera(admin_client, db):
+    resp = admin_client.patch(
+        "/api/cameras/cam_nonexistent/recording-settings",
+        json={"continuous_24_7": True},
+    )
+    assert resp.status_code == 404
+
+
+def test_post_recording_button_flips_continuous_24_7(admin_client, db):
+    """The dashboard's manual record button (POST .../recording) is now
+    a thin wrapper that flips continuous_24_7 — no WebSocket command.
+    Verify the column changes so the heartbeat reconciler sees it."""
+    from app.models.models import Camera
+    cam_id = _seed_camera(db, camera_id="cam_rec_button")
+
+    resp = admin_client.post(
+        f"/api/cameras/{cam_id}/recording", json={"recording": True}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["recording"] is True
+
+    cam = db.query(Camera).filter_by(camera_id=cam_id).first()
+    assert cam.continuous_24_7 is True
+
+    # Stop.
+    admin_client.post(f"/api/cameras/{cam_id}/recording", json={"recording": False})
+    db.refresh(cam)
+    assert cam.continuous_24_7 is False
+
+
+def test_camera_should_record_now_window_logic():
+    """Unit-test the wall-clock window logic in isolation.  Heartbeat
+    decisions hinge on this; a bug here silently breaks scheduled
+    recording for everyone."""
+    from app.api.nodes import _camera_should_record_now
+    from app.models.models import Camera
+    from datetime import datetime, timezone
+    from unittest.mock import patch
+
+    cam = Camera(
+        camera_id="x", org_id="o", name="x",
+        continuous_24_7=False, scheduled_recording=False,
+    )
+    # Empty policy → no recording.
+    assert _camera_should_record_now(cam) is False
+
+    # Continuous overrides scheduled.
+    cam.continuous_24_7 = True
+    assert _camera_should_record_now(cam) is True
+
+    # Scheduled, in-window.
+    cam.continuous_24_7 = False
+    cam.scheduled_recording = True
+    cam.scheduled_start = "08:00"
+    cam.scheduled_end = "17:00"
+    fake_now = datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc)
+    with patch("app.api.nodes.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        assert _camera_should_record_now(cam) is True
+
+    # Scheduled, out-of-window.
+    fake_now = datetime(2026, 4, 29, 18, 30, tzinfo=timezone.utc)
+    with patch("app.api.nodes.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        assert _camera_should_record_now(cam) is False
+
+    # Wrap-around overnight schedule (22:00–06:00).  Inside window.
+    cam.scheduled_start = "22:00"
+    cam.scheduled_end = "06:00"
+    fake_now = datetime(2026, 4, 29, 23, 30, tzinfo=timezone.utc)
+    with patch("app.api.nodes.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        assert _camera_should_record_now(cam) is True
+
+    # Wrap-around, before window.
+    fake_now = datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc)
+    with patch("app.api.nodes.datetime") as mock_dt:
+        mock_dt.now.return_value = fake_now
+        assert _camera_should_record_now(cam) is False
 
 
 # ─── Danger zone (wipe-logs, full-reset) ─────────────────────────────

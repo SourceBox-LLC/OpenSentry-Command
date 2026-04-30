@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateRecordingSettings, updateNotificationSettings } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateNotificationSettings, getCameras } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
 import KeyRotationModal from "../components/KeyRotationModal.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 import NodeStorageBar from "../components/NodeStorageBar.jsx"
+import CameraRecordingControls from "../components/CameraRecordingControls.jsx"
 
 function formatRelativeTime(dateString) {
   if (!dateString) return ""
@@ -32,20 +33,22 @@ function SettingsPage() {
   const { planInfo, refreshPlanInfo } = usePlanInfo()
   const [nodes, setNodes] = useState([])
   const [nodesLoading, setNodesLoading] = useState(false)
+  // Cameras for the recording-policy controls inside each node card.
+  // Loaded alongside nodes (separate /api/cameras call) and grouped
+  // client-side by `node_id` (the parent CameraNode's string id).
+  const [cameras, setCameras] = useState([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [showRotateModal, setShowRotateModal] = useState(false)
   const [selectedNode, setSelectedNode] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Recording settings
-  const [recording, setRecording] = useState(null)
-  const [settingsLoading, setSettingsLoading] = useState(false)
-  const [settingsSaving, setSettingsSaving] = useState(false)
-
-  // Notification preferences (same /api/settings payload, separate subsection).
+  // Notification preferences (org-level — see /api/settings response).
+  // Recording configuration moved per-camera in v0.1.43; the per-camera
+  // toggles live on each camera in the Camera Nodes section above.
   const [notifications, setNotifications] = useState(null)
   const [notificationsSaving, setNotificationsSaving] = useState(false)
+  const [settingsLoading, setSettingsLoading] = useState(false)
 
   // Upgrade modal
   const [upgradeFeature, setUpgradeFeature] = useState(null)
@@ -74,7 +77,6 @@ function SettingsPage() {
       setSettingsLoading(true)
       const token = await getToken()
       const data = await getSettings(() => Promise.resolve(token))
-      setRecording(data.recording)
       // Backend defaults to "all on" when the notifications block is
       // missing, but be defensive for older backends that don't send it.
       setNotifications(
@@ -90,30 +92,6 @@ function SettingsPage() {
     } finally {
       setSettingsLoading(false)
     }
-  }
-
-  const saveRecording = async (updated) => {
-    setSettingsSaving(true)
-    try {
-      const token = await getToken()
-      await updateRecordingSettings(() => Promise.resolve(token), updated)
-      setRecording(updated)
-      showToast("Recording settings saved", "success")
-    } catch (err) {
-      showToast(err.message || "Failed to save recording settings", "error")
-    } finally {
-      setSettingsSaving(false)
-    }
-  }
-
-  const handleRecordingToggle = (key) => {
-    const updated = { ...recording, [key]: !recording[key] }
-    saveRecording(updated)
-  }
-
-  const handleRecordingChange = (key, value) => {
-    const updated = { ...recording, [key]: value }
-    saveRecording(updated)
   }
 
   const saveNotifications = async (updated) => {
@@ -145,12 +123,19 @@ function SettingsPage() {
     try {
       setNodesLoading(true)
       const token = await getToken()
-      const data = await getNodes(() => Promise.resolve(token))
+      // Parallel fetch of nodes and cameras — cameras are needed for
+      // the per-camera recording-policy controls inside each node card.
+      // Promise.all so polling stays at one round-trip's worth of
+      // wall time.
+      const [nodesData, camerasData] = await Promise.all([
+        getNodes(() => Promise.resolve(token)),
+        getCameras(() => Promise.resolve(token)),
+      ])
 
       // Detect nodes that just went offline or came back online
       if (prevNodesRef.current) {
         const prevMap = Object.fromEntries(prevNodesRef.current.map(n => [n.node_id, n]))
-        for (const node of data) {
+        for (const node of nodesData) {
           const prev = prevMap[node.node_id]
           if (prev && prev.status !== "offline" && node.status === "offline") {
             showToast(`Node "${node.name}" went offline`, "warning")
@@ -159,9 +144,10 @@ function SettingsPage() {
           }
         }
       }
-      prevNodesRef.current = data
+      prevNodesRef.current = nodesData
 
-      setNodes(data)
+      setNodes(nodesData)
+      setCameras(camerasData || [])
     } catch (err) {
       console.error("Failed to load nodes:", err)
       // Only toast on first load error, not poll errors
@@ -399,6 +385,31 @@ function SettingsPage() {
                       </div>
                     )}
                     <NodeStorageBar storage={node.storage} />
+                    {/* Per-camera recording-policy controls (v0.1.43+).
+                        Cameras for this node, joined client-side from
+                        the parallel /api/cameras fetch.  Renders one
+                        small panel per camera with Continuous 24/7 +
+                        Scheduled Recording toggles. */}
+                    {cameras
+                      .filter((c) => c.node_id === node.node_id)
+                      .map((cam) => (
+                        <CameraRecordingControls
+                          key={cam.camera_id}
+                          camera={cam}
+                          onUpdated={(newPolicy) => {
+                            // Mirror the server's authoritative state
+                            // into the local cameras list so a re-render
+                            // before the next poll reflects the toggle.
+                            setCameras((prev) =>
+                              prev.map((c) =>
+                                c.camera_id === cam.camera_id
+                                  ? { ...c, recording_policy: newPolicy }
+                                  : c,
+                              ),
+                            )
+                          }}
+                        />
+                      ))}
                   </div>
                   <div className="node-actions">
                     <button
@@ -512,69 +523,11 @@ function SettingsPage() {
         </div>
       </div>
 
-      {recording && (
-        <div className="settings-section">
-          <h2>Recording</h2>
-          <p className="section-description">
-            Configure recording behavior for your camera nodes. Recordings are saved locally on each node.
-          </p>
-          <div className="settings-toggles">
-            <label className="toggle-row">
-              <div className="toggle-info">
-                <span className="toggle-label">Continuous 24/7</span>
-                <span className="toggle-desc">Record all cameras around the clock</span>
-              </div>
-              <button
-                className={`toggle-switch ${recording.continuous_24_7 ? "active" : ""}`}
-                onClick={() => handleRecordingToggle("continuous_24_7")}
-                disabled={settingsSaving}
-              >
-                <span className="toggle-knob" />
-              </button>
-            </label>
-
-            <label className="toggle-row">
-              <div className="toggle-info">
-                <span className="toggle-label">Scheduled Recording</span>
-                <span className="toggle-desc">Only record during specific hours</span>
-              </div>
-              <button
-                className={`toggle-switch ${recording.scheduled_recording ? "active" : ""}`}
-                onClick={() => handleRecordingToggle("scheduled_recording")}
-                disabled={settingsSaving}
-              >
-                <span className="toggle-knob" />
-              </button>
-            </label>
-
-            {recording.scheduled_recording && (
-              <div className="schedule-row">
-                <div className="schedule-field">
-                  <label>Start</label>
-                  <input
-                    type="time"
-                    value={recording.scheduled_start}
-                    onChange={(e) => handleRecordingChange("scheduled_start", e.target.value)}
-                    disabled={settingsSaving}
-                    className="settings-time-input"
-                  />
-                </div>
-                <span className="schedule-separator">to</span>
-                <div className="schedule-field">
-                  <label>End</label>
-                  <input
-                    type="time"
-                    value={recording.scheduled_end}
-                    onChange={(e) => handleRecordingChange("scheduled_end", e.target.value)}
-                    disabled={settingsSaving}
-                    className="settings-time-input"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Recording configuration moved per-camera in v0.1.43 — see
+          the per-camera toggles inside each Camera Nodes card above.
+          Org-level Continuous 24/7 / Scheduled Recording were removed
+          because they never actually drove recording (they persisted
+          to a Setting row but no consumer read them). */}
 
       {notifications && (
         <div className="settings-section">

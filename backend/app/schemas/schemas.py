@@ -8,11 +8,39 @@ class CameraGroupCreate(BaseModel):
     icon: Optional[str] = Field("📁", max_length=10)
 
 
-class RecordingSettings(BaseModel):
-    scheduled_recording: bool = False
-    scheduled_start: str = Field("06:00", max_length=5)
-    scheduled_end: str = Field("17:00", max_length=5)
-    continuous_24_7: bool = False
+class CameraRecordingPolicy(BaseModel):
+    """Per-camera recording policy — set via
+    ``PATCH /api/cameras/{camera_id}/recording-settings``.
+
+    Replaces the org-wide ``RecordingSettings`` (v0.1.42 and earlier),
+    which persisted but never actually drove any recording.  Per-camera
+    is the granularity that matches how recording state is keyed at
+    runtime in CloudNode (``recording_state: HashSet<camera_id>``) and
+    lets operators record some cameras 24/7 while leaving others off
+    for privacy / storage reasons.
+
+    All fields optional so a PATCH can flip just one toggle without
+    re-asserting the others.
+    """
+
+    continuous_24_7: Optional[bool] = None
+    scheduled_recording: Optional[bool] = None
+    # "HH:MM" 24-hour.  Nullable so the operator can clear the window.
+    scheduled_start: Optional[str] = Field(None, max_length=5)
+    scheduled_end: Optional[str] = Field(None, max_length=5)
+
+    @field_validator("scheduled_start", "scheduled_end")
+    @classmethod
+    def _validate_hhmm(cls, v):
+        if v is None or v == "":
+            return v
+        # Strict HH:MM 24-hour validation.  Anything else is a bug —
+        # we'd rather 422 the PATCH than store garbage that the
+        # heartbeat handler then has to defend against.
+        import re
+        if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", v):
+            raise ValueError("must be HH:MM 24-hour, e.g. 08:30")
+        return v
 
 
 class NotificationSettings(BaseModel):

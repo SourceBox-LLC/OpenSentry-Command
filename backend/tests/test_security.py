@@ -89,18 +89,34 @@ def test_audit_log_written_on_node_key_rotate(admin_client, db):
     assert "Rotatable" in (logs[0].details or "")
 
 
-def test_audit_log_written_on_recording_settings_update(admin_client, db):
-    """Updating recording settings persists an audit row."""
-    resp = admin_client.post("/api/settings/recording", json={
-        "scheduled_recording": True,
-        "scheduled_start": "08:00",
-        "scheduled_end": "18:00",
-        "continuous_24_7": False,
-    })
+def test_audit_log_written_on_camera_recording_policy_update(admin_client, db):
+    """Updating a camera's recording policy persists an audit row.
+
+    The org-level `/api/settings/recording` endpoint was retired in
+    v0.1.43; this exercises the per-camera replacement.
+    """
+    from app.models.models import CameraNode, Camera
+    # Seed a node + camera so the PATCH has something to target.
+    node = CameraNode(
+        node_id="nd_audit_rec", org_id="org_test123",
+        api_key_hash="x" * 64, name="audit-test",
+    )
+    db.add(node)
+    db.flush()
+    db.add(Camera(
+        camera_id="cam_audit_rec", org_id="org_test123",
+        node_id=node.id, name="audit-cam",
+    ))
+    db.commit()
+
+    resp = admin_client.patch(
+        "/api/cameras/cam_audit_rec/recording-settings",
+        json={"continuous_24_7": True},
+    )
     assert resp.status_code == 200
 
     logs = _fresh_query(
-        AuditLog, org_id="org_test123", event="recording_settings_updated",
+        AuditLog, org_id="org_test123", event="camera_recording_policy_updated",
     )
     assert len(logs) == 1
 

@@ -130,11 +130,19 @@ export async function getSettings(getToken) {
   return fetchWithAuth("/api/settings", getToken)
 }
 
-export async function updateRecordingSettings(getToken, settings) {
-  return fetchWithAuth("/api/settings/recording", getToken, {
-    method: "POST",
-    body: JSON.stringify(settings)
-  })
+// Per-camera recording policy (v0.1.43+).  Replaced the org-level
+// updateRecordingSettings, which was wired to a backend endpoint that
+// persisted but never actually drove recording.  PATCH semantics —
+// only the fields you pass get updated.
+export async function updateCameraRecordingPolicy(getToken, cameraId, policy) {
+  return fetchWithAuth(
+    `/api/cameras/${encodeURIComponent(cameraId)}/recording-settings`,
+    getToken,
+    {
+      method: "PATCH",
+      body: JSON.stringify(policy),
+    },
+  )
 }
 
 export async function updateNotificationSettings(getToken, settings) {
