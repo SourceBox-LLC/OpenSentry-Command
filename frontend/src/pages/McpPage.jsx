@@ -396,7 +396,20 @@ function McpPage() {
       // we wrap the remote HTTP MCP server with the standard
       // `mcp-remote` npx adapter which fronts it as a local stdio
       // process.  Requires Node.js.
-      config: JSON.stringify({ mcpServers: { opensentry: { command: "npx", args: ["-y", "mcp-remote", MCP_URL, "--header", `Authorization:Bearer ${activeKey}`] } } }, null, 2),
+      //
+      // On Windows, `command: "npx"` triggers a Claude-Desktop bug
+      // where it resolves npx to `C:\Program Files\nodejs\npx.cmd`,
+      // wraps with `cmd /C`, but passes the path UNQUOTED -- cmd
+      // then errors on `'C:\Program' is not recognized`.  Workaround:
+      // use `command: "cmd"` and put `/c npx ...` in args, so cmd.exe
+      // does its own PATHEXT resolution without the quoting bug.
+      config: JSON.stringify({
+        mcpServers: {
+          opensentry: setupOs === "windows"
+            ? { command: "cmd", args: ["/c", "npx", "-y", "mcp-remote", MCP_URL, "--header", `Authorization:Bearer ${activeKey}`] }
+            : { command: "npx", args: ["-y", "mcp-remote", MCP_URL, "--header", `Authorization:Bearer ${activeKey}`] }
+        }
+      }, null, 2),
     },
     cursor: {
       label: "Cursor",

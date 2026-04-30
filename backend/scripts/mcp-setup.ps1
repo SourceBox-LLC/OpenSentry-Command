@@ -346,9 +346,24 @@ function Configure-Client {
             # mcp-remote (npm: mcp-remote) wraps a remote HTTP MCP
             # server as a local stdio process.  Requires Node.js on
             # PATH; we warn separately if it's missing.
+            #
+            # Why `cmd /c npx ...` instead of just `command: "npx"`:
+            # On Windows, npm installs npx as `npx.cmd` (a batch file).
+            # When Claude Desktop sees command="npx", it auto-resolves
+            # via PATHEXT to `C:\Program Files\nodejs\npx.cmd`, then
+            # wraps with `cmd.exe /C` to execute the .cmd file -- but
+            # it passes the resolved path UNQUOTED, so cmd.exe sees
+            # `C:\Program` as the command and the rest as args, with
+            # the lovely error
+            #   'C:\Program' is not recognized as an internal or
+            #   external command, operable program or batch file.
+            # By using `cmd` (a .exe, no wrapping) and `/c npx ...` as
+            # args, we let cmd.exe do its own PATHEXT resolution
+            # natively without the quoting bug.  Standard pattern for
+            # npx-based MCP servers on Windows.
             [ordered]@{
-                command = "npx"
-                args = @("-y", "mcp-remote", $ServerUrl, "--header", "Authorization:Bearer $ApiKey")
+                command = "cmd"
+                args = @("/c", "npx", "-y", "mcp-remote", $ServerUrl, "--header", "Authorization:Bearer $ApiKey")
             }
         }
         'Cursor' {
