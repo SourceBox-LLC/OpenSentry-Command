@@ -14,12 +14,11 @@ function DashboardPage() {
   const { getToken } = useAuth()
   const { organization, membership } = useOrganization()
   const { showToast } = useToasts()
-  const { planInfo, refreshPlanInfo } = usePlanInfo()
+  const { planInfo } = usePlanInfo()
   const [cameras, setCameras] = useState({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
   const prevCamerasRef = useRef(null)
   const toastedOfflinesRef = useRef(new Set())
 
@@ -113,21 +112,31 @@ function DashboardPage() {
   }, [organization, loadCameras])
 
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true)
-    prevCamerasRef.current = null // force state update
-    await loadCameras()
-    await refreshPlanInfo()
-    setRefreshing(false)
-  }, [loadCameras, refreshPlanInfo])
+  // No manual refresh handler — the auto-refresh interval above
+  // (loadCameras every 5s) keeps the dashboard live without user
+  // action.  Manual button was removed once it became clear it was
+  // a placebo: every Refresh click did the same fetch the background
+  // poll already runs twice per 10s.
 
   const getStats = () => {
     const cameraList = Object.values(cameras)
-    const active = cameraList.filter(c => c.status === "streaming" || c.status === "online").length
+    // "Active" = anything that's NOT in a known-down state.  Mirrors
+    // the isDown logic used per-card in CameraCard.jsx so the stat
+    // count and the per-card UI agree on what "down" means.
+    // Includes streaming / online / recording / starting / restarting;
+    // excludes offline / failed / error / plan-suspended.  Previous
+    // version only counted streaming + online and undercounted any
+    // camera in `recording` mode (continuous-24/7), which a 24/7
+    // recording camera definitely is — that was a real bug.
+    const active = cameraList.filter(c =>
+      !(c.disabled_by_plan ||
+        c.status === "offline" ||
+        c.status === "failed" ||
+        c.status === "error")
+    ).length
     const total = cameraList.length
-    const streaming = cameraList.filter(c => c.status === "streaming").length
-    const systemOk = Object.keys(cameras).length > 0
-    return { active, total, streaming, systemOk }
+    const systemOk = total > 0
+    return { active, total, systemOk }
   }
 
   if (!organization) {
@@ -270,10 +279,6 @@ function DashboardPage() {
           <div className="stat-value blue">{stats.total}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Streaming</div>
-          <div className="stat-value green">{stats.streaming}</div>
-        </div>
-        <div className="stat-card">
           <div className="stat-label">System Status</div>
           <div className={`stat-value ${stats.systemOk ? "green" : "amber"}`}>
             {stats.systemOk ? "Ready" : "Offline"}
@@ -306,13 +311,6 @@ function DashboardPage() {
 
       <div className="section-header">
         <h2 className="section-title">Camera Feeds</h2>
-        <button onClick={handleRefresh} className="btn btn-secondary" disabled={refreshing}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-            style={refreshing ? { animation: 'spin 0.8s linear infinite' } : {}}>
-            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-          </svg>
-          {refreshing ? 'Refreshing...' : 'Refresh'}
-        </button>
       </div>
 
       {loading ? (
