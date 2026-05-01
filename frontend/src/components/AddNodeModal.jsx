@@ -41,19 +41,27 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
   // Windows installs via the MSI, not a one-liner — see the Windows
   // branch in the install-tab content below.
   //
-  // Linux/macOS: install.sh now accepts --url/--node-id/--key (added
-  // alongside this commit), so we can hand the operator a SINGLE
-  // command that downloads the binary, registers the node, and
-  // starts the systemd service in one shot.  Previously this was a
-  // two-step modal — install.sh + a separate `setup` command — which
-  // was confusing because install.sh already auto-prompts for setup
-  // when run interactively, and silently skips it when an old
-  // node.db is present (caught a real bug tonight where a Pi with
-  // stale node.db from cargo-run testing started a systemd service
-  // with revoked credentials).
+  // Linux/macOS: install.sh accepts --url/--node-id/--key for
+  // non-interactive registration.  The result is a registered node
+  // ready to be launched via the foreground TUI dashboard
+  // (`~/.sourcebox-sentry/sourcebox-sentry-cloudnode`).  Foreground
+  // is the recommended primary experience — matches the Windows MSI
+  // model where the Start menu shortcut launches the TUI and the
+  // service is an explicit second step.
+  //
+  // For 24/7 unattended operation operators can append
+  // `--install-service` to the one-liner.  We surface this as a
+  // separate command rather than a checkbox so the foreground path
+  // remains the obvious default — the goal is for everyone to verify
+  // the foreground dashboard works before opting into a service that
+  // hides failures behind journalctl.
   const linuxInstallCmd = credentials
     ? `curl -fsSL ${base}/install.sh | bash -s -- --url "${base}" --node-id ${credentials.node_id} --key ${credentials.api_key}`
     : `curl -fsSL ${base}/install.sh | bash`
+  const linuxStartCmd = `~/.sourcebox-sentry/sourcebox-sentry-cloudnode`
+  const linuxUnattendedCmd = credentials
+    ? `curl -fsSL ${base}/install.sh | bash -s -- --url "${base}" --node-id ${credentials.node_id} --key ${credentials.api_key} --install-service`
+    : ''
   const installCommands = {
     linux: linuxInstallCmd,
     macos: linuxInstallCmd,
@@ -186,7 +194,7 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
 
               <div className="deployment-content">
                 <div className="command-box">
-                  <h5>{os === 'windows' ? '1. Install CloudNode:' : 'Install + Register (one command):'}</h5>
+                  <h5>{os === 'windows' ? '1. Install CloudNode:' : '1. Install + Register:'}</h5>
                   <div className="install-tabs">
                     <div className="install-tab-buttons">
                       <button className={`install-tab-btn${os === 'linux' ? ' active' : ''}`} onClick={() => setOs('linux')}>Linux</button>
@@ -217,22 +225,31 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
                   )}
                 </div>
                 {/*
-                    Windows still needs the explicit setup step after the
-                    MSI runs.  Linux/macOS now have the credentials baked
-                    into the install one-liner above, so this section is
-                    only shown for Windows.
+                    Step 2 differs by platform:
+                      - Windows: post-MSI setup wizard (or quick-setup with creds)
+                      - Linux/macOS: launch the foreground TUI dashboard
+                    Both converge on the same model — the foreground TUI is
+                    the recommended primary experience; the service is opt-in.
                 */}
-                {os === 'windows' && (
+                {os === 'windows' ? (
                   <div className="command-box quick-setup-box">
                     <h5>2. Quick Setup (one command in PowerShell):</h5>
                     <code className="quick-setup-cmd">{quickSetupCmd}</code>
                     <button className="btn btn-small" onClick={() => handleCopy(quickSetupCmd)}>Copy</button>
                   </div>
+                ) : (
+                  <div className="command-box quick-setup-box">
+                    <h5>2. Start CloudNode (foreground dashboard):</h5>
+                    <code className="quick-setup-cmd">{linuxStartCmd}</code>
+                    <button className="btn btn-small" onClick={() => handleCopy(linuxStartCmd)}>Copy</button>
+                  </div>
                 )}
                 <div className="command-note">
                   {os === 'windows'
-                    ? <>This configures the node and starts streaming automatically. Or run <code>{exe} setup</code> for the interactive wizard instead.</>
-                    : <>Downloads the binary, registers the node with these credentials, installs the systemd service, and starts streaming — no extra steps. Or run <code>curl -fsSL {base}/install.sh | bash</code> without arguments to get the interactive setup wizard.</>
+                    ? <>The MSI registers a Start menu shortcut for the foreground TUI dashboard — that's the recommended way to run CloudNode. The setup command above registers the node before the first launch. <br/><br/>For 24/7 unattended operation, the MSI also installs an optional Windows Service named <code>SourceBoxSentryCloudNode</code> (manual-start by default). Switch it to automatic from <strong>services.msc</strong> after you've verified the foreground works.</>
+                    : <>The foreground dashboard shows live cameras, segment counts, FFmpeg state, and slash commands. Same primary experience as the Windows MSI's Start menu shortcut.<br/><br/>For 24/7 unattended operation (camera-in-a-closet, no SSH session), append <code>--install-service</code> to the install command:<br/>
+                      <code style={{ display: 'block', marginTop: '0.4rem', padding: '0.5rem', fontSize: '0.85em', wordBreak: 'break-all' }}>{linuxUnattendedCmd}</code>
+                      <button className="btn btn-small" onClick={() => handleCopy(linuxUnattendedCmd)}>Copy unattended command</button></>
                   }
                 </div>
               </div>

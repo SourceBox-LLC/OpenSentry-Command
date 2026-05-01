@@ -3,19 +3,36 @@ set -euo pipefail
 
 # SourceBox Sentry CloudNode Installer
 #
+# Default behavior: download binary, register the node, and tell the
+# operator how to start the foreground TUI.  The foreground TUI is the
+# recommended primary experience on every platform — same model as
+# the Windows MSI's Start menu shortcut.  See README "Running as a
+# Windows Service" / "Running unattended on Linux" for the explicit
+# unattended-operation paths, both of which are opt-in.
+#
 # Usage:
-#   Interactive (downloads binary, then prompts for credentials):
+#   Interactive (downloads binary, prompts for credentials):
 #     curl -fsSL https://opensentry-command.fly.dev/install.sh | bash
 #
-#   One-shot (downloads binary, registers non-interactively, starts service):
+#   One-shot (downloads + registers; foreground-launchable after):
 #     curl -fsSL .../install.sh | bash -s -- \
 #       --url   https://opensentry-command.fly.dev \
 #       --node-id <node_id> \
 #       --key    <api_key>
 #
+#   Unattended / 24/7 headless (above + register systemd service):
+#     curl -fsSL .../install.sh | bash -s -- \
+#       --url   <url> --node-id <id> --key <key> \
+#       --install-service
+#
 # When --node-id and --key are passed, the script overwrites any stale
 # node.db from a previous install (e.g. cargo-run testing) so the new
 # credentials actually take effect.
+#
+# --install-service is OPT-IN: without it, the script never registers
+# or starts a systemd service.  This keeps Linux consistent with the
+# Windows model where foreground TUI is primary and the service is a
+# deliberate second step.
 
 # ── Colors ──────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -38,6 +55,7 @@ INSTALL_DIR="${SOURCEBOX_SENTRY_INSTALL_DIR:-$HOME/.sourcebox-sentry}"
 ARG_URL=""
 ARG_NODE_ID=""
 ARG_KEY=""
+ARG_INSTALL_SERVICE=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -58,6 +76,13 @@ while [ $# -gt 0 ]; do
             shift 2 ;;
         --key=*)
             ARG_KEY="${1#*=}"
+            shift ;;
+        --install-service)
+            # Opt-in flag for 24/7 unattended operation.  Mirrors the
+            # Windows MSI's manual-start service registration: the
+            # foreground TUI is still the default, this just adds a
+            # systemd unit that survives logout and reboots.
+            ARG_INSTALL_SERVICE=true
             shift ;;
         *)
             # Unknown arg — ignore so future install.sh versions can
@@ -632,73 +657,36 @@ UNIT
 
 SERVICE_RUNNING=false
 if [ "$PLATFORM" = "linux" ] && check_cmd systemctl && [ -d /etc/systemd/system ]; then
-    # When we ran setup non-interactively (--url/--node-id/--key),
-    # also auto-install the systemd service without prompting.  The
-    # operator already opted in by including credentials in the
-    # one-liner; making them re-confirm via /dev/tty would defeat the
-    # whole point of "one command does everything."
     UNIT_EXISTS=false
     [ -f /etc/systemd/system/sourcebox-sentry-cloudnode.service ] && UNIT_EXISTS=true
 
-    if [ "$HAVE_QUICK_ARGS" = true ]; then
-        if [ "$IS_REGISTERED" = true ]; then
-            echo ""
-            if [ "$UNIT_EXISTS" = true ]; then
-                echo -e "${DIM}Refreshing systemd unit + restarting with new credentials...${NC}"
-            else
-                echo -e "${DIM}Installing systemd service (auto: --node-id passed)...${NC}"
-            fi
-            install_systemd_service || true
-        else
-            # Setup didn't actually land — defensive; the non-interactive
-            # block above exits 1 on setup failure so we shouldn't
-            # reach here, but if we do, don't start a broken service.
-            echo -e "  ${YELLOW}Skipping systemd — setup didn't complete successfully.${NC}"
-        fi
-    elif [ -t 1 ] && [ -r /dev/tty ]; then
-        # Interactive path — preserve existing behavior.  Skip if we
-        # can't prompt (piped, no tty) — never surprise-enable a
-        # system service in an unattended install.
+    # Two paths fire the systemd install:
+    #
+    #   1. The operator explicitly passed --install-service.  This is
+    #      the deliberate "I want unattended 24/7" opt-in — same model
+    #      as the Windows MSI's optional Service registration.
+    #
+    #   2. The unit ALREADY EXISTS from a prior install.  In that case
+    #      the operator opted in last time, and re-running install.sh
+    #      should refresh the unit (pick up bug fixes in the unit
+    #      template) and restart the service against fresh credentials.
+    #      This keeps existing systemd-using installs working without
+    #      surprise-removing them on upgrade.
+    #
+    # Crucially: a fresh install with NO --install-service and NO
+    # pre-existing unit does NOT install systemd.  Operator gets the
+    # foreground-TUI start hint in the "Done" summary below.  Matches
+    # the Windows pattern where the MSI registers an optional service
+    # but the Start menu shortcut launches the foreground TUI.
+    if [ "$IS_REGISTERED" = true ] \
+        && { [ "$ARG_INSTALL_SERVICE" = true ] || [ "$UNIT_EXISTS" = true ]; }; then
+        echo ""
         if [ "$UNIT_EXISTS" = true ]; then
-            # Re-run of installer: always overwrite the unit so bug fixes
-            # (e.g. wrong WorkingDirectory, missing `run` subcommand,
-            # missing Environment vars) take effect.  The operator
-            # already opted in to systemd the first time — we don't
-            # re-prompt, we just upgrade silently.  Skips only when the
-            # node isn't registered — can't start a service that has
-            # nowhere to read credentials from.
-            if [ "$IS_REGISTERED" = true ]; then
-                echo ""
-                echo -e "${DIM}Upgrading systemd unit + restarting...${NC}"
-                install_systemd_service || true
-            else
-                echo ""
-                echo -e "  ${YELLOW}systemd unit exists but node isn't registered — skipping restart.${NC}"
-                echo -e "  ${DIM}Register first:  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode setup${NC}"
-            fi
-        elif [ "$IS_REGISTERED" = true ]; then
-            # Fresh install, registration in place — this is the happy
-            # path where the service will actually work, so default yes.
-            echo ""
-            echo -e "${BOLD}  Auto-start on boot?${NC}"
-            echo -e "  ${DIM}Installs a systemd service that starts CloudNode when your system${NC}"
-            echo -e "  ${DIM}boots and restarts it on failure.  Recommended for headless deployments.${NC}"
-            if prompt_yes "Install systemd service and start it now?"; then
-                # `|| true` so a failed sudo / systemctl doesn't abort
-                # the whole installer — the function already prints a
-                # clear error and the operator should still see the
-                # "Next steps" summary below.
-                install_systemd_service || true
-            fi
+            echo -e "${DIM}Refreshing existing systemd unit + restarting...${NC}"
         else
-            # No registration — installing the service now would just
-            # make it crash-loop on missing credentials.  Tell the
-            # operator how to wire it up after they've registered.
-            echo ""
-            echo -e "  ${DIM}Skipping systemd service — node not yet registered.${NC}"
-            echo -e "  ${DIM}After running setup, re-run this installer to install the service:${NC}"
-            echo -e "  ${CYAN}curl -fsSL https://opensentry-command.fly.dev/install.sh | bash${NC}"
+            echo -e "${DIM}Installing systemd service (--install-service passed)...${NC}"
         fi
+        install_systemd_service || true
     fi
 fi
 
@@ -714,25 +702,42 @@ echo -e "${GREEN}${BOLD}  CloudNode installed successfully.${NC}"
 echo ""
 
 if [ "$SERVICE_RUNNING" = true ]; then
-    # Turnkey path: registered + service up.  Operator is done.
-    echo -e "  ${GREEN}${BOLD}CloudNode is streaming.${NC}"
+    # Operator opted in to the systemd service (or had it from a prior
+    # install).  Service is up — they're done.
+    echo -e "  ${GREEN}${BOLD}CloudNode is streaming via systemd.${NC}"
     echo -e "  ${DIM}View your cameras at ${CYAN}https://opensentry-command.fly.dev${NC}"
     echo ""
     echo -e "  ${DIM}Live logs:  ${CYAN}journalctl -u sourcebox-sentry-cloudnode -f${NC}"
+    echo -e "  ${DIM}Stop:       ${CYAN}sudo systemctl stop sourcebox-sentry-cloudnode${NC}"
 elif [ "$IS_REGISTERED" = true ]; then
-    # Registered but service not installed/running — hand over the
-    # two commands that get them there.
-    echo -e "  ${BOLD}Next steps:${NC}"
+    # Registered but no service running — the foreground-TUI path is
+    # primary.  Operator runs the binary directly and sees the live
+    # dashboard with cameras, segments, and slash commands.  Same
+    # model as the Windows MSI's Start menu shortcut.
+    echo -e "  ${BOLD}Start CloudNode (foreground dashboard):${NC}"
+    echo -e "  ${CYAN}${INSTALL_DIR}/sourcebox-sentry-cloudnode${NC}"
     echo ""
-    echo -e "  Start CloudNode:  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode${NC}"
+    echo -e "  ${DIM}You'll see the live TUI: cameras, segments, FFmpeg state, slash${NC}"
+    echo -e "  ${DIM}commands.  Close the window or Ctrl+C to stop.${NC}"
     echo ""
-    echo -e "  ${DIM}Or install the systemd service: re-run this installer.${NC}"
+    echo -e "  ${BOLD}For 24/7 unattended operation${NC} ${DIM}(camera-in-a-closet, no SSH session):${NC}"
+    if [ "$HAVE_QUICK_ARGS" = true ]; then
+        # We have the quick-args saved, can give them the exact re-run
+        # one-liner with --install-service.
+        echo -e "  ${CYAN}curl -fsSL https://opensentry-command.fly.dev/install.sh | bash -s -- \\\\${NC}"
+        echo -e "  ${CYAN}    --url \"${ARG_URL}\" --node-id ${ARG_NODE_ID} --key <key> \\\\${NC}"
+        echo -e "  ${CYAN}    --install-service${NC}"
+    else
+        echo -e "  ${CYAN}curl -fsSL https://opensentry-command.fly.dev/install.sh | bash -s -- --install-service${NC}"
+    fi
+    echo -e "  ${DIM}Registers a systemd unit and starts it.  Verify the foreground${NC}"
+    echo -e "  ${DIM}flow works first before flipping to unattended.${NC}"
 else
     # Not registered yet — setup was declined or failed.
     echo -e "  ${BOLD}Next steps:${NC}"
     echo ""
     echo -e "  1. Register:         ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode setup${NC}"
-    echo -e "  2. Start streaming:  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode${NC}"
+    echo -e "  2. Start streaming:  ${CYAN}${INSTALL_DIR}/sourcebox-sentry-cloudnode${NC}"
     echo ""
     echo -e "  ${DIM}Get your node ID + API key at ${CYAN}https://opensentry-command.fly.dev${NC}"
 fi

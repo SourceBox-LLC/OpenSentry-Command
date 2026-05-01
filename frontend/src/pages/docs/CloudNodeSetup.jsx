@@ -18,7 +18,7 @@ function CloudNodeSetup() {
       <p style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
         {os === 'windows'
           ? 'After the MSI finishes, click the SourceBox Sentry CloudNode shortcut from the Start menu — first launch runs the setup wizard, every launch after streams cameras directly.'
-          : 'Run in your terminal. The script downloads the binary, runs setup, and (on Linux + systemd) optionally installs a service unit so the node restarts on boot.'}
+          : 'Run in your terminal. The script downloads the binary and registers the node. After it finishes, run the binary directly to start the foreground dashboard — same recommended path as the Windows MSI Start menu shortcut. For 24/7 unattended operation, append --install-service to register a systemd unit (opt-in).'}
       </p>
 
       <h3>Setup Wizard</h3>
@@ -94,6 +94,49 @@ Set-Service -Name SourceBoxSentryCloudNode -StartupType Automatic`}</code>
 
           <p>
             See the CloudNode <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node#quick-start" target="_blank" rel="noopener noreferrer">README</a> for the full reference.
+          </p>
+        </>
+      )}
+
+      {os !== 'windows' && (
+        <>
+          <h3>Running on Linux / macOS</h3>
+          <p>
+            After <code>install.sh</code> finishes, run the binary directly to launch the
+            foreground TUI dashboard:
+          </p>
+          <div className="docs-code-block">
+            <code>~/.sourcebox-sentry/sourcebox-sentry-cloudnode</code>
+            <button className="docs-copy-btn" onClick={() => copyToClipboard("~/.sourcebox-sentry/sourcebox-sentry-cloudnode")}>Copy</button>
+          </div>
+          <p>
+            A terminal dashboard opens with live cameras, segment counts, FFmpeg state, and
+            slash commands. The node stays online for as long as the window is open. This is
+            the recommended path for everyday use — same model as the Windows MSI's Start
+            menu shortcut. You can see what's happening, hit a slash command, and close it
+            cleanly with Ctrl+C.
+          </p>
+
+          <h4>Auto-start on boot (optional)</h4>
+          <p>
+            For 24/7 unattended operation (camera in a closet, no SSH session), append{' '}
+            <code>--install-service</code> to the install command. This registers a systemd
+            unit and starts it:
+          </p>
+          <div className="docs-code-block">
+            <code>curl -fsSL https://opensentry-command.fly.dev/install.sh | bash -s -- --install-service</code>
+            <button className="docs-copy-btn" onClick={() => copyToClipboard("curl -fsSL https://opensentry-command.fly.dev/install.sh | bash -s -- --install-service")}>Copy</button>
+          </div>
+          <p>Standard service-management commands all work:</p>
+          <ul>
+            <li><code>systemctl status sourcebox-sentry-cloudnode</code> — running / stopped status</li>
+            <li><code>sudo systemctl restart sourcebox-sentry-cloudnode</code></li>
+            <li><code>journalctl -u sourcebox-sentry-cloudnode -f</code> — tail live log</li>
+          </ul>
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+            Don't run the foreground TUI and the service at the same time — only one process
+            should hold the cameras. Verify the foreground flow works first before flipping
+            to unattended.
           </p>
         </>
       )}
