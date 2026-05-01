@@ -1210,6 +1210,23 @@ def add_observation(
         if not incident:
             raise ToolError(f"Incident {incident_id} not found")
 
+        # Same org-scope check we do in attach_clip / attach_snapshot:
+        # only let the agent reference cameras the org actually owns.
+        # Without this, an agent could record a foreign camera_id as
+        # text on our own incident, polluting the audit trail with
+        # references that don't resolve in this org's context.  Not a
+        # data-leak (the foreign cam doesn't get queried), just hygiene.
+        if camera_id is not None:
+            cam_exists = (
+                db.query(Camera)
+                .filter_by(org_id=org_id, camera_id=camera_id)
+                .first()
+            )
+            if not cam_exists:
+                raise ToolError(
+                    f"Camera '{camera_id}' not found in this organization"
+                )
+
         evidence = IncidentEvidence(
             incident_id=incident.id,
             kind="observation",

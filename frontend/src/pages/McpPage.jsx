@@ -431,9 +431,16 @@ function McpPage() {
   // Windows: `iex -Args` is invalid (Invoke-Expression has no -Args parameter).
   // The scriptblock::Create pattern is the correct way to pipe-and-parameterize
   // a remote PowerShell script, and it matches what the script's param() expects.
+  //
+  // Both forms wrap the key + URL in single quotes.  The current `osc_<32 hex>`
+  // key format is shell-safe (alphanumeric + underscore only), but quoting
+  // future-proofs the command if we ever change the format and stops anyone
+  // who hand-edits the displayed snippet from accidentally introducing a
+  // value that breaks shell parsing (e.g. pasting a key with surrounding
+  // whitespace).
   const autoSetupCmd = setupOs === "windows"
     ? `& ([scriptblock]::Create((irm ${base}/mcp-setup.ps1))) '${activeKey}' '${MCP_URL}'`
-    : `curl -fsSL ${base}/mcp-setup.sh | bash -s -- ${activeKey} ${MCP_URL}`
+    : `curl -fsSL ${base}/mcp-setup.sh | bash -s -- '${activeKey}' '${MCP_URL}'`
 
   const isPro = planInfo?.features?.includes("admin")
 

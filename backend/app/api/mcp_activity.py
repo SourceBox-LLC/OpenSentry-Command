@@ -124,7 +124,21 @@ async def get_mcp_logs(
     if tool_name:
         query = query.filter(McpActivityLog.tool_name == tool_name)
     if key_name:
-        query = query.filter(McpActivityLog.key_name.ilike(f"%{key_name}%"))
+        # Escape SQL LIKE wildcards in the user-supplied filter so a
+        # key name containing % or _ filters precisely instead of
+        # matching everything.  Admin-only endpoint so this is filter
+        # precision, not a security boundary, but worth getting right
+        # since key names can contain underscores by convention
+        # ("ci_robot", "prod_main", etc.).
+        escaped = (
+            key_name
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        query = query.filter(
+            McpActivityLog.key_name.ilike(f"%{escaped}%", escape="\\")
+        )
     if status:
         query = query.filter(McpActivityLog.status == status)
 

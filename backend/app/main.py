@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import os
+import threading
 import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Optional
 
 # Process start markers for ``/api/health/detailed``. Captured at module
@@ -22,7 +25,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
-from app.core.limiter import limiter
+from app.core.limiter import limiter, tenant_aware_key
 from app.core.migrations import sync_schema, sanitize_existing_codecs, drop_orphan_tables
 from app.core.sentry import init_sentry
 from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
@@ -632,6 +635,64 @@ async def _offline_sweep_loop():
             logger.exception("[OfflineSweep] Sweep failed")
 
 
+# ── Pre-auth rate limit for the /mcp/ ASGI mount ──────────────────────
+#
+# /mcp is mounted as an ASGI app (FastMCP), not a FastAPI route, so the
+# Redis-backed slowapi @limiter.limit decorator that protects every
+# other endpoint doesn't apply.  Each pre-auth POST to /mcp/ costs:
+#
+#   - 1 SHA256 of the bearer
+#   - 1 indexed DB lookup against McpApiKey by key_hash
+#
+# Cheap, but unbounded.  An attacker who can't brute-force the 128-bit
+# osc_<32 hex> keyspace can still chew CPU and DB connection budget by
+# spamming random bearers.  This middleware caps the rate per tenant
+# bucket BEFORE the request reaches FastMCP.
+#
+# Bucket key:
+#   - Authenticated MCP request → IP (since the bearer is osc_..., not
+#     a JWT, ``tenant_aware_key`` falls through to the IP path).
+#   - Pre-auth or malformed → IP.
+#
+# Storage:
+#   - In-process dict.  Single-VM today; if we ever go multi-VM, swap to
+#     a Redis-backed `slowapi.shared_limit` or equivalent.
+#
+# Cap:
+#   - 600/min per IP.  Generous: a legitimate MCP client makes one or
+#     two requests per tool call.  At 10 calls/min steady-state with
+#     headroom for bursts, 600/min is roughly 60× the worst-case real
+#     usage from a single IP.  An NAT'd office of 50 users still has
+#     budget; an attacker spamming with random keys hits the wall well
+#     before any meaningful DoS impact.
+_MCP_PRE_AUTH_LIMIT_PER_MINUTE = 600
+_mcp_pre_auth_buckets: dict[str, list[float]] = defaultdict(list)
+_mcp_pre_auth_lock = threading.Lock()
+
+
+def _check_mcp_pre_auth_rate(request: Request) -> bool:
+    """Per-tenant rate gate for /mcp/.  Returns False if over the cap.
+
+    Sliding 60-second window — drop entries older than the cutoff,
+    append the current timestamp, refuse if the bucket is full.
+    Holding the lock around the whole pop+append keeps this race-free
+    under the asyncio executor's thread pool without serialising the
+    actual MCP request handling.
+    """
+    bucket_key = tenant_aware_key(request)
+    now = monotonic()
+    cutoff = now - 60.0
+    with _mcp_pre_auth_lock:
+        bucket = _mcp_pre_auth_buckets[bucket_key]
+        # Drop stale entries in-place so the bucket size doesn't grow
+        # unbounded for a noisy tenant.
+        bucket[:] = [t for t in bucket if t > cutoff]
+        if len(bucket) >= _MCP_PRE_AUTH_LIMIT_PER_MINUTE:
+            return False
+        bucket.append(now)
+        return True
+
+
 # Serve static files from the React build
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
@@ -647,8 +708,17 @@ if static_dir.exists():
             return await call_next(request)
 
         # MCP endpoint: only pass POST requests (JSON-RPC) to the MCP server;
-        # GET /mcp should serve the frontend dashboard page
+        # GET /mcp should serve the frontend dashboard page.
+        #
+        # Apply a pre-auth IP/tenant rate limit BEFORE the request hits
+        # FastMCP — see ``_check_mcp_pre_auth_rate`` for the rationale.
         if request.url.path.startswith("/mcp") and request.method == "POST":
+            if not _check_mcp_pre_auth_rate(request):
+                return JSONResponse(
+                    {"error": "Too many requests. Slow down and retry shortly."},
+                    status_code=429,
+                    headers={"Retry-After": "60"},
+                )
             return await call_next(request)
 
         static_file = static_dir / request.url.path.lstrip("/")

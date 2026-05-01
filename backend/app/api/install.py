@@ -135,6 +135,20 @@ async def install_sh(request: Request):
 
 # ── MCP Client Setup Scripts ─────────────────────────
 
+# Cache-Control headers on the setup-script endpoints:
+#
+# These scripts get fixed in master and re-deployed frequently (we
+# shipped 6 changes in one evening during the auto-setup debugging
+# session).  Without an explicit Cache-Control header, browsers and
+# any intervening CDN are free to cache the response indefinitely
+# under their default heuristic, leaving users on the previous
+# broken version after a fix lands.  A 60s max-age gives clients a
+# chance to coalesce the cost (a refresh costs them ~50KB) while
+# bounding the window during which a known-bad script could still
+# be served from a cache.
+_SETUP_SCRIPT_CACHE_HEADER = "no-cache, max-age=60"
+
+
 @router.get("/mcp-setup.sh", response_class=PlainTextResponse)
 @limiter.limit("30/minute")
 async def mcp_setup_sh(request: Request):
@@ -143,7 +157,10 @@ async def mcp_setup_sh(request: Request):
     return PlainTextResponse(
         content=content,
         media_type="text/x-shellscript",
-        headers={"Content-Disposition": "inline; filename=mcp-setup.sh"},
+        headers={
+            "Content-Disposition": "inline; filename=mcp-setup.sh",
+            "Cache-Control": _SETUP_SCRIPT_CACHE_HEADER,
+        },
     )
 
 
@@ -155,7 +172,10 @@ async def mcp_setup_ps1(request: Request):
     return PlainTextResponse(
         content=content,
         media_type="text/plain",
-        headers={"Content-Disposition": "inline; filename=mcp-setup.ps1"},
+        headers={
+            "Content-Disposition": "inline; filename=mcp-setup.ps1",
+            "Cache-Control": _SETUP_SCRIPT_CACHE_HEADER,
+        },
     )
 
 
