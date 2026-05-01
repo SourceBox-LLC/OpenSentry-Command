@@ -5724,6 +5724,23 @@ body {
     filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.35));
 }
 
+/*
+    Amber variant for the post-connect stalled state.  Distinct from the
+    green initial-connect pulse so the operator can tell at a glance
+    whether the stream is starting up (green, "Connecting...") or has
+    already connected and is now mid-interruption (amber,
+    "Reconnecting...").  Common cause is a backend segment-cache hole
+    that hls.js retries past — see HlsPlayer's stall checker.
+*/
+.hls-player-loading.stalled {
+    color: #f59e0b;
+}
+
+.hls-player-loading.stalled .camera-pulse {
+    color: #f59e0b;
+    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.35));
+}
+
 @keyframes hls-camera-pulse {
     0%, 100% { opacity: 0.35; transform: scale(0.96); }
     50%      { opacity: 1;    transform: scale(1.04); }

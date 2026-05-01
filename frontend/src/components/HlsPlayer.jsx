@@ -20,6 +20,15 @@ function HlsPlayer({ cameraId, cameraName }) {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [isLive, setIsLive] = useState(false)
+    // `stalled` is post-connect: MANIFEST_PARSED has fired (loading is
+    // false) but the video element hasn't advanced in N seconds.
+    // Common cause is a backend segment-cache hole that hls.js is
+    // retry-skipping past (e.g. CloudNode's HLS uploader losing a
+    // batch of segments to the muxer rotating files out from under
+    // it).  Without surfacing this state the player goes dead black
+    // with no error and no spinner — operator can't tell whether the
+    // camera died or the dashboard broke.
+    const [stalled, setStalled] = useState(false)
 
     useEffect(() => {
         const video = videoRef.current
@@ -140,9 +149,24 @@ function HlsPlayer({ cameraId, cameraName }) {
                         }
                     })
 
-                    // Stall recovery: if the player hasn't advanced in 2 seconds
-                    // while playing, it's stuck. Jump to live edge to break out
-                    // of it — this is what a page refresh does, but automatically.
+                    // Stall detection + recovery.  Two roles:
+                    //   1. Auto-recovery: if the player hasn't advanced for
+                    //      ~2 seconds, snap to live edge.  Equivalent to a
+                    //      manual page refresh, just automated.
+                    //   2. Surface the state to the UI: if the recovery
+                    //      attempt at 2s doesn't take and the player still
+                    //      isn't advancing at 3s+, set `stalled` so the
+                    //      branded camera-pulse overlay re-appears in amber
+                    //      ("Reconnecting to stream...").  Without this the
+                    //      view is dead black — operator can't tell the
+                    //      camera went dark vs the dashboard broke.
+                    //
+                    // Bug worth knowing about: previous version reset
+                    // stallCount to 0 every 2 seconds whether the recovery
+                    // jump succeeded or not, so we never tracked stalls
+                    // longer than 2s — meaning we could never distinguish
+                    // "transient hiccup" from "stream is genuinely dead."
+                    // New version only resets on actual playback advance.
                     let lastTime = 0
                     let stallCount = 0
                     const stallCheck = setInterval(() => {
@@ -150,20 +174,32 @@ function HlsPlayer({ cameraId, cameraName }) {
 
                         if (Math.abs(video.currentTime - lastTime) < 0.1) {
                             stallCount++
-                            if (stallCount >= 2) {
-                                // Stalled for 2+ seconds — jump to live
+
+                            // First recovery attempt at 2s — jump to live.
+                            if (stallCount === 2) {
                                 const liveEdge = hls.liveSyncPosition
                                 if (liveEdge && liveEdge > video.currentTime + 1) {
-                                    console.warn(`[HlsPlayer] Stall detected (${stallCount}s), jumping to live edge`)
+                                    console.warn("[HlsPlayer] Stall detected, jumping to live edge")
                                     video.currentTime = liveEdge
                                     hls.startLoad(-1)
-                                    setLoading(false)
                                 }
-                                stallCount = 0
+                            }
+
+                            // After 3 consecutive ticks of no progress, the
+                            // recovery jump (if any) clearly didn't help.
+                            // Tell the UI so the operator sees the amber
+                            // "Reconnecting" overlay instead of dead black.
+                            if (stallCount >= 3) {
+                                setStalled(true)
                             }
                         } else {
+                            // Playback advanced — drop every stall flag.
+                            if (stallCount > 0) {
+                                console.log("[HlsPlayer] Stream resumed after stall")
+                            }
                             stallCount = 0
                             setLoading(false)
+                            setStalled(false)
                         }
                         lastTime = video.currentTime
                     }, 1000)
@@ -250,13 +286,19 @@ function HlsPlayer({ cameraId, cameraName }) {
             </div>
             
             <div className="hls-player-video-wrapper">
-                {loading && (
-                    <div className="hls-player-loading">
+                {(loading || stalled) && (
+                    <div className={`hls-player-loading${stalled ? " stalled" : ""}`}>
                         {/*
                             Custom loading state — branded camera-pulse SVG instead
                             of the generic .loading-spinner (which is shared with
                             auth pages and empty states).  Keeps the connecting UI
-                            on-brand and matches the SourceBox green accent.
+                            on-brand and matches the SourceBox accent.
+
+                            Two trigger paths:
+                              - `loading` (initial connect, green pulse)
+                              - `stalled` (post-connect interruption, amber pulse)
+                            The `.stalled` modifier swaps the color so the
+                            operator can tell at a glance which case they're in.
                         */}
                         <svg
                             className="camera-pulse"
@@ -271,7 +313,7 @@ function HlsPlayer({ cameraId, cameraName }) {
                             <path d="M23 7l-7 5 7 5V7z" />
                             <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
                         </svg>
-                        <p>Connecting to stream...</p>
+                        <p>{stalled ? "Reconnecting to stream..." : "Connecting to stream..."}</p>
                     </div>
                 )}
 
