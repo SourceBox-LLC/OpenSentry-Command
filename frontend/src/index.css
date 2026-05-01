@@ -265,6 +265,17 @@ body {
     border-radius: 16px;
     overflow: hidden;
     transition: all 0.3s ease;
+    /*
+        Flex column so the feed-container can flex: 1 and absorb the
+        extra height the grid row hands us when one card in the row is
+        taller (e.g. streaming, with its 16:9 video + Fullscreen
+        button) than another (offline, with just the placeholder).
+        Without this, the OFFLINE card's Record/Snapshot row floats to
+        the natural content position with empty space below, while the
+        STREAMING card's row sits at the bottom — visibly misaligned.
+    */
+    display: flex;
+    flex-direction: column;
 }
 
 .camera-card:hover {
@@ -456,6 +467,15 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    /*
+        Soak up the slack height the grid row has after the camera
+        header and controls take their natural sizes.  Pairs with the
+        flex column on .camera-card above — without this, the row
+        height is stretched but the feed-container doesn't grow into
+        the extra space, leaving an empty band below the Record/
+        Snapshot buttons on offline tiles.
+    */
+    flex: 1 1 auto;
 }
 
 .camera-feed {
