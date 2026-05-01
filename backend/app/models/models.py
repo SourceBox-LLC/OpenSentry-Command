@@ -105,6 +105,13 @@ class Camera(Base):
             # path can briefly leave a Camera with node_id=None during
             # node deletion.
             "node_id": self.node.node_id if self.node else None,
+            # Human-readable node name (e.g. "Pi test", "Front yard").
+            # Surfaced alongside node_id so the dashboard can show the
+            # operator's chosen label rather than just the 8-char UUID
+            # prefix.  None on an orphaned camera (rare; happens
+            # transiently during node deletion when the cap-check path
+            # leaves a Camera row with node_id=None).
+            "node_name": self.node.name if self.node else None,
             "node_type": self.node_type,
             "capabilities": self.capabilities.split(",") if self.capabilities else [],
             "group": self.group.name if self.group else None,

@@ -341,6 +341,60 @@ body {
     letter-spacing: 0.03em;
 }
 
+/*
+    Node-association line ("on Pi test"). Auto-generated camera names
+    (USB descriptors) are often duplicated across cameras, so the
+    operator-chosen node name is what tells the operator which
+    physical box this camera lives on. This line is the second-most-
+    prominent piece of metadata after the camera name itself —
+    readable, friendly font, slightly de-emphasized vs the title.
+*/
+.camera-details .camera-node {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.75rem;
+    font-family: inherit;
+    color: var(--text-primary);
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+.camera-details .camera-node .camera-node-prefix {
+    /* The "on" word — muted relative to the node name itself so the
+       eye lands on "Pi test", not on "on". Inline so it doesn't
+       trigger .camera-details span's display rules. */
+    display: inline;
+    color: var(--text-muted);
+    font-weight: 400;
+    font-family: inherit;
+    margin-right: 4px;
+}
+
+/* Combined tech line: camera_id · NODE_TYPE. Was two separate
+   spans; combined for vertical compactness now that the camera-node
+   line takes the slot above. Inner spans preserve the original
+   mono / uppercase treatment so the line still reads as
+   "the technical details" at a glance. */
+.camera-details .camera-tech {
+    display: block;
+    margin-top: 4px;
+}
+
+.camera-details .camera-tech .camera-tech-sep {
+    display: inline;
+    color: var(--text-muted);
+    opacity: 0.5;
+    margin: 0 2px;
+}
+
+.camera-details .camera-tech .camera-tech-type {
+    display: inline;
+    font-size: 0.65rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
 /* Status Badge */
 .status-badge {
     display: flex;

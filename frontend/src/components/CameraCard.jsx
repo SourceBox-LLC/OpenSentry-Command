@@ -106,8 +106,26 @@ function CameraCard({
           <div className="camera-icon">{nodeTypeIcon}</div>
           <div className="camera-details">
             <h3>{camera.name || `Camera ${cameraId.slice(-4)}`}</h3>
-            <span>{cameraId}</span>
-            <span className="node-type">{nodeTypeLabel}</span>
+            {/*
+                Node association line.  The camera name itself is
+                auto-generated from the USB descriptor and is often
+                duplicated across cameras ("USB Webcam" × N), so the
+                operator-chosen node name is what tells the user
+                which physical box this camera lives on.  Only render
+                when we actually have a node_name — an orphaned
+                camera (mid-delete) just shows the tech line below.
+            */}
+            {camera.node_name && (
+              <span className="camera-node">
+                <span className="camera-node-prefix">on</span>
+                {camera.node_name}
+              </span>
+            )}
+            <span className="camera-tech">
+              {cameraId}
+              <span className="camera-tech-sep"> · </span>
+              <span className="camera-tech-type">{nodeTypeLabel}</span>
+            </span>
           </div>
         </div>
         <div className={`status-badge ${statusClass}`} title={badgeTitle}>
