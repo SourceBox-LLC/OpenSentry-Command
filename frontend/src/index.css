@@ -5698,6 +5698,17 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 12px;
     overflow: hidden;
+    /*
+        Always fill the parent .camera-feed-container's width.
+        Without this, the player shrink-wraps to the video element's
+        intrinsic size — which is ~300×150 (browser default) before
+        the stream has data — leaving the loading state in a tiny
+        sub-card with empty space around it.  Once segments arrive,
+        the video's 1280×720 intrinsic size expands the player
+        naturally; we want the loading state to look the same as
+        playback, not collapse to default video dimensions.
+    */
+    width: 100%;
 }
 
 .hls-player-header {
@@ -5733,6 +5744,17 @@ body {
     position: relative;
     background: #000;
     aspect-ratio: 16/9;
+    /*
+        Pair with the explicit width on .hls-player-container above.
+        aspect-ratio: 16/9 only computes height when the cross-axis
+        (width) is known — otherwise the wrapper collapses to the
+        intrinsic size of the <video> element it contains, which is
+        300×150 before any stream data arrives.  Setting width: 100%
+        gives aspect-ratio a width to compute against, so the
+        wrapper's height is always a known 16:9 of the parent's
+        width whether or not the video has data yet.
+    */
+    width: 100%;
 }
 
 .hls-player-video {
@@ -5771,11 +5793,20 @@ body {
     (auth pages, empty states, settings) is unaffected.
 */
 .hls-player-loading .camera-pulse {
-    width: 56px;
-    height: 56px;
+    /*
+        Bumped from 56 → 72 to scale up with the now-full-width
+        loading area.  At ~1280×720 video container size the icon
+        is still small enough to feel like an indicator rather than
+        an obtrusive logo, but big enough to be unambiguous at a
+        glance.  Down-scale handled by the aspect-ratio container —
+        on a narrow 400px card the icon is still 72px (small but
+        readable).
+    */
+    width: 72px;
+    height: 72px;
     color: var(--accent-green);
     animation: hls-camera-pulse 1.6s ease-in-out infinite;
-    filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.35));
+    filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.35));
 }
 
 /*
