@@ -352,13 +352,40 @@ function McpPage() {
     }
   }
 
-  const handleRevoke = async (keyId) => {
-    setRevoking(keyId)
+  const handleRevoke = async (key) => {
+    // Confirmation + active-client warning.  The MCP server validates
+    // the bearer on every tool call, so revocation takes effect
+    // immediately server-side — but a connected AI client (Claude
+    // Desktop, Cursor, mcp-remote stdio bridges, etc.) keeps sending
+    // the now-stale bearer on every subsequent tool call.  Their
+    // process stays "running" in their MCP panel; only the tool calls
+    // fail with 401, and the user often doesn't notice until they
+    // try to use the AI again.
+    //
+    // We can't push a "you've been deauth'd" notification to live
+    // connections without moving off the FastMCP stateless-HTTP mode,
+    // so the practical answer is to make sure the operator clicking
+    // Revoke knows they need to restart the AI clients themselves.
+    const confirmed = window.confirm(
+      `Revoke API key "${key.name}"?\n\n` +
+      `Any AI client currently using this key (Claude Desktop, Cursor, etc.) ` +
+      `will start receiving 401 errors on every tool call. The clients will ` +
+      `appear "running" in their MCP panel but won't actually work — you'll ` +
+      `need to quit and restart each one with a new key.\n\n` +
+      `Once revoked, this key cannot be reactivated. Generate a new key if ` +
+      `you still need MCP access.`
+    )
+    if (!confirmed) return
+
+    setRevoking(key.id)
     try {
       const token = await getToken()
-      await revokeMcpKey(() => Promise.resolve(token), keyId)
+      await revokeMcpKey(() => Promise.resolve(token), key.id)
       await loadKeys()
-      showToast("API key revoked", "success")
+      showToast(
+        `Key "${key.name}" revoked. Restart any AI client that was using it.`,
+        "success",
+      )
     } catch (err) {
       showToast(err.message || "Failed to revoke key", "error")
     } finally {
@@ -890,7 +917,12 @@ function McpPage() {
                             {k.last_used_at && <> — Last used {new Date(k.last_used_at).toLocaleDateString()}</>}
                           </span>
                         </div>
-                        <button className="btn btn-small btn-danger" onClick={() => handleRevoke(k.id)} disabled={revoking === k.id}>
+                        <button
+                          className="btn btn-small btn-danger"
+                          onClick={() => handleRevoke(k)}
+                          disabled={revoking === k.id}
+                          title="Revoke this key (you'll need to restart any AI client using it)"
+                        >
                           {revoking === k.id ? "Revoking..." : "Revoke"}
                         </button>
                       </div>
