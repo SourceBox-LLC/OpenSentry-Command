@@ -252,15 +252,46 @@ function HlsPlayer({ cameraId, cameraName }) {
             <div className="hls-player-video-wrapper">
                 {loading && (
                     <div className="hls-player-loading">
-                        <div className="loading-spinner"></div>
+                        {/*
+                            Custom loading state — branded camera-pulse SVG instead
+                            of the generic .loading-spinner (which is shared with
+                            auth pages and empty states).  Keeps the connecting UI
+                            on-brand and matches the SourceBox green accent.
+                        */}
+                        <svg
+                            className="camera-pulse"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.75"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path d="M23 7l-7 5 7 5V7z" />
+                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                        </svg>
                         <p>Connecting to stream...</p>
                     </div>
                 )}
-                
+
+                {/*
+                    No `controls` attribute on purpose.  The native HTML5 control
+                    bar (play/pause, scrubber, time, mute, fullscreen) renders on
+                    top of the video and is visible during the connect window AND
+                    during normal playback — pure visual noise for our use case:
+                      - every player is `muted` (line below) so volume is moot
+                      - live streams aren't seekable
+                      - autoplay starts on MANIFEST_PARSED so play/pause is moot
+                      - the dedicated Fullscreen button below replaces the native
+                        fullscreen icon
+                    Removing `controls` cleans up both the loading state and the
+                    steady-state playback view.  Right-click "Save video as" goes
+                    away too, which is a nice security adjacent.
+                */}
                 <video
                     ref={videoRef}
                     className="hls-player-video"
-                    controls
                     playsInline
                     muted
                 />

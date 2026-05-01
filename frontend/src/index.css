@@ -5678,12 +5678,48 @@ body {
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.8);
-    color: var(--text-primary);
+    color: var(--accent-green);
 }
 
 .hls-player-loading p {
     margin-top: 1rem;
     color: var(--text-muted);
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
+}
+
+/*
+    Branded loading icon for the HLS player.  Lightweight SVG camera —
+    no bitmap, scales cleanly at any size — pulsing in the SourceBox
+    green accent so the connecting state reads as "we're trying"
+    rather than "something is broken".  Keep this scoped under
+    .hls-player-loading so the global .loading-spinner used elsewhere
+    (auth pages, empty states, settings) is unaffected.
+*/
+.hls-player-loading .camera-pulse {
+    width: 56px;
+    height: 56px;
+    color: var(--accent-green);
+    animation: hls-camera-pulse 1.6s ease-in-out infinite;
+    filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.35));
+}
+
+@keyframes hls-camera-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.96); }
+    50%      { opacity: 1;    transform: scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    /*
+        Honor the OS-level reduced-motion preference.  The pulse is
+        decorative — drop the animation and just hold a steady mid-
+        opacity icon so users with vestibular sensitivity aren't
+        forced to watch it breathe.
+    */
+    .hls-player-loading .camera-pulse {
+        animation: none;
+        opacity: 0.7;
+    }
 }
 
 .hls-player-error {
