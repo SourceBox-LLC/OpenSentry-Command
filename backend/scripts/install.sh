@@ -2,7 +2,20 @@
 set -euo pipefail
 
 # SourceBox Sentry CloudNode Installer
-# Usage: curl -fsSL https://opensentry-command.fly.dev/install.sh | bash
+#
+# Usage:
+#   Interactive (downloads binary, then prompts for credentials):
+#     curl -fsSL https://opensentry-command.fly.dev/install.sh | bash
+#
+#   One-shot (downloads binary, registers non-interactively, starts service):
+#     curl -fsSL .../install.sh | bash -s -- \
+#       --url   https://opensentry-command.fly.dev \
+#       --node-id <node_id> \
+#       --key    <api_key>
+#
+# When --node-id and --key are passed, the script overwrites any stale
+# node.db from a previous install (e.g. cargo-run testing) so the new
+# credentials actually take effect.
 
 # ── Colors ──────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -15,6 +28,57 @@ NC='\033[0m'
 
 REPO="SourceBox-LLC/opensentry-cloud-node"
 INSTALL_DIR="${SOURCEBOX_SENTRY_INSTALL_DIR:-$HOME/.sourcebox-sentry}"
+
+# ── Parse credential args ──────────────────────────────────────────
+# When the dashboard's "Add Node" modal generates the install command
+# it now appends --url/--node-id/--key so the operator gets a single
+# one-liner that does everything.  When invoked without these args
+# (e.g. someone hand-typing the curl URL with no creds) the script
+# falls back to its old interactive setup-wizard flow.
+ARG_URL=""
+ARG_NODE_ID=""
+ARG_KEY=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --url)
+            ARG_URL="${2:-}"
+            shift 2 ;;
+        --url=*)
+            ARG_URL="${1#*=}"
+            shift ;;
+        --node-id)
+            ARG_NODE_ID="${2:-}"
+            shift 2 ;;
+        --node-id=*)
+            ARG_NODE_ID="${1#*=}"
+            shift ;;
+        --key)
+            ARG_KEY="${2:-}"
+            shift 2 ;;
+        --key=*)
+            ARG_KEY="${1#*=}"
+            shift ;;
+        *)
+            # Unknown arg — ignore so future install.sh versions can
+            # accept new flags from older dashboard one-liners without
+            # crashing the install.
+            shift ;;
+    esac
+done
+
+# All-or-nothing: if any of the three are set, all three must be.
+# Better to fail loud here than to half-configure and leave the
+# operator wondering why setup didn't run.
+HAVE_QUICK_ARGS=false
+if [ -n "$ARG_URL" ] || [ -n "$ARG_NODE_ID" ] || [ -n "$ARG_KEY" ]; then
+    if [ -z "$ARG_URL" ] || [ -z "$ARG_NODE_ID" ] || [ -z "$ARG_KEY" ]; then
+        echo -e "${RED}Error: --url, --node-id, and --key must all be provided together.${NC}"
+        echo -e "  Got: --url=${ARG_URL:-<missing>} --node-id=${ARG_NODE_ID:-<missing>} --key=${ARG_KEY:-<missing>}"
+        exit 1
+    fi
+    HAVE_QUICK_ARGS=true
+fi
 
 # ── Banner ──────────────────────────────────────────────────────────
 echo ""
@@ -397,29 +461,66 @@ elif [ -f "$INSTALL_DIR/data/node.db" ]; then
     DATA_DIR="$INSTALL_DIR"
 fi
 
-# ── Run setup wizard interactively ────────────────────────────────
+# When credentials were passed on the command line, treat the existing
+# node.db as stale (likely from a previous cargo-run / different node)
+# and force re-registration with the new creds.  Without this, an
+# operator clicking "Add Node" → copying the new one-liner → running
+# it on a Pi that already has a node.db would silently keep the old
+# credentials and start a service that doesn't actually work — exactly
+# the bug a user reported tonight.
+if [ "$HAVE_QUICK_ARGS" = true ] && [ "$IS_REGISTERED" = true ]; then
+    echo -e "${YELLOW}Existing node.db detected at ${DATA_DIR}/data/node.db — overwriting with new credentials.${NC}"
+    # The setup binary itself handles atomic node.db replacement; we
+    # don't `rm` it here, in case setup fails partway through and the
+    # operator wants to fall back to the old registration manually.
+    IS_REGISTERED=false
+fi
+
+# ── Run setup (non-interactive when creds passed, wizard otherwise) ─
 # A brand-new install is useless without a node_id + api_key, so we
-# chain setup straight onto the binary install.  The wizard walks the
-# operator through "paste the creds from Command Center" and writes
-# node.db.  We redirect stdin from /dev/tty because `curl | bash`
-# leaves stdin as the pipe from curl — without that redirect the
-# wizard's first `read` returns EOF and every prompt falls through to
-# an empty answer.
+# chain setup straight onto the binary install.  Two paths now:
+#
+#   Quick path (--url/--node-id/--key passed on the install.sh
+#   command line): run `setup --url X --node-id Y --key Z` directly.
+#   No prompts, no /dev/tty needed — works in CI, cloud-init, Ansible,
+#   anywhere the dashboard's one-liner gets pasted.
+#
+#   Interactive path (no args): run the TUI wizard from /dev/tty so
+#   the operator can paste creds.  We redirect stdin from /dev/tty
+#   because `curl | bash` leaves stdin as the pipe from curl — without
+#   that redirect the wizard's first `read` returns EOF and every
+#   prompt falls through to an empty answer.
 SETUP_RAN=false
-if [ "$IS_REGISTERED" = false ] && [ -r /dev/tty ] && [ -t 1 ]; then
+if [ "$IS_REGISTERED" = false ] && [ "$HAVE_QUICK_ARGS" = true ]; then
+    # Non-interactive path.  Run from $HOME so node.db lands at the
+    # canonical location the systemd unit uses as WorkingDirectory.
+    echo ""
+    echo -e "${BOLD}  Registering node with Command Center...${NC}"
+    if (cd "$HOME" && "$INSTALL_DIR/sourcebox-sentry-cloudnode" setup \
+            --url "$ARG_URL" --node-id "$ARG_NODE_ID" --key "$ARG_KEY"); then
+        SETUP_RAN=true
+        if [ -f "$HOME/data/node.db" ]; then
+            IS_REGISTERED=true
+            DATA_DIR="$HOME"
+        fi
+        echo -e "  ${GREEN}Registered.${NC}"
+    else
+        echo -e "${RED}Quick setup failed — check the URL and key, then try again.${NC}"
+        echo -e "  ${CYAN}cd ~ && ${INSTALL_DIR}/sourcebox-sentry-cloudnode setup --url ${ARG_URL} --node-id ${ARG_NODE_ID} --key <key>${NC}"
+        # Exit non-zero so the calling shell (or the dashboard's one-
+        # liner copy box) can detect the failure.
+        exit 1
+    fi
+elif [ "$IS_REGISTERED" = false ] && [ -r /dev/tty ] && [ -t 1 ]; then
+    # Interactive path — the original wizard flow.
     echo ""
     echo -e "${BOLD}  Register this node with Command Center${NC}"
     echo -e "  ${DIM}We'll run the setup wizard now.  You'll need a node ID and${NC}"
     echo -e "  ${DIM}API key from ${CYAN}https://opensentry-command.fly.dev${NC}${DIM} → Nodes → Add node.${NC}"
     echo ""
     if prompt_yes "Run setup wizard now?"; then
-        # Run from $HOME so node.db lands at the canonical location that
-        # the systemd unit (below) uses as WorkingDirectory.  The wizard
-        # creates ./data/ relative to CWD.
         if (cd "$HOME" && "$INSTALL_DIR/sourcebox-sentry-cloudnode" setup </dev/tty); then
             SETUP_RAN=true
-            # Re-detect registration — if setup succeeded we should now
-            # find node.db where we expect it.
             if [ -f "$HOME/data/node.db" ]; then
                 IS_REGISTERED=true
                 DATA_DIR="$HOME"
@@ -531,12 +632,33 @@ UNIT
 
 SERVICE_RUNNING=false
 if [ "$PLATFORM" = "linux" ] && check_cmd systemctl && [ -d /etc/systemd/system ]; then
-    # Skip if we can't prompt (piped, no tty) — never surprise-enable a
-    # system service in an unattended install.
-    if [ -t 1 ] && [ -r /dev/tty ]; then
-        UNIT_EXISTS=false
-        [ -f /etc/systemd/system/sourcebox-sentry-cloudnode.service ] && UNIT_EXISTS=true
+    # When we ran setup non-interactively (--url/--node-id/--key),
+    # also auto-install the systemd service without prompting.  The
+    # operator already opted in by including credentials in the
+    # one-liner; making them re-confirm via /dev/tty would defeat the
+    # whole point of "one command does everything."
+    UNIT_EXISTS=false
+    [ -f /etc/systemd/system/sourcebox-sentry-cloudnode.service ] && UNIT_EXISTS=true
 
+    if [ "$HAVE_QUICK_ARGS" = true ]; then
+        if [ "$IS_REGISTERED" = true ]; then
+            echo ""
+            if [ "$UNIT_EXISTS" = true ]; then
+                echo -e "${DIM}Refreshing systemd unit + restarting with new credentials...${NC}"
+            else
+                echo -e "${DIM}Installing systemd service (auto: --node-id passed)...${NC}"
+            fi
+            install_systemd_service || true
+        else
+            # Setup didn't actually land — defensive; the non-interactive
+            # block above exits 1 on setup failure so we shouldn't
+            # reach here, but if we do, don't start a broken service.
+            echo -e "  ${YELLOW}Skipping systemd — setup didn't complete successfully.${NC}"
+        fi
+    elif [ -t 1 ] && [ -r /dev/tty ]; then
+        # Interactive path — preserve existing behavior.  Skip if we
+        # can't prompt (piped, no tty) — never surprise-enable a
+        # system service in an unattended install.
         if [ "$UNIT_EXISTS" = true ]; then
             # Re-run of installer: always overwrite the unit so bug fixes
             # (e.g. wrong WorkingDirectory, missing `run` subcommand,

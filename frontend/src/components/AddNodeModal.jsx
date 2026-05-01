@@ -40,14 +40,33 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
   const base = window.location.origin
   // Windows installs via the MSI, not a one-liner — see the Windows
   // branch in the install-tab content below.
+  //
+  // Linux/macOS: install.sh now accepts --url/--node-id/--key (added
+  // alongside this commit), so we can hand the operator a SINGLE
+  // command that downloads the binary, registers the node, and
+  // starts the systemd service in one shot.  Previously this was a
+  // two-step modal — install.sh + a separate `setup` command — which
+  // was confusing because install.sh already auto-prompts for setup
+  // when run interactively, and silently skips it when an old
+  // node.db is present (caught a real bug tonight where a Pi with
+  // stale node.db from cargo-run testing started a systemd service
+  // with revoked credentials).
+  const linuxInstallCmd = credentials
+    ? `curl -fsSL ${base}/install.sh | bash -s -- --url "${base}" --node-id ${credentials.node_id} --key ${credentials.api_key}`
+    : `curl -fsSL ${base}/install.sh | bash`
   const installCommands = {
-    linux: `curl -fsSL ${base}/install.sh | bash`,
-    macos: `curl -fsSL ${base}/install.sh | bash`,
+    linux: linuxInstallCmd,
+    macos: linuxInstallCmd,
   }
   const MSI_DOWNLOAD_URL =
     'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi'
 
   const exe = os === 'windows' ? 'sourcebox-sentry-cloudnode.exe' : 'sourcebox-sentry-cloudnode'
+  // Quick setup command — kept for the Windows path (after MSI install,
+  // operators run this in PowerShell to register the node) and as a
+  // fallback / re-registration option on Linux/macOS.  The Linux
+  // one-liner above already includes these args, so step 2 is now
+  // optional / informational on Linux, mandatory on Windows.
   const quickSetupCmd = credentials
     ? `${exe} setup --url "${base}" --node-id ${credentials.node_id} --key ${credentials.api_key}`
     : ''
@@ -167,7 +186,7 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
 
               <div className="deployment-content">
                 <div className="command-box">
-                  <h5>1. Install CloudNode:</h5>
+                  <h5>{os === 'windows' ? '1. Install CloudNode:' : 'Install + Register (one command):'}</h5>
                   <div className="install-tabs">
                     <div className="install-tab-buttons">
                       <button className={`install-tab-btn${os === 'linux' ? ' active' : ''}`} onClick={() => setOs('linux')}>Linux</button>
@@ -197,13 +216,24 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
                     </div>
                   )}
                 </div>
-                <div className="command-box quick-setup-box">
-                  <h5>2. Quick Setup (one command):</h5>
-                  <code className="quick-setup-cmd">{quickSetupCmd}</code>
-                  <button className="btn btn-small" onClick={() => handleCopy(quickSetupCmd)}>Copy</button>
-                </div>
+                {/*
+                    Windows still needs the explicit setup step after the
+                    MSI runs.  Linux/macOS now have the credentials baked
+                    into the install one-liner above, so this section is
+                    only shown for Windows.
+                */}
+                {os === 'windows' && (
+                  <div className="command-box quick-setup-box">
+                    <h5>2. Quick Setup (one command in PowerShell):</h5>
+                    <code className="quick-setup-cmd">{quickSetupCmd}</code>
+                    <button className="btn btn-small" onClick={() => handleCopy(quickSetupCmd)}>Copy</button>
+                  </div>
+                )}
                 <div className="command-note">
-                  This configures the node and starts streaming automatically. Or run <code>{exe} setup</code> for the interactive wizard instead.
+                  {os === 'windows'
+                    ? <>This configures the node and starts streaming automatically. Or run <code>{exe} setup</code> for the interactive wizard instead.</>
+                    : <>Downloads the binary, registers the node with these credentials, installs the systemd service, and starts streaming — no extra steps. Or run <code>curl -fsSL {base}/install.sh | bash</code> without arguments to get the interactive setup wizard.</>
+                  }
                 </div>
               </div>
             </div>
