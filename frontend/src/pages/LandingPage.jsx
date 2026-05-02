@@ -355,11 +355,11 @@ function LandingPage() {
               <div className="landing-step-number">1</div>
               <div className="landing-step-content">
                 <h4>Create a free account</h4>
-                <div className="landing-code-block">
-                  <code>Sign up and create your organization</code>
-                </div>
+                <Link to="/sign-up" className="landing-btn landing-btn-primary">
+                  Sign up — it's free
+                </Link>
                 <p className="landing-step-note">
-                  Create an account at opensentry-command.fly.dev and set up your organization.
+                  Takes about 30 seconds. You'll create your organization on the way in.
                 </p>
               </div>
             </div>

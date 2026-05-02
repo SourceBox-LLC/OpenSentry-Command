@@ -32,9 +32,30 @@ if (!PUBLISHABLE_KEY) {
   throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY. Please add it to your .env file.")
 }
 
+// Match Clerk's UI to our dark brand. Without this, SignIn / SignUp /
+// PricingTable / OrganizationSwitcher render with Clerk's default light
+// theme on top of our near-black page background — looks broken. Using
+// `variables` (not @clerk/themes) keeps us off the extra dependency.
+const clerkAppearance = {
+  variables: {
+    colorBackground: '#12121a',
+    colorPrimary: '#22c55e',
+    colorText: '#ffffff',
+    colorTextSecondary: '#a1a1aa',
+    colorTextOnPrimaryBackground: '#000000',
+    colorInputBackground: 'rgba(255, 255, 255, 0.03)',
+    colorInputText: '#ffffff',
+    colorNeutral: '#ffffff',
+    colorDanger: '#ef4444',
+    colorSuccess: '#22c55e',
+    colorWarning: '#f59e0b',
+    borderRadius: '8px',
+  },
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY} appearance={clerkAppearance}>
       <BrowserRouter>
         <ToastProvider>
           <PlanInfoProvider>
