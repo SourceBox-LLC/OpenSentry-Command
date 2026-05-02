@@ -407,6 +407,19 @@ class McpActivityLog(Base):
     error = Column(String(500))
     timestamp = Column(DateTime, default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None), index=True)
 
+    # Composite index for the hot admin-query pattern in
+    # api/mcp_activity.py: WHERE org_id = ? AND timestamp >= ? ORDER BY
+    # timestamp DESC.  Single-column indexes on org_id and timestamp
+    # already exist above; the composite lets SQLite (and Postgres if
+    # we ever migrate) do a single index range-scan instead of
+    # intersecting two single-column hits.  Mirrors the pattern set by
+    # StreamAccessLog above — bites at scale (~10K+ rows per org).
+    # SQLAlchemy create_all() / sync_schema() pick this up on next
+    # boot.
+    __table_args__ = (
+        Index("ix_mcp_activity_logs_org_timestamp", "org_id", "timestamp"),
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
@@ -527,6 +540,17 @@ class MotionEvent(Base):
         DateTime,
         default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
         index=True,
+    )
+
+    # Composite index for the hot dashboard-feed query pattern:
+    # WHERE org_id = ? AND timestamp >= ? ORDER BY timestamp DESC.
+    # Notifications inbox + motion-event listing both hit this shape.
+    # Mirrors the StreamAccessLog and McpActivityLog composites — at
+    # 100K+ events per high-traffic org the single-column indexes
+    # become noticeably slower than a true range scan.  Picked up by
+    # sync_schema() on next boot.
+    __table_args__ = (
+        Index("ix_motion_events_org_timestamp", "org_id", "timestamp"),
     )
 
     def to_dict(self) -> dict:

@@ -37,8 +37,31 @@ def test_health_detailed_returns_full_shape(unauthenticated_client):
     assert "started_at" in data
     assert "time" in data
     assert set(data["checks"].keys()) == {
-        "database", "hls_cache", "viewer_usage", "sse",
+        "database", "disk", "hls_cache", "viewer_usage", "sse",
     }
+
+
+def test_health_detailed_disk_check_returns_usage(unauthenticated_client):
+    """External uptime monitors (UptimeRobot, BetterStack) poll this
+    endpoint and parse `checks.disk.percent_used` to alert before the
+    Fly volume fills.  Pin the shape — accidentally renaming a field
+    or dropping a metric would silently break those alerts."""
+    resp = unauthenticated_client.get("/api/health/detailed")
+    data = resp.json()
+
+    disk = data["checks"]["disk"]
+    # In tests we don't have /data, so the fallback to '.' kicks in.
+    # `error` is acceptable on platforms where shutil.disk_usage('.')
+    # somehow fails; the rest of the keys must be present in the
+    # success path.
+    assert disk["status"] in ("ok", "warn", "critical", "error")
+    assert "path" in disk
+    if disk["status"] != "error":
+        assert isinstance(disk["bytes_used"], int)
+        assert isinstance(disk["bytes_free"], int)
+        assert isinstance(disk["bytes_total"], int)
+        assert isinstance(disk["percent_used"], (int, float))
+        assert 0 <= disk["percent_used"] <= 100
 
 
 def test_health_detailed_database_check_includes_latency(unauthenticated_client):

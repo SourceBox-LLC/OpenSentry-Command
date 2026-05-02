@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import threading
 import time
 from collections import defaultdict
@@ -821,10 +822,59 @@ async def health_check_detailed():
         ),
     }
 
+    # ── Disk usage on the SQLite volume ──────────────────────
+    # Fly mounts the persistent volume at /data per fly.toml; the
+    # SQLite file lives there.  When this fills, writes start failing
+    # with SQLITE_IOERR — recordings, audit logs, motion events stop
+    # persisting silently.  Surface percent_used so an external uptime
+    # monitor (UptimeRobot, BetterStack, etc.) can alert before the
+    # disk hits 100%.  Local dev falls back to the current directory
+    # so the endpoint stays informative without /data existing.
+    #
+    # Thresholds chosen for SaaS-ops common practice:
+    #   - 95%+ → critical (write failures imminent; alert pages)
+    #   - 80%+ → warn (plan a volume resize; not yet failing)
+    #   - else → ok
+    disk_path = "/data" if os.path.isdir("/data") else "."
+    try:
+        disk_usage = shutil.disk_usage(disk_path)
+        disk_pct = round(
+            (disk_usage.used / disk_usage.total) * 100, 1
+        ) if disk_usage.total else 0.0
+        if disk_pct >= 95.0:
+            disk_status = "critical"
+        elif disk_pct >= 80.0:
+            disk_status = "warn"
+        else:
+            disk_status = "ok"
+        disk = {
+            "status": disk_status,
+            "path": disk_path,
+            "bytes_used": disk_usage.used,
+            "bytes_free": disk_usage.free,
+            "bytes_total": disk_usage.total,
+            "percent_used": disk_pct,
+        }
+    except OSError as exc:
+        # Stat failures should never bring the endpoint down.  Return
+        # the error class so monitoring catches the disappearance of
+        # the metric (which would itself be a signal worth alerting
+        # on once we have alerting wired up).
+        disk = {
+            "status": "error",
+            "path": disk_path,
+            "error_class": type(exc).__name__,
+        }
+        logger.warning("[Health] disk_usage(%s) failed", disk_path, exc_info=True)
+
     # ── Roll up overall status ───────────────────────────────
-    if db_check["status"] != "ok":
+    # DB ping failure or critical disk both warrant pager-grade
+    # alerting; either is "the app is up but cannot serve correctly."
+    # Warn-level signals roll up to "degraded" so a status page
+    # renders yellow without paging anyone.
+    if db_check["status"] != "ok" or disk["status"] == "critical":
         overall = "unhealthy"
-    elif viewer_usage["status"] == "warn":
+    elif viewer_usage["status"] == "warn" or disk["status"] == "warn":
         overall = "degraded"
     else:
         overall = "healthy"
@@ -837,6 +887,7 @@ async def health_check_detailed():
         "time": now_wall.isoformat(),
         "checks": {
             "database": db_check,
+            "disk": disk,
             "hls_cache": hls_cache,
             "viewer_usage": viewer_usage,
             "sse": sse,
