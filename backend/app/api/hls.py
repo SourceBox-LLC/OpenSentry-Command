@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.auth import get_current_user
 from app.core.limiter import limiter
 from app.models import Camera, CameraNode, StreamAccessLog
+from app.models.models import Setting
 from app.models.models import OrgMonthlyUsage
 
 router = APIRouter(prefix="/api/cameras/{camera_id}", tags=["streaming"])
@@ -708,6 +709,17 @@ async def push_motion_event(
     if not camera:
         raise HTTPException(status_code=404, detail="Camera not found")
 
+    # Per-org kill switch.  When an admin disables ingestion (e.g. a
+    # misbehaving sensor is flooding events and you need a server-side
+    # stop without reaching the node), short-circuit before recording
+    # anything.  Returns 200 + ingested:false so the CloudNode treats
+    # this as a successful "by design" rejection and doesn't burn its
+    # retry budget — same behaviour as the plan-cap suspension path.
+    # Default "true" so orgs that never touch the toggle keep the
+    # original always-ingest behaviour.
+    if Setting.get(db, node.org_id, "motion_ingestion_enabled", "true").lower() != "true":
+        return {"success": True, "ingested": False, "reason": "ingestion_disabled"}
+
     body = await request.json()
 
     from app.api.ws import _handle_motion_event
@@ -723,4 +735,4 @@ async def push_motion_event(
         },
     )
 
-    return {"success": True}
+    return {"success": True, "ingested": True}

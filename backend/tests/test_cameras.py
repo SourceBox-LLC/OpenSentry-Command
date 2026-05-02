@@ -87,6 +87,40 @@ def test_notification_settings_reflected_in_all_settings(admin_client):
     assert resp.json()["notifications"]["motion_notifications"] is False
 
 
+def test_get_motion_ingestion_default_enabled(admin_client):
+    """Default is on — kill switch only filters after explicit opt-out.
+    Critical to verify because flipping the default would silently
+    disable motion ingestion on every existing org."""
+    resp = admin_client.get("/api/settings/motion-ingestion")
+    assert resp.status_code == 200
+    assert resp.json() == {"motion_ingestion_enabled": True}
+
+
+def test_motion_ingestion_toggle_persists(admin_client):
+    """Admin disables, GET reflects, admin re-enables, GET reflects."""
+    off = admin_client.post("/api/settings/motion-ingestion", json={"enabled": False})
+    assert off.status_code == 200
+    assert off.json()["motion_ingestion_enabled"] is False
+
+    follow = admin_client.get("/api/settings/motion-ingestion")
+    assert follow.json()["motion_ingestion_enabled"] is False
+
+    on = admin_client.post("/api/settings/motion-ingestion", json={"enabled": True})
+    assert on.json()["motion_ingestion_enabled"] is True
+
+    follow_on = admin_client.get("/api/settings/motion-ingestion")
+    assert follow_on.json()["motion_ingestion_enabled"] is True
+
+
+def test_motion_ingestion_toggle_requires_admin(viewer_client):
+    """Members without admin can't flip the kill switch."""
+    resp = viewer_client.post(
+        "/api/settings/motion-ingestion", json={"enabled": False}
+    )
+    # Same rejection shape as other admin-gated settings endpoints.
+    assert resp.status_code in (401, 403, 404)
+
+
 def test_update_notification_settings_requires_admin(viewer_client):
     """Non-admin members can't flip the toggles."""
     resp = viewer_client.post("/api/settings/notifications", json={

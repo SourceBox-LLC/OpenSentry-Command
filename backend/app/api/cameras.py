@@ -436,6 +436,57 @@ async def get_notification_settings(
     }
 
 
+@router.get("/settings/motion-ingestion")
+async def get_motion_ingestion_setting(
+    user: AuthUser = Depends(require_view), db: Session = Depends(get_db)
+):
+    """Return whether server-side motion-event ingestion is enabled
+    for this org.
+
+    Defaults to enabled — the kill switch only takes effect after an
+    admin explicitly flips it off via POST.  This is a safety valve
+    for runaway sensors flooding events; under normal operation it
+    stays on and the per-camera recording policy is the granularity
+    operators usually want.
+    """
+    enabled = Setting.get(db, user.org_id, "motion_ingestion_enabled", "true").lower() == "true"
+    return {"motion_ingestion_enabled": enabled}
+
+
+@router.post("/settings/motion-ingestion")
+@limiter.limit("30/minute")
+async def update_motion_ingestion_setting(
+    request: Request,
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Toggle server-side motion-event ingestion for the org.
+
+    Body: ``{"enabled": true|false}``.
+
+    When set to false, ``POST /api/cameras/{id}/motion`` short-circuits
+    with ``{"ingested": false}`` and no MotionEvent rows are written.
+    Stops a misbehaving / mis-configured camera or node from flooding
+    the events table without requiring physical access to the node.
+    Audited so there's a record of who flipped it.
+    """
+    payload = await request.json()
+    enabled = bool(payload.get("enabled"))
+    Setting.set(
+        db, user.org_id, "motion_ingestion_enabled", "true" if enabled else "false"
+    )
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="motion_ingestion_toggled",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"enabled": enabled},
+        request=request,
+    )
+    return {"motion_ingestion_enabled": enabled}
+
+
 @router.post("/settings/notifications")
 @limiter.limit("30/minute")
 async def update_notification_settings(
