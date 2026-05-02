@@ -92,7 +92,7 @@ function Mcp() {
 
       <h3>Available Tools</h3>
       <p className="docs-subtle">
-        22 tools grouped by capability. VISUAL tools return images the model can look at,
+        23 tools grouped by capability. VISUAL tools return images the model can look at,
         READ tools return structured data, and WRITE tools create or update state.
       </p>
 

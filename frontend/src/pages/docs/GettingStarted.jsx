@@ -49,7 +49,7 @@ function GettingStarted() {
           <h4>Segment</h4>
           <p>A <code>.ts</code> HLS video chunk — 1 second by default. CloudNode emits
           a new one every second and pushes it to Command Center, which caches
-          roughly 15 at a time per camera in RAM for low-latency playback.</p>
+          roughly 60 at a time per camera in RAM for low-latency playback.</p>
         </div>
         <div className="docs-concept">
           <h4>Incident</h4>

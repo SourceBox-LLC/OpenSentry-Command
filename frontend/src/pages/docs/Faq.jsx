@@ -65,7 +65,7 @@ function Faq() {
       <ul>
         <li>All traffic between CloudNode, Command Center, and your browser is TLS-encrypted</li>
         <li>Node API keys are stored as SHA-256 hashes server-side and encrypted at rest on the node (AES-256-GCM, machine-derived key)</li>
-        <li>Live segments are cached in Command Center RAM for a rolling ~15s window, then evicted — no long-term cloud storage</li>
+        <li>Live segments are cached in Command Center RAM for a rolling ~60s window, then evicted — no long-term cloud storage</li>
         <li>Recordings and snapshots live only on your node, in an encrypted SQLite DB</li>
         <li>Every authenticated request is logged for audit</li>
       </ul>
@@ -75,7 +75,8 @@ function Faq() {
         Yes — the Command Center source is available at <a href="https://github.com/SourceBox-LLC/OpenSentry-Command" target="_blank" rel="noopener noreferrer">github.com/SourceBox-LLC/OpenSentry-Command</a>
         under the AGPL-3.0. The project ships a <code>fly.toml</code> for Fly.io deployment
         and a <code>Dockerfile</code> for anywhere else. You'll need your own Clerk
-        organization for auth and a Postgres database.
+        organization for auth; the database is SQLite by default (<code>DATABASE_URL</code>{" "}
+        env var if you want to point it elsewhere).
       </p>
 
       <h3>Which MCP clients does SourceBox Sentry work with?</h3>

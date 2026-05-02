@@ -38,7 +38,7 @@ function Plans() {
             <tr><td>Danger-zone tools (log wipe, full reset)</td><td>—</td><td>Yes</td><td>Yes</td></tr>
             <tr><td>MCP integration</td><td>—</td><td>Yes</td><td>Yes</td></tr>
             <tr><td>MCP rate limit (per key)</td><td>—</td><td>30 / min · 5,000 / day</td><td>120 / min · 30,000 / day</td></tr>
-            <tr><td>Priority support</td><td>—</td><td>—</td><td>24h first-response SLA</td></tr>
+            <tr><td>Priority support</td><td>—</td><td>—</td><td>Best-effort priority</td></tr>
           </tbody>
         </table>
       </div>

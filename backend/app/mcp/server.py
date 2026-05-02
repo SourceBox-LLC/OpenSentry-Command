@@ -1313,7 +1313,7 @@ _APPROX_SEGMENT_SECONDS = 2.0
         "buffered) and stores them as a single .ts blob the human reviewer can "
         "play back from the dashboard. Use after attach_snapshot when motion "
         "context matters more than a single frame. The camera's stream must "
-        "have been live recently — only segments still in the buffer (~30s "
+        "have been live recently — only segments still in the buffer (~60s "
         "depending on server config) are available."
     ),
 )
