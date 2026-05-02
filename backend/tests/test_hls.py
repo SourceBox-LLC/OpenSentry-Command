@@ -308,6 +308,81 @@ def test_segment_cache_evicts_oldest_when_over_limit(
         assert f"segment_{i:05d}.ts" in cached
 
 
+def test_global_cache_cap_evicts_across_cameras(db, monkeypatch):
+    """Direct unit test for _evict_global_oldest — the eviction loop
+    that keeps the SUM of all camera caches under
+    SEGMENT_CACHE_MAX_TOTAL_BYTES.
+
+    Per-camera eviction is already covered above; this pins the
+    cross-camera behaviour because the policy choice (oldest-first
+    globally, ignoring per-camera ownership) is the load-bearing
+    decision.  A future refactor that switched to per-camera fairness
+    would silently fail to recover memory under the pathological
+    "many cameras, low per-camera segment count" scenario the global
+    cap exists for.
+    """
+    import time
+    from app.api.hls import _segment_cache, _evict_global_oldest
+
+    # Reset the module-level cache so the test is hermetic.  Other
+    # tests in this file may have left entries behind via the push
+    # endpoint; we isolate by clearing.
+    _segment_cache.clear()
+
+    # Three cameras, three segments each, deterministic timestamps.
+    # Bytes ascending so the budget math is easy to read.
+    base_ts = time.monotonic()
+    for cam_idx in range(3):
+        cam_id = f"cam_{cam_idx}"
+        for seg_idx in range(3):
+            # Timestamps interleave across cameras so oldest-first
+            # eviction crosses camera boundaries — that's the
+            # behaviour we want to pin.  Order:
+            #   cam_0/seg_0 < cam_1/seg_0 < cam_2/seg_0 < cam_0/seg_1 < ...
+            ts = base_ts + (seg_idx * 3.0) + cam_idx
+            body = b"x" * 100  # 100 bytes per segment
+            _segment_cache.setdefault(cam_id, {})[f"segment_{seg_idx:05d}.ts"] = (body, ts)
+
+    # 9 segments × 100 bytes = 900 total.  Cap at 500 → must evict
+    # the 4 oldest to land at 500.
+    evicted = _evict_global_oldest(500)
+    assert evicted == 4
+
+    # The 4 oldest-by-ts evictees: cam_0/seg_0, cam_1/seg_0,
+    # cam_2/seg_0, cam_0/seg_1.  The remaining 5 segments must all
+    # have ts >= base_ts + 4.0 (cam_1/seg_1).
+    remaining = [
+        (cam_id, fname, ts)
+        for cam_id, cache in _segment_cache.items()
+        for fname, (_body, ts) in cache.items()
+    ]
+    assert len(remaining) == 5
+
+    # cam_0 should have lost both seg_0 and seg_1; only seg_2 remains.
+    assert "segment_00000.ts" not in _segment_cache.get("cam_0", {})
+    assert "segment_00001.ts" not in _segment_cache.get("cam_0", {})
+    assert "segment_00002.ts" in _segment_cache.get("cam_0", {})
+
+    # cam_1 should have lost seg_0; seg_1 + seg_2 remain.
+    assert "segment_00000.ts" not in _segment_cache.get("cam_1", {})
+    assert "segment_00001.ts" in _segment_cache.get("cam_1", {})
+    assert "segment_00002.ts" in _segment_cache.get("cam_1", {})
+
+
+def test_global_cache_cap_no_op_when_under_budget(db):
+    """When total bytes are already under cap, eviction must not
+    touch anything.  Cheap-path correctness."""
+    import time
+    from app.api.hls import _segment_cache, _evict_global_oldest
+
+    _segment_cache.clear()
+    _segment_cache["cam_a"] = {"segment_00001.ts": (b"x" * 100, time.monotonic())}
+
+    evicted = _evict_global_oldest(10_000)  # cap way above 100 bytes
+    assert evicted == 0
+    assert _segment_cache["cam_a"] == {"segment_00001.ts": (b"x" * 100, _segment_cache["cam_a"]["segment_00001.ts"][1])}
+
+
 # ── Playlist rewriting ───────────────────────────────────────────────
 
 _RAW_PLAYLIST = (

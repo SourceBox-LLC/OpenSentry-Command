@@ -274,6 +274,75 @@ def _evict_segment_cache(camera_id: str):
         del cam_cache[key]
 
 
+def _segment_cache_total_bytes() -> int:
+    """Compute the live total bytes held in _segment_cache.
+
+    Cheap O(N) walk — N is bounded by
+    SEGMENT_CACHE_MAX_PER_CAMERA × <active cameras> which sits at
+    ~30K entries even at 500 cameras, fine to call on the post-push
+    hot path.  An incremental running counter would be marginally
+    faster but races with the existing pop/del paths in
+    _evict_segment_cache / cleanup_camera_cache / _evict_stale_cameras
+    that don't go through a helper.  Recomputing keeps the cap
+    honest without forcing a refactor of every dict mutation.
+    """
+    return sum(
+        len(body)
+        for cam_cache in _segment_cache.values()
+        for body, _ts in cam_cache.values()
+    )
+
+
+def _evict_global_oldest(max_total_bytes: int) -> int:
+    """Drop the oldest segments globally until the total fits the cap.
+
+    Called after each push.  Sort by timestamp ascending across ALL
+    cameras and pop the oldest entries until total <= cap.  Returns
+    the number of segments evicted (mostly for tests / observability).
+
+    Policy choice: prefer freshness.  When the cap is hit, the live
+    edge of every active camera is more valuable than the tail of
+    any single camera — so global oldest-first beats per-camera
+    fairness.  A camera that hasn't received a segment in a while is
+    the natural sacrifice; an active stream's recent segments stay.
+    """
+    total = _segment_cache_total_bytes()
+    if total <= max_total_bytes:
+        return 0
+
+    # Build a flat list of (ts, camera_id, filename, byte_size).
+    # Snapshot the keys we're about to mutate so we don't iterate
+    # the dict while modifying it (CPython would raise RuntimeError).
+    candidates: list[tuple[float, str, str, int]] = []
+    for cam_id, cam_cache in _segment_cache.items():
+        for fname, (body, ts) in cam_cache.items():
+            candidates.append((ts, cam_id, fname, len(body)))
+    candidates.sort()
+
+    evicted = 0
+    for ts, cam_id, fname, size in candidates:
+        if total <= max_total_bytes:
+            break
+        cam_cache = _segment_cache.get(cam_id)
+        if cam_cache is None:
+            continue
+        if cam_cache.pop(fname, None) is not None:
+            total -= size
+            evicted += 1
+        # If the camera's cache is now empty, drop the empty bucket
+        # too so _segment_cache size stays accurate for monitoring.
+        if cam_cache is not None and not cam_cache:
+            _segment_cache.pop(cam_id, None)
+
+    if evicted:
+        logger.warning(
+            "[HLS] Global cache cap hit — evicted %d oldest segments "
+            "(total now %d bytes, cap %d bytes)",
+            evicted, total, max_total_bytes,
+        )
+    return evicted
+
+
 def _evict_stale_cameras():
     """Remove segment caches for cameras that haven't received data recently."""
     now = time.monotonic()
@@ -593,8 +662,14 @@ async def push_segment(
     # handlers for the same camera interleaved around an await point.
     _segment_cache.setdefault(camera_id, {})[filename] = (body, time.monotonic())
     _evict_segment_cache(camera_id)
+    # Global byte ceiling — bounds the SUM of all camera caches.
+    # Cheap when under budget (single comparison after the bytes-sum
+    # walk); fires the eviction loop only when an unexpected surge in
+    # active cameras would otherwise OOM the box.  See
+    # SEGMENT_CACHE_MAX_TOTAL_BYTES in config.py for the rationale.
+    _evict_global_oldest(settings.SEGMENT_CACHE_MAX_TOTAL_BYTES)
 
-    return {"success": True, "cached_segments": len(_segment_cache[camera_id])}
+    return {"success": True, "cached_segments": len(_segment_cache.get(camera_id, {}))}
 
 
 @router.post("/playlist")

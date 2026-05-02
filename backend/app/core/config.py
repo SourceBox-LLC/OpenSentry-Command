@@ -38,6 +38,20 @@ class Config:
     SEGMENT_CACHE_MAX_PER_CAMERA: int = int(
         os.getenv("SEGMENT_CACHE_MAX_PER_CAMERA", "60")
     )
+    # Hard byte ceiling on the SUM of all camera segment caches.
+    # SEGMENT_CACHE_MAX_PER_CAMERA bounds per-camera; this bounds the
+    # total.  Without it, an unexpected surge in active cameras (e.g.
+    # an MSP onboarding 200 nodes in one day) can OOM the Fly machine
+    # before the per-camera limits would even rotate.  When exceeded,
+    # the global eviction in hls.py drops the oldest segments across
+    # ALL cameras until the total is back under the cap — preserves
+    # the live-edge for active cameras at the cost of dropping the
+    # tail of less-active ones.  Default 2 GiB chosen to leave the
+    # 1 GiB Fly machine headroom for the rest of the app on a 4 GiB
+    # box (typical production size).  Bump when you scale the box.
+    SEGMENT_CACHE_MAX_TOTAL_BYTES: int = int(
+        os.getenv("SEGMENT_CACHE_MAX_TOTAL_BYTES", str(2 * 1024 * 1024 * 1024))
+    )
     # Max size of a single pushed segment (safety valve).  Enforced
     # via Content-Length BEFORE the body is read, plus a post-read
     # check for chunked transfers.
