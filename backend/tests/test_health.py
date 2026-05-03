@@ -37,8 +37,79 @@ def test_health_detailed_returns_full_shape(unauthenticated_client):
     assert "started_at" in data
     assert "time" in data
     assert set(data["checks"].keys()) == {
-        "database", "disk", "hls_cache", "viewer_usage", "sse",
+        "database", "disk", "hls_cache", "viewer_usage", "sse", "resend",
     }
+
+
+def test_health_detailed_resend_check_disabled_by_default(unauthenticated_client, monkeypatch):
+    """When EMAIL_ENABLED=false (the default for local dev / tests), the
+    resend check reports 'disabled' rather than 'unconfigured' or 'ok'.
+    This split lets the operator distinguish "I forgot to set the
+    secret" from "I left the kill-switch off intentionally."
+    """
+    from app.core.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "EMAIL_ENABLED", False)
+
+    resp = unauthenticated_client.get("/api/health/detailed")
+    data = resp.json()
+
+    assert data["checks"]["resend"]["status"] == "disabled"
+    # Queue depth is always reported as an int, never None — status-page
+    # consumers should be able to render it without null-checks.
+    assert isinstance(data["checks"]["resend"]["queue_depth"], int)
+
+
+def test_health_detailed_resend_check_unconfigured(unauthenticated_client, monkeypatch):
+    """Kill-switch on but secret missing → 'unconfigured' (operator
+    forgot a step).  Different from 'disabled' so the diagnosis is
+    obvious from the status page."""
+    from app.core.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(app_settings, "RESEND_API_KEY", "")
+
+    resp = unauthenticated_client.get("/api/health/detailed")
+    data = resp.json()
+
+    assert data["checks"]["resend"]["status"] == "unconfigured"
+
+
+def test_health_detailed_resend_check_ok_when_configured(unauthenticated_client, monkeypatch):
+    """Kill-switch on AND secret set → 'ok'."""
+    from app.core.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "EMAIL_ENABLED", True)
+    monkeypatch.setattr(app_settings, "RESEND_API_KEY", "re_test_dummy")
+    monkeypatch.setattr(app_settings, "EMAIL_FROM_ADDRESS", "n@s.test")
+
+    resp = unauthenticated_client.get("/api/health/detailed")
+    data = resp.json()
+
+    assert data["checks"]["resend"]["status"] == "ok"
+
+
+def test_health_detailed_resend_queue_depth_counts_pending(unauthenticated_client, db):
+    """Queue depth is the count of EmailOutbox rows in 'pending' status —
+    drives status-page graphs and informs alerting on a backlog that
+    isn't draining."""
+    from app.models.models import EmailOutbox
+
+    # Mix of statuses: only 'pending' should count.
+    for status, n in [("pending", 3), ("sent", 5), ("failed", 1)]:
+        for i in range(n):
+            db.add(EmailOutbox(
+                org_id="org_x",
+                recipient_email=f"u{i}@x.test",
+                subject="x",
+                body_text="t",
+                body_html="<p>t</p>",
+                kind="camera_offline",
+                status=status,
+            ))
+    db.commit()
+
+    resp = unauthenticated_client.get("/api/health/detailed")
+    data = resp.json()
+
+    assert data["checks"]["resend"]["queue_depth"] == 3
 
 
 def test_health_detailed_disk_check_returns_usage(unauthenticated_client):

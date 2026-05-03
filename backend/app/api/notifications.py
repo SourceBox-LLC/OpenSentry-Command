@@ -28,8 +28,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_view
+from app.core.config import settings
 from app.core.database import SessionLocal, get_db
-from app.models.models import Notification, Setting, UserNotificationState
+from app.core.recipients import get_recipient_emails
+from app.models.models import EmailOutbox, Notification, Setting, UserNotificationState
 
 
 # ── Per-org preference gate ────────────────────────────────────────
@@ -44,6 +46,34 @@ _NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     "camera_offline": ("camera_transition_notifications", True),
     "node_online": ("node_transition_notifications", True),
     "node_offline": ("node_transition_notifications", True),
+}
+
+
+# ── Email side-channel preference gate ─────────────────────────────
+# Per-org per-kind "should we email this notification?" toggle.  The
+# inbox gate above (_NOTIFICATION_KIND_TO_SETTING) decides whether
+# the notification appears in the bell-icon panel; this map decides
+# whether it ALSO emails out.
+#
+# Different defaults from the inbox gate on purpose:
+#   - The "online" recovery events are NOT emailed even when the
+#     "offline" events are — recovery is good news that doesn't need
+#     a midnight email.  Keeps the inbox feed and the email feed
+#     intentionally different shapes.
+#   - Motion is omitted entirely from this map for v1.  Adding it
+#     before the digest/cooldown work in v1.1 is the difference
+#     between "useful" and "unsubscribed within an hour."
+#   - All other defaults are True so an org that hasn't visited the
+#     settings page still gets the operator-critical alerts.
+#
+# When EMAIL_ENABLED is False globally (the kill-switch), this gate
+# is bypassed entirely and no rows get enqueued — we don't enqueue
+# rows just to have the worker discard them.
+_EMAIL_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
+    "camera_offline":   ("email_camera_offline",   True),
+    "node_offline":     ("email_node_offline",     True),
+    "disk_critical":    ("email_disk_critical",    True),
+    "incident_created": ("email_incident_created", True),
 }
 
 
@@ -64,6 +94,167 @@ def notifications_enabled(db: Session, org_id: str, kind: str) -> bool:
     if val is None:
         return default
     return val == "true"
+
+
+def email_enabled_for_kind(db: Session, org_id: str, kind: str) -> bool:
+    """Return True if this org wants ``kind`` notifications emailed out.
+
+    Two gates in series:
+      1. ``settings.EMAIL_ENABLED`` — global kill-switch.  If False, no
+         org gets emails regardless of their per-kind preference.
+      2. Per-org per-kind setting in the ``Setting`` table.  Defaults
+         from ``_EMAIL_KIND_TO_SETTING`` apply when the row is absent.
+
+    Unknown kinds return False — the inbox gate defaults unknown kinds
+    to ENABLED for forward-compat, but the email gate is the opposite:
+    we'd rather miss emailing a brand-new kind than blast users on it
+    by default before the per-kind setting UI catches up.
+    """
+    if not settings.EMAIL_ENABLED:
+        return False
+    cfg = _EMAIL_KIND_TO_SETTING.get(kind)
+    if cfg is None:
+        return False
+    key, default = cfg
+    val = Setting.get(db, org_id, key, None)
+    if val is None:
+        return default
+    return val == "true"
+
+
+def _build_email_content(notif: Notification) -> tuple[str, str, str]:
+    """Render a notification into (subject, body_text, body_html).
+
+    v1: inlined string templates derived from the notification's
+    title and body fields.  Day 3 of the plan replaces this with
+    proper Jinja2 templates per kind (camera_offline.html.j2 etc.)
+    that share a branded layout — this function will become a thin
+    wrapper around ``app.core.email_templates.render(kind, notif)``.
+
+    Keeping the v1 shape minimal-but-useful so the operator-critical
+    events ship before the templating work lands.  Title goes in the
+    subject; body becomes the plain-text and HTML email body, with
+    the brand and a deep link added.
+    """
+    subject = f"[SourceBox Sentry] {notif.title}"
+
+    link_path = notif.link or "/dashboard"
+    full_link = f"{settings.FRONTEND_URL.rstrip('/')}{link_path}"
+
+    body_text = (
+        f"{notif.title}\n\n"
+        f"{notif.body}\n\n"
+        f"View in dashboard: {full_link}\n\n"
+        f"— SourceBox Sentry"
+    )
+
+    body_html = (
+        f"<div style=\"font-family:system-ui,sans-serif;max-width:560px;"
+        f"padding:16px;color:#111\">"
+        f"<h2 style=\"margin:0 0 12px;color:#111\">{_escape(notif.title)}</h2>"
+        f"<p style=\"margin:0 0 16px;color:#444;line-height:1.5\">"
+        f"{_escape(notif.body)}</p>"
+        f"<p style=\"margin:0 0 24px\"><a href=\"{full_link}\" "
+        f"style=\"color:#22c55e;text-decoration:none;font-weight:600\">"
+        f"View in dashboard →</a></p>"
+        f"<hr style=\"border:none;border-top:1px solid #e5e5e5;margin:24px 0\">"
+        f"<p style=\"margin:0;color:#888;font-size:12px\">"
+        f"You're receiving this because you're a member of an organization "
+        f"using SourceBox Sentry. Adjust email preferences in your "
+        f"<a href=\"{settings.FRONTEND_URL.rstrip('/')}/settings\" "
+        f"style=\"color:#888\">settings page</a>."
+        f"</p>"
+        f"</div>"
+    )
+
+    return subject, body_text, body_html
+
+
+def _escape(s: str) -> str:
+    """Minimal HTML escape for body text inserted into the email
+    template.  Notification titles and bodies are operator-controlled
+    strings (server-side rendered, not user-typed forms), but defense
+    in depth — a malformed camera name shouldn't break the email's
+    HTML structure or open an XSS path."""
+    if not s:
+        return ""
+    return (
+        s.replace("&", "&amp;")
+         .replace("<", "&lt;")
+         .replace(">", "&gt;")
+         .replace('"', "&quot;")
+         .replace("'", "&#39;")
+    )
+
+
+def _enqueue_email_for_notification(
+    session: Session, notif: Notification, audience: str
+) -> int:
+    """Look up recipients and insert one EmailOutbox row per address.
+
+    Returns the count of rows enqueued (zero on any failure).  Never
+    raises — this is called from inside ``create_notification`` and a
+    failure here must not roll back the inbox notification we just
+    committed.
+
+    Caller must have already verified ``email_enabled_for_kind()`` is
+    True; this function unconditionally enqueues for the audience.
+    """
+    try:
+        recipients = get_recipient_emails(notif.org_id, audience)
+    except Exception:
+        logger.exception(
+            "[Notifications] recipient lookup failed for org=%s kind=%s",
+            notif.org_id, notif.kind,
+        )
+        return 0
+
+    if not recipients:
+        return 0
+
+    try:
+        subject, body_text, body_html = _build_email_content(notif)
+    except Exception:
+        logger.exception(
+            "[Notifications] email template render failed for kind=%s",
+            notif.kind,
+        )
+        return 0
+
+    enqueued = 0
+    for addr in recipients:
+        try:
+            session.add(EmailOutbox(
+                org_id=notif.org_id,
+                recipient_email=addr,
+                subject=subject,
+                body_text=body_text,
+                body_html=body_html,
+                kind=notif.kind,
+                notification_id=notif.id,
+                status="pending",
+            ))
+            enqueued += 1
+        except Exception:
+            logger.exception(
+                "[Notifications] enqueue failed for org=%s kind=%s addr=%s",
+                notif.org_id, notif.kind, addr,
+            )
+
+    if enqueued:
+        try:
+            session.commit()
+        except Exception:
+            logger.exception(
+                "[Notifications] outbox commit failed for kind=%s", notif.kind,
+            )
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            return 0
+
+    return enqueued
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +411,23 @@ def create_notification(
         payload["type"] = "notification"
         payload["audience"] = audience
         notification_broadcaster.notify(org_id, payload)
+
+        # Email side-channel.  Same gate pattern as the inbox
+        # preference, different setting key.  Failure never blocks
+        # the caller — the inbox notification is already committed
+        # and a missing email is recoverable (operator can re-trigger
+        # the alert), but a failure that propagated out of here
+        # would prevent the notification from showing up in the
+        # bell panel too.
+        try:
+            if email_enabled_for_kind(session, org_id, kind):
+                _enqueue_email_for_notification(session, notif, audience)
+        except Exception:
+            logger.exception(
+                "[Notifications] email enqueue side-channel failed for kind=%s",
+                kind,
+            )
+
         return notif
     except Exception:
         logger.exception("[Notifications] Failed to create notification")

@@ -100,6 +100,29 @@ RELEASE_CACHE_REFRESH_INTERVAL_SECONDS = int(
     os.getenv("RELEASE_CACHE_REFRESH_INTERVAL_SECONDS", "600")
 )
 
+# How often to poll disk usage and emit ``disk_critical`` notifications.
+# 5 min is fast enough that we beat /data filling up between ticks
+# (writes are bytes-per-second scale, not megabytes-per-second), but
+# slow enough to keep the system call cost trivial.  Per-tick work is
+# one ``shutil.disk_usage`` and one in-memory threshold compare.
+DISK_CHECK_INTERVAL_SECONDS = int(os.getenv("DISK_CHECK_INTERVAL_SECONDS", "300"))
+# Threshold at which we email "your disk is filling up — act now."
+# Mirrors the 95% threshold used by /api/health/detailed so the email
+# and the dashboard agree.  Below this we leave it to the inbox + the
+# status page to communicate "approaching" warnings.
+DISK_CRITICAL_THRESHOLD_PERCENT = float(
+    os.getenv("DISK_CRITICAL_THRESHOLD_PERCENT", "95.0")
+)
+# After emitting a critical alert, re-emit no sooner than this.  6h is
+# the right shape for "I emailed you about this; if you haven't fixed
+# it in 6h, here's another nudge" — paging cadence without becoming a
+# spam trigger.  Per-process state, so a process restart resets the
+# debounce; that's deliberate (an operator restarting the server is
+# probably already aware of the disk situation).
+DISK_CRITICAL_REEMIT_INTERVAL_SECONDS = int(
+    os.getenv("DISK_CRITICAL_REEMIT_INTERVAL_SECONDS", str(6 * 3600))
+)
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -116,6 +139,11 @@ async def lifespan(app):
     # worker just logs "would have sent" lines for any outbox row
     # that gets enqueued.  See app/core/email_worker.py.
     email_worker_task = asyncio.create_task(email_worker_loop())
+    # Disk-check loop polls /data every 5 min and emits a
+    # 'disk_critical' notification (which the email side-channel
+    # then routes to org admins) when usage crosses 95%.  Pure
+    # in-memory debounce, no DB persistence — see _disk_check_loop.
+    disk_check_task = asyncio.create_task(_disk_check_loop())
     print(
         f"[App] SourceBox Sentry Command Center started "
         f"(log retention: {LOG_RETENTION_DAYS}d, "
@@ -128,6 +156,7 @@ async def lifespan(app):
     viewer_usage_task.cancel()
     release_refresh_task.cancel()
     email_worker_task.cancel()
+    disk_check_task.cancel()
     print("[System] Shutdown complete")
 
 
@@ -622,6 +651,131 @@ async def _viewer_usage_flush_loop():
             logger.exception("[ViewerUsage] Flush loop tick failed")
 
 
+# Per-process debounce for the disk_critical alert.  Reset on
+# process restart, which is fine — an operator restarting the
+# server is presumably already aware of the disk situation.
+_disk_critical_last_emit_monotonic: Optional[float] = None
+
+
+def _check_and_emit_disk_critical(db) -> bool:
+    """Sample disk usage and emit a disk_critical notification on
+    crossing the threshold.  Returns True if an alert was emitted
+    this call (used by the test suite to drive the function
+    deterministically).
+
+    Extracted from the loop so tests can call it directly with a
+    fake disk_usage stub instead of waiting on the 5-min sleep.
+
+    The emit goes to every org in the system because the disk
+    belongs to the Command Center, not to any single tenant — every
+    org admin is downstream of the same volume filling up.  We
+    iterate orgs that have at least one membership in the database
+    rather than guessing at a global broadcast: org-scoped
+    notifications still need an org_id.
+    """
+    global _disk_critical_last_emit_monotonic
+
+    disk_path = "/data" if os.path.isdir("/data") else "."
+    try:
+        usage = shutil.disk_usage(disk_path)
+    except OSError:
+        logger.warning("[DiskCheck] disk_usage(%s) failed", disk_path, exc_info=True)
+        return False
+
+    if usage.total <= 0:
+        return False
+    pct = (usage.used / usage.total) * 100
+
+    if pct < DISK_CRITICAL_THRESHOLD_PERCENT:
+        # Recovered below threshold — clear the debounce so the next
+        # critical hit emits immediately rather than waiting out a
+        # stale 6h cooldown.
+        _disk_critical_last_emit_monotonic = None
+        return False
+
+    now = monotonic()
+    last = _disk_critical_last_emit_monotonic
+    if last is not None and (now - last) < DISK_CRITICAL_REEMIT_INTERVAL_SECONDS:
+        # Still within the re-emit window — log but don't emit.
+        return False
+
+    # Find orgs to notify.  Pull from CameraNode (every org with at
+    # least one node has skin in this game) — small set, fast scan.
+    from app.api.notifications import create_notification
+    from app.models.models import CameraNode
+
+    org_ids = {row[0] for row in db.query(CameraNode.org_id).distinct() if row[0]}
+    if not org_ids:
+        # Nothing to notify (test installs / brand-new deploy).  Don't
+        # set the debounce so the FIRST org to register a node still
+        # gets the alert.
+        return False
+
+    pct_rounded = round(pct, 1)
+    bytes_free_gb = round(usage.free / (1024 ** 3), 1)
+    title = "Command Center disk usage is critical"
+    body = (
+        f"The Command Center volume is {pct_rounded}% full "
+        f"({bytes_free_gb} GB free).  Recordings and audit logs may "
+        f"start failing to persist when the disk fills.  Resize the "
+        f"Fly volume or free space immediately."
+    )
+
+    for org_id in org_ids:
+        try:
+            create_notification(
+                org_id=org_id,
+                kind="disk_critical",
+                title=title,
+                body=body,
+                severity="critical",
+                audience="admin",
+                link="/admin/health",
+                meta={"percent_used": pct_rounded, "bytes_free": usage.free},
+                db=db,
+            )
+        except Exception:
+            logger.exception(
+                "[DiskCheck] notification emit failed for org=%s", org_id,
+            )
+
+    _disk_critical_last_emit_monotonic = now
+    logger.warning(
+        "[DiskCheck] emitted disk_critical to %d org(s) at %.1f%% used",
+        len(org_ids), pct_rounded,
+    )
+    return True
+
+
+async def _disk_check_loop():
+    """Background task — poll disk usage, emit disk_critical when full.
+
+    Runs every ``DISK_CHECK_INTERVAL_SECONDS`` (5 min default).  Per-tick
+    work: one ``shutil.disk_usage`` call and one threshold compare,
+    plus (on alert) one notification emit per org.
+
+    Emits are debounced per-process for 6h via
+    ``_disk_critical_last_emit_monotonic`` so a stuck-at-99% volume
+    doesn't generate an email every 5 minutes.  The debounce resets
+    automatically when usage drops back below threshold OR when the
+    process restarts (deliberate — see ``_check_and_emit_disk_critical``).
+    """
+    while True:
+        try:
+            await asyncio.sleep(DISK_CHECK_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            return
+
+        try:
+            db = SessionLocal()
+            try:
+                _check_and_emit_disk_critical(db)
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("[DiskCheck] tick failed")
+
+
 async def _offline_sweep_loop():
     """Background task — periodically flip stale 'online' rows to 'offline'.
 
@@ -880,11 +1034,46 @@ async def health_check_detailed():
         }
         logger.warning("[Health] disk_usage(%s) failed", disk_path, exc_info=True)
 
+    # ── Email transport (Resend) ─────────────────────────────
+    # Three states surface separately so an operator can tell
+    # "I forgot to set the secret" from "I left the kill-switch off"
+    # at a glance.  Queue depth is the worker's backlog — a steady
+    # non-zero value means the worker is running but sends are
+    # failing (or Resend is rate-limiting us); a spike followed by
+    # decay is normal.
+    resend_status = "ok"
+    if not settings.EMAIL_ENABLED:
+        resend_status = "disabled"
+    elif not (settings.RESEND_API_KEY and settings.EMAIL_FROM_ADDRESS):
+        resend_status = "unconfigured"
+    queue_depth = 0
+    try:
+        from app.models.models import EmailOutbox
+        db = SessionLocal()
+        try:
+            queue_depth = (
+                db.query(EmailOutbox)
+                .filter(EmailOutbox.status == "pending")
+                .count()
+            )
+        finally:
+            db.close()
+    except Exception:
+        # Don't fail the health endpoint over a count query.  Surface
+        # the count as -1 so a status page can flag "we don't know."
+        logger.warning("[Health] EmailOutbox count query failed", exc_info=True)
+        queue_depth = -1
+    resend = {"status": resend_status, "queue_depth": queue_depth}
+
     # ── Roll up overall status ───────────────────────────────
     # DB ping failure or critical disk both warrant pager-grade
     # alerting; either is "the app is up but cannot serve correctly."
     # Warn-level signals roll up to "degraded" so a status page
     # renders yellow without paging anyone.
+    #
+    # Email status is informational only — even an unconfigured
+    # transport doesn't degrade the overall app; it just means the
+    # operator hasn't finished setting up their alerts.
     if db_check["status"] != "ok" or disk["status"] == "critical":
         overall = "unhealthy"
     elif viewer_usage["status"] == "warn" or disk["status"] == "warn":
@@ -904,5 +1093,6 @@ async def health_check_detailed():
             "hls_cache": hls_cache,
             "viewer_usage": viewer_usage,
             "sse": sse,
+            "resend": resend,
         },
     }

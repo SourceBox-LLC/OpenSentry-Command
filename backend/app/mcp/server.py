@@ -1175,6 +1175,40 @@ def create_incident(
         db.add(incident)
         db.commit()
         db.refresh(incident)
+
+        # Fire an inbox + email notification.  Audience='all' because
+        # any member of the org should know an AI agent created an
+        # incident in their environment — this is the hand-off from
+        # automated triage to human review.  ``severity='warning'``
+        # for low/medium incidents and 'critical' for high/critical
+        # so the inbox styling matches the actual urgency.
+        try:
+            from app.api.notifications import create_notification
+
+            notif_severity = "critical" if severity in ("high", "critical") else "warning"
+            create_notification(
+                org_id=org_id,
+                kind="incident_created",
+                title=f"Incident #{incident.id}: {incident.title}",
+                body=f"[{severity.upper()}] {incident.summary}",
+                severity=notif_severity,
+                audience="all",
+                link=f"/incidents/{incident.id}",
+                camera_id=camera_id,
+                meta={"incident_id": incident.id, "severity": severity},
+                db=db,
+            )
+        except Exception:
+            # Notification failure must NEVER fail the incident
+            # creation — the agent already wrote the row, and the
+            # human can find it in the dashboard regardless.  Logged
+            # for triage but not surfaced to the agent.
+            import logging as _logging
+            _logging.getLogger(__name__).exception(
+                "[create_incident] notification emit failed for incident=%s",
+                incident.id,
+            )
+
         return incident.to_dict()
     finally:
         db.close()

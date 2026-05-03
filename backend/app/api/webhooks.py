@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Request, HTTPException, status, Depends
@@ -8,7 +9,11 @@ from app.core.clerk import clerk
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.plans import enforce_camera_cap
-from app.models.models import Setting, CameraNode, McpApiKey, McpActivityLog, StreamAccessLog, AuditLog, CameraGroup, ProcessedWebhook
+from app.models.models import (
+    Setting, CameraNode, McpApiKey, McpActivityLog, StreamAccessLog,
+    AuditLog, CameraGroup, ProcessedWebhook,
+    EmailOutbox, EmailSuppression,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -243,3 +248,198 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             )
 
     return {"received": True}
+
+
+# ── Resend webhook ─────────────────────────────────────────────────
+# Resend signs webhooks via Svix, same library Clerk uses, so we
+# verify and dedupe with the identical pattern as ``/api/webhooks/clerk``.
+#
+# Events we handle:
+#   - email.bounced     → insert EmailSuppression so we stop sending
+#   - email.complained  → insert EmailSuppression (marked spam by user)
+#   - email.delivered   → optional outbox-row update (informational)
+#
+# Other event types (opened, clicked, scheduled, etc.) are accepted
+# (200 OK) but not acted on for v1.  The 200 keeps Resend from
+# disabling our endpoint for "unhandled events."
+
+# Reasons we'll record on EmailSuppression rows.  ``email.bounced``
+# is anything Resend's SMTP-level retries gave up on (hard bounces);
+# ``email.complained`` is the user clicking "spam" in their client.
+# Both are signals to stop sending — re-sending after either dings
+# our deliverability reputation across ALL recipients.
+_RESEND_SUPPRESSION_EVENTS = {
+    "email.bounced": "bounce",
+    "email.complained": "complaint",
+}
+
+
+@router.post("/resend")
+@limiter.limit("600/minute")
+async def resend_webhook(request: Request, db: Session = Depends(get_db)):
+    """Receive Resend delivery events (bounce, complaint, etc.).
+
+    Mirrors the Clerk webhook pattern exactly: HMAC verification via
+    Svix, idempotency via ``ProcessedWebhook``, dispatch by event type.
+    Reuses the existing ``ProcessedWebhook`` table because Svix message
+    IDs are UUIDs — collision between Clerk and Resend is statistically
+    impossible, and even if one occurred the unique constraint would
+    fail safely.
+
+    The 600/min rate limit is generous because Resend bursts events
+    when a delivery campaign completes.  Real volume is far below this.
+    """
+    payload = await request.body()
+    headers = dict(request.headers)
+
+    if not settings.RESEND_WEBHOOK_SECRET:
+        # Without the secret we can't verify signatures, so refusing
+        # is the only safe thing.  An attacker who knows the URL but
+        # not the secret would otherwise be able to forge bounce
+        # events to suppress legitimate users.
+        logger.error(
+            "RESEND_WEBHOOK_SECRET not set — cannot verify Resend signatures"
+        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Webhook processing unavailable")
+
+    try:
+        wh = Webhook(settings.RESEND_WEBHOOK_SECRET)
+        event = wh.verify(payload, headers)
+    except WebhookVerificationError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature")
+
+    # Resend's event payload shape:
+    #   {"type": "email.bounced", "data": {"email_id": "...", "to": ["..."], ...}, "created_at": "..."}
+    event_type = event.get("type") or ""
+    data = event.get("data") or {}
+
+    # ── Idempotency check (mirrors Clerk handler) ──────────────────
+    svix_msg_id = headers.get("svix-id")
+    if svix_msg_id:
+        already = (
+            db.query(ProcessedWebhook)
+            .filter_by(svix_msg_id=svix_msg_id)
+            .first()
+        )
+        if already:
+            logger.info(
+                "Resend webhook %s already processed (event=%s) — skipping",
+                svix_msg_id, already.event_type or "?",
+            )
+            return {"status": "duplicate", "svix_id": svix_msg_id}
+
+    logger.info("Resend webhook received: %s", event_type)
+
+    # ── Dispatch ────────────────────────────────────────────────────
+    if event_type in _RESEND_SUPPRESSION_EVENTS:
+        reason = _RESEND_SUPPRESSION_EVENTS[event_type]
+        addresses = _extract_addresses(data)
+        for addr in addresses:
+            _insert_suppression(db, addr, reason=reason, source="resend_webhook")
+
+        # Mark the originating outbox row 'suppressed' if we can find
+        # it via the email_id Resend sends.  Updating after-the-fact
+        # is informational — the suppression-list check on the next
+        # send is what actually stops further attempts.
+        email_id = data.get("email_id")
+        if email_id:
+            try:
+                row = (
+                    db.query(EmailOutbox)
+                    .filter(EmailOutbox.resend_message_id == email_id)
+                    .first()
+                )
+                if row and row.status == "sent":
+                    row.status = "suppressed"
+                    row.error = f"webhook_event:{event_type}:reason={reason}"
+                    db.commit()
+            except Exception:
+                logger.exception(
+                    "[ResendWebhook] failed to mark outbox row suppressed for email_id=%s",
+                    email_id,
+                )
+                db.rollback()
+
+    elif event_type == "email.delivered":
+        # Informational — we already marked the row 'sent' when the
+        # API call returned.  Nothing to do, but logged so an operator
+        # can correlate "sent at T+0" with "delivered at T+5s" if a
+        # support ticket comes in about latency.
+        email_id = data.get("email_id")
+        if email_id:
+            logger.info(
+                "[ResendWebhook] delivered confirmation for email_id=%s",
+                email_id,
+            )
+
+    # Mark this message id as processed so Resend retries short-circuit.
+    if svix_msg_id:
+        try:
+            db.add(ProcessedWebhook(
+                svix_msg_id=svix_msg_id, event_type=event_type or "",
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.info(
+                "Resend webhook %s dedup insert raced — ignoring",
+                svix_msg_id,
+            )
+
+    return {"received": True}
+
+
+def _extract_addresses(data: dict) -> list[str]:
+    """Pull recipient addresses out of a Resend event payload.
+
+    Resend sometimes sends ``to`` as a list, sometimes as a string,
+    depending on the event type and SDK version.  Handle both, plus
+    the edge case where it's missing entirely (we get nothing useful
+    so we don't suppress anyone — better than suppressing the wrong
+    address)."""
+    to = data.get("to")
+    if isinstance(to, list):
+        return [a for a in to if isinstance(a, str) and "@" in a]
+    if isinstance(to, str) and "@" in to:
+        return [to]
+    return []
+
+
+def _insert_suppression(
+    db: Session, address: str, *, reason: str, source: str
+) -> None:
+    """Insert into EmailSuppression, swallowing duplicate-key errors.
+
+    Address is lower-cased to match the worker's case-insensitive
+    suppression check (test_email_worker.py covers this).  Race
+    between two Resend retries delivering the same bounce gets
+    handled by the unique constraint — we treat the rollback as
+    benign (the address is already suppressed; mission accomplished).
+    """
+    addr = (address or "").strip().lower()
+    if not addr or "@" not in addr:
+        return
+    try:
+        db.add(EmailSuppression(address=addr, reason=reason, source=source))
+        db.commit()
+        logger.info(
+            "[ResendWebhook] suppressed address=%s reason=%s source=%s",
+            _redact_addr(addr), reason, source,
+        )
+    except Exception:
+        db.rollback()
+        # Either an existing row (benign) or a real error.  Log at
+        # debug to keep the steady-state webhook noise down.
+        logger.debug(
+            "[ResendWebhook] suppression insert failed (likely duplicate) "
+            "for address=%s reason=%s",
+            _redact_addr(addr), reason,
+        )
+
+
+def _redact_addr(addr: str) -> str:
+    """Same redaction shape as app/core/email.py — keep PII out of logs."""
+    if not addr or "@" not in addr:
+        return "***"
+    local, _, domain = addr.partition("@")
+    return f"{local[0]}***@{domain}" if local else f"***@{domain}"

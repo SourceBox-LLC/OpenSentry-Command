@@ -632,3 +632,233 @@ def test_create_notification_camera_transition_gated(db):
     assert offline is None
     assert online is None
     assert db.query(Notification).count() == 0
+
+
+# ── Email side-channel ─────────────────────────────────────────────
+# Cover the integration between create_notification() and the
+# EmailOutbox table.  Resend transport is stubbed via the
+# get_recipient_emails patch so no real Clerk lookup happens; the
+# tests just verify the rows that land in EmailOutbox.
+
+from app.api import notifications as notifications_mod
+from app.models.models import EmailOutbox
+
+
+@pytest.fixture
+def stub_recipients(monkeypatch):
+    """Stub recipient lookup so tests don't depend on Clerk.
+
+    Tests set ``stub.return_value`` (list of addresses).  Default is
+    one admin so the simple "create notification → enqueue email"
+    path works without configuration."""
+    class Stub:
+        def __init__(self):
+            self.return_value: list[str] = ["admin@org.test"]
+            self.calls: list[tuple[str, str]] = []
+
+        def __call__(self, org_id, audience):
+            self.calls.append((org_id, audience))
+            return list(self.return_value)
+
+    stub = Stub()
+    monkeypatch.setattr(notifications_mod, "get_recipient_emails", stub)
+    return stub
+
+
+def _enable_email(monkeypatch):
+    """Helper — flip the global kill-switch on for tests that need
+    to exercise the enqueue path.  Defaults are intentionally OFF
+    so accidentally-on tests that don't stub recipients can't
+    enqueue real-looking rows."""
+    monkeypatch.setattr(notifications_mod.settings, "EMAIL_ENABLED", True)
+
+
+# Per-kind setting gate ─────────────────────────────────────────────
+
+def test_email_enabled_for_kind_respects_kill_switch(db, monkeypatch):
+    """Global kill-switch off → no kind is email-enabled, even if the
+    per-kind setting says yes.  Defense in depth: an operator turning
+    off email globally must take precedence over any per-org config."""
+    monkeypatch.setattr(notifications_mod.settings, "EMAIL_ENABLED", False)
+    Setting.set(db, "org_test123", "email_camera_offline", "true")
+
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "camera_offline",
+    ) is False
+
+
+def test_email_enabled_for_kind_uses_default_when_unset(db, monkeypatch):
+    """No Setting row for the org → fall back to the per-kind default
+    in _EMAIL_KIND_TO_SETTING.  Operator-critical events default True
+    so a freshly-created org that hasn't visited the settings page
+    still gets the alerts."""
+    _enable_email(monkeypatch)
+
+    for kind in ("camera_offline", "node_offline", "disk_critical", "incident_created"):
+        assert notifications_mod.email_enabled_for_kind(
+            db, "org_test123", kind,
+        ) is True, f"{kind} should default to enabled"
+
+
+def test_email_enabled_for_kind_respects_per_org_setting(db, monkeypatch):
+    """Per-org Setting=='false' overrides the default and stops emails
+    for that kind in that org only."""
+    _enable_email(monkeypatch)
+    Setting.set(db, "org_test123", "email_camera_offline", "false")
+
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "camera_offline",
+    ) is False
+    # Other kinds for the same org are still enabled.
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "node_offline",
+    ) is True
+
+
+def test_email_enabled_for_kind_unknown_kind_returns_false(db, monkeypatch):
+    """Unknown kind → False.  Inverted from the inbox gate (which
+    defaults unknown=True for forward-compat) because emailing on
+    every new kind by default would be a worse failure mode than
+    missing one alert until the per-kind UI catches up."""
+    _enable_email(monkeypatch)
+
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "some_brand_new_kind",
+    ) is False
+
+
+# Enqueue path ──────────────────────────────────────────────────────
+
+def test_create_notification_enqueues_email_when_enabled(db, monkeypatch, stub_recipients):
+    """Happy path: kill-switch on, kind in map, recipients found →
+    one EmailOutbox row per recipient, status='pending', linked back
+    to the notification id."""
+    _enable_email(monkeypatch)
+    stub_recipients.return_value = ["admin@org.test", "ops@org.test"]
+
+    notif = create_notification(
+        org_id="org_test123",
+        kind="camera_offline",
+        title="Front Door went offline",
+        body="No heartbeat in 90s.",
+        audience="all",
+        db=db,
+    )
+
+    assert notif is not None
+    rows = db.query(EmailOutbox).all()
+    assert len(rows) == 2
+    addrs = sorted(r.recipient_email for r in rows)
+    assert addrs == ["admin@org.test", "ops@org.test"]
+    for row in rows:
+        assert row.status == "pending"
+        assert row.kind == "camera_offline"
+        assert row.notification_id == notif.id
+        assert row.org_id == "org_test123"
+        # Subject + body get rendered from the notification.
+        assert "Front Door went offline" in row.subject
+        assert "No heartbeat" in row.body_text
+        assert "<h2" in row.body_html  # branded HTML wrapper present
+
+
+def test_create_notification_does_not_enqueue_when_kill_switch_off(db, monkeypatch, stub_recipients):
+    """Kill-switch off → EmailOutbox stays empty even though the kind
+    is in the email map.  Inbox notification still persists."""
+    monkeypatch.setattr(notifications_mod.settings, "EMAIL_ENABLED", False)
+
+    notif = create_notification(
+        org_id="org_test123", kind="camera_offline",
+        title="x", body="y", audience="all", db=db,
+    )
+
+    assert notif is not None  # inbox row created
+    assert db.query(EmailOutbox).count() == 0
+    assert len(stub_recipients.calls) == 0  # didn't even look up recipients
+
+
+def test_create_notification_does_not_enqueue_for_unmapped_kind(db, monkeypatch, stub_recipients):
+    """A kind not in _EMAIL_KIND_TO_SETTING (e.g. 'motion') skips the
+    email enqueue path entirely.  Motion gets deferred to v1.1; we
+    don't want it to silently slip through to the outbox today."""
+    _enable_email(monkeypatch)
+
+    notif = create_notification(
+        org_id="org_test123", kind="motion",
+        title="Motion on cam_abc", body="42% intensity", audience="all", db=db,
+    )
+
+    assert notif is not None
+    assert db.query(EmailOutbox).count() == 0
+
+
+def test_create_notification_no_recipients_no_outbox_rows(db, monkeypatch, stub_recipients):
+    """get_recipient_emails returns [] (Clerk outage, empty org) →
+    enqueue is a no-op.  Notification still committed to inbox."""
+    _enable_email(monkeypatch)
+    stub_recipients.return_value = []
+
+    notif = create_notification(
+        org_id="org_test123", kind="camera_offline",
+        title="x", body="y", audience="all", db=db,
+    )
+
+    assert notif is not None
+    assert db.query(EmailOutbox).count() == 0
+
+
+def test_create_notification_email_failure_does_not_break_inbox(db, monkeypatch, stub_recipients):
+    """If recipient lookup raises, the inbox notification still gets
+    persisted.  Email is best-effort; the bell-icon panel must never
+    go silent because Resend or Clerk is having a bad day."""
+    _enable_email(monkeypatch)
+
+    def boom(*a, **kw):
+        raise RuntimeError("Clerk down")
+    monkeypatch.setattr(notifications_mod, "get_recipient_emails", boom)
+
+    notif = create_notification(
+        org_id="org_test123", kind="camera_offline",
+        title="x", body="y", audience="all", db=db,
+    )
+
+    assert notif is not None
+    assert db.query(Notification).count() == 1
+    assert db.query(EmailOutbox).count() == 0
+
+
+def test_create_notification_passes_audience_to_recipient_lookup(db, monkeypatch, stub_recipients):
+    """audience='admin' → recipient lookup gets 'admin'.  This is the
+    bridge between the existing inbox audience field and the email
+    recipient filter — the same notification that hides from non-admin
+    users in the inbox should also only email admins."""
+    _enable_email(monkeypatch)
+
+    create_notification(
+        org_id="org_test123", kind="node_offline",
+        title="Node down", audience="admin", db=db,
+    )
+
+    assert stub_recipients.calls == [("org_test123", "admin")]
+
+
+def test_email_content_escapes_html_in_title_and_body(db, monkeypatch, stub_recipients):
+    """A camera name that happens to contain `<script>` must not
+    break out of the email's HTML structure.  Operator-controlled
+    strings, but defense in depth."""
+    _enable_email(monkeypatch)
+
+    create_notification(
+        org_id="org_test123", kind="camera_offline",
+        title="<script>alert(1)</script>",
+        body="Body with <b>html</b> & ampersand",
+        audience="all", db=db,
+    )
+
+    row = db.query(EmailOutbox).first()
+    # Raw script tag must not appear anywhere.
+    assert "<script>alert(1)</script>" not in row.body_html
+    # Escaped form must.
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in row.body_html
+    assert "&amp;" in row.body_html
+    # Plain text body keeps original (not HTML, no XSS surface).
+    assert "Body with <b>html</b>" in row.body_text
