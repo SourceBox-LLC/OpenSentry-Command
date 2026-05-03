@@ -348,6 +348,13 @@ Organization.
 - Application errors are captured by Sentry (when `SENTRY_DSN` is
   configured) at a 10% trace sample rate. No video, body content, or
   user identifiers beyond what's required for triage are captured.
+- Operator-critical alerts (camera offline, CloudNode offline, disk
+  approaching full, AI-agent-created incident) are delivered via
+  email through Resend when `EMAIL_ENABLED=true` and per-org per-kind
+  preference allows. Each email includes a one-click unsubscribe link
+  scoped to the (org, kind) pair. Recipients are derived live from
+  Clerk org membership at send time; no separate mailing list is
+  maintained.
 - Personal Data Breach response: documented internally; notification
   obligation in Section 4.7.
 
@@ -388,6 +395,7 @@ At the date of this DPA the engaged Sub-processors are:
 | Stripe (via Clerk) | Payment processing | Card data (collected by Stripe directly; SourceBox never sees) |
 | Fly.io | Application + database hosting | All metadata SourceBox stores |
 | Sentry (optional) | Error monitoring | Exception stack traces; no video, no body content |
+| Resend (optional) | Transactional email for operator-critical alerts | Recipient email + subject/body of alerts opted-in by the org |
 
 ---
 

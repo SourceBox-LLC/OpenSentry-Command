@@ -41,16 +41,28 @@ function Faq() {
         only live viewing via Command Center does.
       </p>
 
-      <h3>Will I get email or SMS alerts when motion is detected?</h3>
+      <h3>Will I get email or SMS alerts when something happens?</h3>
       <p>
-        Not from Command Center directly. Email, SMS, and push-notification delivery
-        are not built into Command Center today — motion and offline events surface as
-        in-dashboard banners, in the Incidents tab, and via MCP. To get alerts to a
-        phone or inbox, point an MCP agent (Claude, Cursor, your own) at the motion
-        events stream and route through your own transport (Twilio, Resend, PagerDuty,
-        a webhook). Every plan has full MCP access, so this works on Free too. See the{" "}
-        <a href="#notifications">Notifications</a> section for the full list of
-        triggers and where they show up today.
+        <strong>Email: yes</strong> for the operator-critical events — camera went
+        offline, CloudNode went offline, Command Center disk approaching full, and
+        AI-agent-created incidents. Each kind is opt-in per-org via the{" "}
+        <a href="/settings#settings-notifications">notification settings page</a>;
+        all four default ON for new orgs.
+      </p>
+      <p>
+        <strong>Motion-event emails are intentionally deferred</strong> until we ship
+        per-camera cooldown + digest logic — without it, a single flappy outdoor
+        camera blasts hundreds of emails a day, your spam-marker tanks our sender
+        reputation for everyone, and you unsubscribe out of self-defense. We'd
+        rather ship the events that matter most first and add motion later
+        properly.
+      </p>
+      <p>
+        <strong>SMS and mobile push: not built in.</strong> Point an MCP agent
+        (Claude, Cursor, your own) at the motion-events stream and route through
+        Twilio, PagerDuty, or whatever you already use. Every plan has full MCP
+        access. See the <a href="#notifications">Notifications</a> section below
+        for the full list of triggers.
       </p>
 
       <h3>Does CloudNode need always-on internet?</h3>

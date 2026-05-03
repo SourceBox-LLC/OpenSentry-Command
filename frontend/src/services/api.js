@@ -162,6 +162,22 @@ export async function updateOrgTimezone(getToken, tzName) {
   })
 }
 
+// Per-org per-kind email notification preferences.  Companion to the
+// inbox-level updateNotificationSettings above — a notification can
+// be enabled in the inbox AND emailed, just inbox-only, or off
+// entirely.  See backend/app/api/notifications.py::email_enabled_for_kind
+// and the kind→setting map for the contract.
+export async function getEmailPreferences(getToken) {
+  return fetchWithAuth("/api/notifications/email/preferences", getToken)
+}
+
+export async function updateEmailPreferences(getToken, prefs) {
+  return fetchWithAuth("/api/notifications/email/preferences", getToken, {
+    method: "POST",
+    body: JSON.stringify(prefs)
+  })
+}
+
 export async function getCameraGroups(getToken) {
   return fetchWithAuth("/api/camera-groups", getToken)
 }

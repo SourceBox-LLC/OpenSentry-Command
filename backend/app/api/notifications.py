@@ -23,15 +23,18 @@ import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.auth import AuthUser, require_view
+from app.core.audit import write_audit
+from app.core.auth import AuthUser, require_admin, require_view
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
+from app.core.email_unsubscribe import verify_token
 from app.core.recipients import get_recipient_emails
-from app.models.models import EmailOutbox, Notification, Setting, UserNotificationState
+from app.models.models import EmailOutbox, EmailSuppression, Notification, Setting, UserNotificationState
 
 
 # ── Per-org preference gate ────────────────────────────────────────
@@ -123,67 +126,23 @@ def email_enabled_for_kind(db: Session, org_id: str, kind: str) -> bool:
 
 
 def _build_email_content(notif: Notification) -> tuple[str, str, str]:
-    """Render a notification into (subject, body_text, body_html).
+    """Render a notification into ``(subject, body_text, body_html)``
+    via the Jinja2 templates in ``app/templates/emails/``.
 
-    v1: inlined string templates derived from the notification's
-    title and body fields.  Day 3 of the plan replaces this with
-    proper Jinja2 templates per kind (camera_offline.html.j2 etc.)
-    that share a branded layout — this function will become a thin
-    wrapper around ``app.core.email_templates.render(kind, notif)``.
-
-    Keeping the v1 shape minimal-but-useful so the operator-critical
-    events ship before the templating work lands.  Title goes in the
-    subject; body becomes the plain-text and HTML email body, with
-    the brand and a deep link added.
+    Thin wrapper around ``app.core.email_templates.render`` — the
+    interesting work lives there.  This wrapper exists so callers in
+    ``create_notification()`` don't need to know about the
+    unsubscribe-token path, the dashboard URL config, or the
+    template module's import shape.
     """
-    subject = f"[SourceBox Sentry] {notif.title}"
+    from app.core import email_templates
+    from app.core.email_unsubscribe import build_unsubscribe_url
 
-    link_path = notif.link or "/dashboard"
-    full_link = f"{settings.FRONTEND_URL.rstrip('/')}{link_path}"
-
-    body_text = (
-        f"{notif.title}\n\n"
-        f"{notif.body}\n\n"
-        f"View in dashboard: {full_link}\n\n"
-        f"— SourceBox Sentry"
-    )
-
-    body_html = (
-        f"<div style=\"font-family:system-ui,sans-serif;max-width:560px;"
-        f"padding:16px;color:#111\">"
-        f"<h2 style=\"margin:0 0 12px;color:#111\">{_escape(notif.title)}</h2>"
-        f"<p style=\"margin:0 0 16px;color:#444;line-height:1.5\">"
-        f"{_escape(notif.body)}</p>"
-        f"<p style=\"margin:0 0 24px\"><a href=\"{full_link}\" "
-        f"style=\"color:#22c55e;text-decoration:none;font-weight:600\">"
-        f"View in dashboard →</a></p>"
-        f"<hr style=\"border:none;border-top:1px solid #e5e5e5;margin:24px 0\">"
-        f"<p style=\"margin:0;color:#888;font-size:12px\">"
-        f"You're receiving this because you're a member of an organization "
-        f"using SourceBox Sentry. Adjust email preferences in your "
-        f"<a href=\"{settings.FRONTEND_URL.rstrip('/')}/settings\" "
-        f"style=\"color:#888\">settings page</a>."
-        f"</p>"
-        f"</div>"
-    )
-
-    return subject, body_text, body_html
-
-
-def _escape(s: str) -> str:
-    """Minimal HTML escape for body text inserted into the email
-    template.  Notification titles and bodies are operator-controlled
-    strings (server-side rendered, not user-typed forms), but defense
-    in depth — a malformed camera name shouldn't break the email's
-    HTML structure or open an XSS path."""
-    if not s:
-        return ""
-    return (
-        s.replace("&", "&amp;")
-         .replace("<", "&lt;")
-         .replace(">", "&gt;")
-         .replace('"', "&quot;")
-         .replace("'", "&#39;")
+    unsubscribe_url = build_unsubscribe_url(notif.org_id, notif.kind)
+    return email_templates.render(
+        notif.kind,
+        notif,
+        unsubscribe_url=unsubscribe_url,
     )
 
 
@@ -749,4 +708,226 @@ async def stream_notifications(user: AuthUser = Depends(require_view)):
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+# ── Email preferences ──────────────────────────────────────────────
+# Per-org per-kind toggles for the email side-channel.  GET is
+# require_view (anyone in the org can SEE current prefs); POST is
+# require_admin + audit (only admins can change them).
+#
+# The shape returned matches the keys in _EMAIL_KIND_TO_SETTING — a
+# stable contract for the frontend toggle UI.  Adding a new kind
+# means: add to _EMAIL_KIND_TO_SETTING, add a template, add a
+# checkbox to the frontend.  No API change.
+
+
+class EmailPreferences(BaseModel):
+    """Request body for POST /email/preferences.
+
+    Each field is optional — clients only send the toggles they're
+    actually changing.  Unset fields keep their existing values.
+    """
+    email_camera_offline: Optional[bool] = None
+    email_node_offline: Optional[bool] = None
+    email_disk_critical: Optional[bool] = None
+    email_incident_created: Optional[bool] = None
+
+
+def _current_email_prefs(db: Session, org_id: str) -> dict:
+    """Return the org's effective email prefs as a {key: bool} dict.
+
+    Reads each setting; falls back to the per-kind default in
+    ``_EMAIL_KIND_TO_SETTING`` when the row is absent.  This is
+    what the frontend toggle UI shows on first load — the absence
+    of a Setting row is presented as the default ON state, not a
+    blank "unset" state.
+    """
+    out = {}
+    for kind, (key, default) in _EMAIL_KIND_TO_SETTING.items():
+        val = Setting.get(db, org_id, key, None)
+        if val is None:
+            out[key] = default
+        else:
+            out[key] = (val == "true")
+    return out
+
+
+@router.get("/email/preferences")
+async def get_email_preferences(
+    user: AuthUser = Depends(require_view),
+    db: Session = Depends(get_db),
+):
+    """Return the current per-kind email toggles for the org.
+
+    Includes ``email_globally_enabled`` flag derived from
+    ``settings.EMAIL_ENABLED`` so the frontend can show "emails are
+    currently turned off at the platform level" copy alongside
+    individually-still-enabled toggles.  This is the difference
+    between the operator's kill-switch and the org's prefs — the UI
+    needs both signals to render the right state.
+    """
+    return {
+        "email_globally_enabled": settings.EMAIL_ENABLED,
+        "preferences": _current_email_prefs(db, user.org_id),
+    }
+
+
+@router.post("/email/preferences")
+async def update_email_preferences(
+    request: Request,
+    prefs: EmailPreferences,
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Update the org's per-kind email toggles.
+
+    Only fields present in the request body are touched — partial
+    updates are the norm (frontend toggles fire one at a time).
+    Audit row written for every change so admin actions are
+    traceable.
+
+    Returns the updated full pref dict so the frontend doesn't need
+    a follow-up GET to reflect the new state.
+    """
+    changes = []
+    for key, value in prefs.model_dump(exclude_unset=True).items():
+        if value is None:
+            continue
+        # Validate the key is one we recognise.  Pydantic already
+        # restricts the field set, but defense in depth — if a
+        # future field gets added without a corresponding
+        # _EMAIL_KIND_TO_SETTING entry, this rejects it cleanly.
+        if not any(cfg[0] == key for cfg in _EMAIL_KIND_TO_SETTING.values()):
+            continue
+        Setting.set(db, user.org_id, key, "true" if value else "false")
+        changes.append(f"{key}={value}")
+
+    if changes:
+        write_audit(
+            db,
+            org_id=user.org_id,
+            event="email_prefs_updated",
+            user_id=user.user_id,
+            username=user.email or user.username,
+            details=", ".join(changes),
+            request=request,
+        )
+
+    return {
+        "email_globally_enabled": settings.EMAIL_ENABLED,
+        "preferences": _current_email_prefs(db, user.org_id),
+        "changes": changes,
+    }
+
+
+# ── Unsubscribe ────────────────────────────────────────────────────
+# Public endpoint, no auth required — the JWT in the URL is the
+# auth.  Rate-limited via the global slowapi middleware (every route
+# is bounded by ``tenant_aware_key`` + the default per-IP cap) so a
+# stream of bad tokens can't burn the DB.
+#
+# Returns HTML (not JSON) because this is end-user facing — the
+# user clicked a link in their email, they expect a web page, not
+# a 200 OK with `{"status": "unsubscribed"}`.
+
+_UNSUBSCRIBE_HTML_OK = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Unsubscribed</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; max-width: 540px;
+         margin: 80px auto; padding: 0 24px; color: #111; line-height: 1.5; }}
+  h1 {{ font-size: 22px; margin: 0 0 12px; }}
+  p {{ color: #555; }}
+  .ok {{ color: #16a34a; font-weight: 600; }}
+  a {{ color: #22c55e; }}
+</style></head>
+<body>
+  <h1><span class="ok">✓</span> You're unsubscribed</h1>
+  <p>We won't email you about <strong>{kind}</strong> alerts anymore.</p>
+  <p>You can re-enable this (or fine-tune any other email type) any time
+     in your <a href="{frontend}/settings#settings-notifications">notification settings</a>.</p>
+</body></html>"""
+
+_UNSUBSCRIBE_HTML_ERROR = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Link expired</title>
+<style>
+  body {{ font-family: system-ui, sans-serif; max-width: 540px;
+         margin: 80px auto; padding: 0 24px; color: #111; line-height: 1.5; }}
+  h1 {{ font-size: 22px; margin: 0 0 12px; }}
+  p {{ color: #555; }}
+  a {{ color: #22c55e; }}
+</style></head>
+<body>
+  <h1>Link not recognised</h1>
+  <p>This unsubscribe link looks invalid or has been superseded.
+     Sign in to your <a href="{frontend}/settings#settings-notifications">
+     notification settings</a> to manage email alerts directly.</p>
+</body></html>"""
+
+
+@router.get("/email/unsubscribe", response_class=HTMLResponse)
+async def email_unsubscribe(
+    t: str = Query(..., description="Signed unsubscribe token"),
+    db: Session = Depends(get_db),
+):
+    """Process an unsubscribe link click.
+
+    Verifies the JWT, identifies the (org_id, kind) it was issued
+    for, flips the corresponding setting to "false", and renders a
+    confirmation HTML page.
+
+    Also writes an EmailSuppression row keyed on the recipient's
+    address — wait, we don't know the recipient from the token.
+    The token only carries (org_id, kind), which is the right
+    granularity: "this org no longer wants this kind of email."
+    Per-recipient suppression for cases where one user wants to
+    opt out while their org-mates keep receiving them is a v1.1
+    feature gated on per-user prefs landing.
+    """
+    frontend = (settings.FRONTEND_URL or "").rstrip("/")
+
+    decoded = verify_token(t)
+    if decoded is None:
+        return HTMLResponse(
+            _UNSUBSCRIBE_HTML_ERROR.format(frontend=frontend),
+            status_code=400,
+        )
+
+    org_id, kind = decoded
+
+    # Validate the kind is one we know about.  A token signed for a
+    # kind we since removed should still acknowledge gracefully.
+    cfg = _EMAIL_KIND_TO_SETTING.get(kind)
+    if cfg is None:
+        return HTMLResponse(
+            _UNSUBSCRIBE_HTML_OK.format(kind=kind, frontend=frontend),
+        )
+
+    setting_key, _default = cfg
+    try:
+        Setting.set(db, org_id, setting_key, "false")
+    except Exception:
+        logger.exception(
+            "[Unsubscribe] failed to update setting org=%s key=%s",
+            org_id, setting_key,
+        )
+        # Don't surface the DB error to the user — they clicked an
+        # unsubscribe link, they want to feel unsubscribed.  The
+        # link is idempotent; they can click again or use the
+        # settings page.
+
+    # Audit (no user_id since this is a public link click).
+    try:
+        write_audit(
+            db, org_id=org_id, event="email_unsubscribed",
+            details=f"kind={kind} via_link=true",
+        )
+    except Exception:
+        logger.exception("[Unsubscribe] audit write failed")
+
+    # Pretty-print the kind for the user-facing copy.  "camera_offline"
+    # → "camera offline" is friendlier than "email_camera_offline".
+    pretty_kind = kind.replace("_", " ")
+    return HTMLResponse(
+        _UNSUBSCRIBE_HTML_OK.format(kind=pretty_kind, frontend=frontend),
     )

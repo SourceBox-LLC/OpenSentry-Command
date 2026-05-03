@@ -101,8 +101,8 @@ function PricingPage() {
             <p>Yes, always. CloudNode is open source (GPL-3) and runs on your own hardware. You only pay for the Command Center cloud service — and you can self-host that too (AGPL-3) if you want to skip us entirely.</p>
           </div>
           <div className="pricing-faq-item">
-            <h3>Do you send email or SMS alerts on motion?</h3>
-            <p>No — email, SMS, and push-notification delivery are not built into Command Center today. Motion events surface as in-dashboard banners, in the Incidents tab, and through MCP tool calls. If you need external notifications, wire your MCP agent to your own transport (Twilio, Resend, your existing PagerDuty, etc.) — every plan has full MCP access. We're being explicit about this so nobody upgrades expecting alerts that aren't built yet.</p>
+            <h3>Do you send email or SMS alerts?</h3>
+            <p>Yes for email — every plan gets opt-in email alerts for the operator-critical events: camera offline, CloudNode offline, Command Center disk approaching full, and AI-agent-created incidents. Toggle each kind on or off per-org in your notification settings. Motion-event emails are deferred until we ship per-camera digest / cooldown logic (a flappy outdoor camera shouldn't blast your inbox). SMS and mobile push remain MCP-only — wire your agent to Twilio, PagerDuty, or whatever you already use.</p>
           </div>
         </div>
       </div>

@@ -755,10 +755,15 @@ def test_create_notification_enqueues_email_when_enabled(db, monkeypatch, stub_r
         assert row.kind == "camera_offline"
         assert row.notification_id == notif.id
         assert row.org_id == "org_test123"
-        # Subject + body get rendered from the notification.
-        assert "Front Door went offline" in row.subject
+        # Subject is template-driven — ``camera_offline.subject.txt.j2``
+        # produces "[SourceBox Sentry] Camera offline: <name>".
+        assert row.subject.startswith("[SourceBox Sentry]")
+        assert "Front Door" in row.subject
+        # Body templates surface notification.body verbatim.
         assert "No heartbeat" in row.body_text
-        assert "<h2" in row.body_html  # branded HTML wrapper present
+        # HTML wrap brings in the layout's brand header + severity bar.
+        assert "<h2" in row.body_html
+        assert "SourceBox Sentry" in row.body_html
 
 
 def test_create_notification_does_not_enqueue_when_kill_switch_off(db, monkeypatch, stub_recipients):
@@ -844,7 +849,11 @@ def test_create_notification_passes_audience_to_recipient_lookup(db, monkeypatch
 def test_email_content_escapes_html_in_title_and_body(db, monkeypatch, stub_recipients):
     """A camera name that happens to contain `<script>` must not
     break out of the email's HTML structure.  Operator-controlled
-    strings, but defense in depth."""
+    strings, but defense in depth.
+
+    Plain-text templates do NOT escape (otherwise the text body
+    would render ``&amp;`` instead of ``&``); the .html.j2 templates
+    do (autoescape selected per-template by extension)."""
     _enable_email(monkeypatch)
 
     create_notification(
@@ -855,10 +864,217 @@ def test_email_content_escapes_html_in_title_and_body(db, monkeypatch, stub_reci
     )
 
     row = db.query(EmailOutbox).first()
-    # Raw script tag must not appear anywhere.
+    # Raw script tag must not appear anywhere in the HTML body.
     assert "<script>alert(1)</script>" not in row.body_html
     # Escaped form must.
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in row.body_html
     assert "&amp;" in row.body_html
-    # Plain text body keeps original (not HTML, no XSS surface).
+    # Plain text body keeps original characters — not HTML, no XSS
+    # surface.  The .txt.j2 templates intentionally don't autoescape
+    # so the user reads "&" not "&amp;".
     assert "Body with <b>html</b>" in row.body_text
+    assert "& ampersand" in row.body_text
+
+
+# ── Email preferences endpoints ────────────────────────────────────
+
+def test_get_email_preferences_returns_defaults(admin_client):
+    """First load: no Setting rows → response uses _EMAIL_KIND_TO_SETTING
+    defaults so the toggle UI shows the right initial state."""
+    resp = admin_client.get("/api/notifications/email/preferences")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "email_globally_enabled" in data
+    prefs = data["preferences"]
+    # All four operator-critical kinds default to enabled.
+    assert prefs["email_camera_offline"] is True
+    assert prefs["email_node_offline"] is True
+    assert prefs["email_disk_critical"] is True
+    assert prefs["email_incident_created"] is True
+
+
+def test_get_email_preferences_reflects_overrides(admin_client, db):
+    """Setting rows override the defaults."""
+    Setting.set(db, "org_test123", "email_camera_offline", "false")
+    Setting.set(db, "org_test123", "email_node_offline", "false")
+
+    resp = admin_client.get("/api/notifications/email/preferences")
+    prefs = resp.json()["preferences"]
+
+    assert prefs["email_camera_offline"] is False
+    assert prefs["email_node_offline"] is False
+    # Untouched ones stay at default.
+    assert prefs["email_disk_critical"] is True
+
+
+def test_get_email_preferences_surfaces_global_kill_switch(admin_client, monkeypatch):
+    """email_globally_enabled mirrors settings.EMAIL_ENABLED so the
+    frontend can render "emails are off platform-wide" copy alongside
+    individually-still-enabled toggles."""
+    from app.core.config import settings as app_settings
+    monkeypatch.setattr(app_settings, "EMAIL_ENABLED", False)
+
+    resp = admin_client.get("/api/notifications/email/preferences")
+    assert resp.json()["email_globally_enabled"] is False
+
+    monkeypatch.setattr(app_settings, "EMAIL_ENABLED", True)
+    resp = admin_client.get("/api/notifications/email/preferences")
+    assert resp.json()["email_globally_enabled"] is True
+
+
+def test_post_email_preferences_updates_settings(admin_client, db):
+    """POST a partial pref dict → only those keys flip."""
+    resp = admin_client.post(
+        "/api/notifications/email/preferences",
+        json={"email_camera_offline": False, "email_disk_critical": False},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["preferences"]["email_camera_offline"] is False
+    assert data["preferences"]["email_disk_critical"] is False
+    # Unspecified keys keep their default.
+    assert data["preferences"]["email_node_offline"] is True
+    # Confirm via direct Setting query.
+    assert Setting.get(db, "org_test123", "email_camera_offline") == "false"
+    assert Setting.get(db, "org_test123", "email_disk_critical") == "false"
+
+
+def test_post_email_preferences_partial_update_does_not_clobber(admin_client, db):
+    """Partial update: omitted fields stay untouched.  Tests can't
+    rely on field default == None vs False; pydantic exclude_unset
+    is what makes this work."""
+    Setting.set(db, "org_test123", "email_node_offline", "false")
+
+    resp = admin_client.post(
+        "/api/notifications/email/preferences",
+        json={"email_camera_offline": False},
+    )
+
+    assert resp.status_code == 200
+    # node_offline should STILL be false from the prior set.
+    assert Setting.get(db, "org_test123", "email_node_offline") == "false"
+
+
+def test_post_email_preferences_writes_audit(admin_client, db):
+    """Admin pref changes audited — so a "who turned off our alerts?"
+    investigation can find the answer in the audit log."""
+    from app.models.models import AuditLog
+
+    admin_client.post(
+        "/api/notifications/email/preferences",
+        json={"email_camera_offline": False},
+    )
+
+    audit = (
+        db.query(AuditLog)
+        .filter_by(event="email_prefs_updated")
+        .first()
+    )
+    assert audit is not None
+    assert audit.org_id == "org_test123"
+    assert "email_camera_offline=False" in (audit.details or "")
+
+
+def test_post_email_preferences_requires_admin(viewer_client):
+    """Non-admins can READ prefs but not change them."""
+    # Viewer can read.
+    r1 = viewer_client.get("/api/notifications/email/preferences")
+    assert r1.status_code == 200
+
+    # But not write.
+    r2 = viewer_client.post(
+        "/api/notifications/email/preferences",
+        json={"email_camera_offline": False},
+    )
+    assert r2.status_code == 403
+
+
+# ── Unsubscribe endpoint ────────────────────────────────────────────
+
+def test_unsubscribe_endpoint_disables_setting(unauthenticated_client, db):
+    """Click the link → org-level setting flips to "false"."""
+    from app.core.email_unsubscribe import make_token
+
+    token = make_token("org_test123", "camera_offline")
+
+    resp = unauthenticated_client.get(
+        f"/api/notifications/email/unsubscribe?t={token}"
+    )
+
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # Setting is now "false" — no future enqueue for this kind in this org.
+    assert Setting.get(db, "org_test123", "email_camera_offline") == "false"
+
+
+def test_unsubscribe_endpoint_writes_audit(unauthenticated_client, db):
+    """Anonymous unsubscribes are audited too — useful for triaging
+    "all my users are unsubscribing" support tickets later."""
+    from app.core.email_unsubscribe import make_token
+    from app.models.models import AuditLog
+
+    token = make_token("org_test123", "node_offline")
+    unauthenticated_client.get(
+        f"/api/notifications/email/unsubscribe?t={token}"
+    )
+
+    audit = (
+        db.query(AuditLog)
+        .filter_by(event="email_unsubscribed")
+        .first()
+    )
+    assert audit is not None
+    assert audit.org_id == "org_test123"
+    assert "kind=node_offline" in (audit.details or "")
+
+
+def test_unsubscribe_endpoint_renders_friendly_html(unauthenticated_client):
+    """End-user-facing — HTML page, not a JSON response.  Pin a
+    couple of recognisable phrases so a copy refactor surfaces here
+    rather than silently producing a worse page."""
+    from app.core.email_unsubscribe import make_token
+
+    token = make_token("org_test123", "camera_offline")
+    resp = unauthenticated_client.get(
+        f"/api/notifications/email/unsubscribe?t={token}"
+    )
+
+    body = resp.text
+    assert "unsubscribed" in body.lower()
+    # Pretty-prints "camera_offline" as "camera offline" for the user.
+    assert "camera offline" in body.lower()
+
+
+def test_unsubscribe_endpoint_rejects_invalid_token(unauthenticated_client):
+    """Bad token → friendly error page, NOT a 500.  The user clicked
+    a link expecting a result; show them one."""
+    resp = unauthenticated_client.get(
+        "/api/notifications/email/unsubscribe?t=this-is-not-a-jwt"
+    )
+
+    assert resp.status_code == 400
+    body = resp.text.lower()
+    assert "not recognised" in body or "invalid" in body or "expired" in body
+
+
+def test_unsubscribe_endpoint_idempotent(unauthenticated_client, db):
+    """Clicking the same link twice produces the same outcome — no
+    error on the second click.  Email clients sometimes pre-fetch
+    links for security scans, so a non-idempotent unsubscribe would
+    flip the setting AND then 500 when the user actually clicks."""
+    from app.core.email_unsubscribe import make_token
+
+    token = make_token("org_test123", "camera_offline")
+
+    r1 = unauthenticated_client.get(
+        f"/api/notifications/email/unsubscribe?t={token}"
+    )
+    r2 = unauthenticated_client.get(
+        f"/api/notifications/email/unsubscribe?t={token}"
+    )
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert Setting.get(db, "org_test123", "email_camera_offline") == "false"

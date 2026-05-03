@@ -1,0 +1,24 @@
+CRITICAL: Command Center disk usage is in the danger zone
+
+{{ notification.body }}
+
+This affects every organization on this Command Center, not just yours.
+When the disk fills:
+  - SQLite writes start failing — recordings, audit logs, motion events
+    stop persisting silently.
+  - The dashboard will continue serving live HLS streams (those are
+    in-memory) but everything that touches the database breaks.
+
+What to do RIGHT NOW:
+  1. Open the admin health page: {{ dashboard_url }}/admin/health
+  2. Check the disk usage stats and recent log volume.
+  3. Either resize the Fly volume (`fly volumes extend ...`) or run
+     log retention cleanup if the volume is full of old logs.
+
+Don't wait for the next email. Each follow-up alert is gated for 6 hours,
+so if you get a second one, the first didn't fix anything.
+
+——
+This alert went only to organization admins.
+Manage email alerts: {{ dashboard_url }}/settings#settings-notifications
+Unsubscribe from disk-critical alerts: {{ unsubscribe_url }}

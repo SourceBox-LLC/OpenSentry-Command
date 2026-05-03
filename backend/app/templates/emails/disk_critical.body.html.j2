@@ -1,0 +1,39 @@
+<h2 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#111;line-height:1.3;">
+  Command Center disk usage is critical
+</h2>
+
+<p style="margin:0 0 20px;font-size:15px;line-height:1.6;color:#374151;">
+  {{ notification.body | e }}
+</p>
+
+<p style="margin:0 0 20px;padding:14px;background:#fee2e2;border-left:3px solid #ef4444;font-size:14px;color:#7f1d1d;line-height:1.5;">
+  This affects <strong>every organization</strong> on this Command Center,
+  not just yours. When the disk fills, SQLite writes start failing —
+  recordings, audit logs, and motion events stop persisting silently.
+  Live HLS streams keep working (they're in-memory) but everything that
+  touches the database breaks.
+</p>
+
+<p style="margin:0 0 8px;font-size:14px;color:#6b7280;font-weight:600;">
+  What to do RIGHT NOW
+</p>
+<ol style="margin:0 0 24px;padding-left:20px;font-size:14px;line-height:1.7;color:#374151;">
+  <li>Open the admin health page (link below) and check disk + log volume.</li>
+  <li>Resize the Fly volume (<code style="background:#f3f4f6;padding:2px 6px;border-radius:3px;font-family:ui-monospace,Menlo,monospace;font-size:13px;">fly volumes extend ...</code>) <em>or</em> trigger early log retention cleanup.</li>
+  <li>Don't wait for the next email — each follow-up is gated for 6 hours.</li>
+</ol>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td style="background:#ef4444;border-radius:6px;">
+      <a href="{{ dashboard_url }}/admin/health"
+         style="display:inline-block;padding:10px 18px;font-size:14px;font-weight:600;color:#fff;text-decoration:none;">
+        Open admin health page →
+      </a>
+    </td>
+  </tr>
+</table>
+
+<p style="margin:24px 0 0;font-size:13px;color:#9ca3af;line-height:1.5;">
+  This alert went only to organization admins.
+</p>

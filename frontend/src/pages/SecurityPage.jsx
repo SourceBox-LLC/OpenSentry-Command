@@ -434,15 +434,15 @@ function SecurityPage() {
           </p>
           <ul className="security-bullets">
             <li>
-              <strong>No built-in email, SMS, or push alerts.</strong> Motion
-              and offline events surface as in-dashboard banners, in the
-              Incidents tab, and via the MCP tool log — but Command Center
-              does not send notifications to any external channel today. If
-              you need pages to a phone or an email when a camera goes
-              offline, wire your MCP agent to your own transport (Twilio,
-              Resend, PagerDuty, your existing webhook) — every plan has
-              full MCP access, and the agent can subscribe to motion events
-              and route them however you like.
+              <strong>No SMS or mobile push alerts.</strong> Email alerts
+              for operator-critical events <em>are</em> built in (camera
+              offline, CloudNode offline, disk-full warning, AI-created
+              incident — opt-in per kind in your settings). Motion-event
+              emails are deferred until we ship per-camera digest /
+              cooldown logic to keep a flappy outdoor camera from
+              blasting your inbox. SMS and mobile push remain MCP-only —
+              wire your agent to Twilio or your existing PagerDuty
+              webhook if you need them.
             </li>
             <li>
               <strong>No public status page yet.</strong> If Command Center

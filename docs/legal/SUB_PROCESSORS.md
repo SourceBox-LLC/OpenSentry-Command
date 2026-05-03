@@ -88,6 +88,28 @@ terminate the affected Service per Section 4.4 of the
   unset. Self-hosting deployments and any deployment that hasn't
   configured a DSN do not engage Sentry as a sub-processor.
 
+### Resend — *optional, off by default*
+- **Service provided:** Transactional email delivery for operator-
+  critical alerts (camera offline, CloudNode offline, Command Center
+  disk-critical, AI-agent-created incidents). Each kind is opt-in
+  per-org; defaults to ON for new orgs.
+- **Personal Data processed:** Recipient email address (for org
+  members opted-in to email alerts), subject line and body content
+  (which may include camera names, node names, and incident
+  summaries — all operator-controlled strings, never video or
+  motion-detection imagery), delivery status (sent / delivered /
+  bounced / complained) returned via webhook.
+- **Location of processing:** United States.
+- **Cross-border transfers:** Yes.
+- **Privacy policy:** https://resend.com/legal/privacy-policy
+- **DPA reference:** https://resend.com/legal/dpa
+- **Notes:** Disabled when the `EMAIL_ENABLED` environment variable
+  is unset or `false`. Resend is also bypassed when `RESEND_API_KEY`
+  is unset. Self-hosting deployments that haven't configured both
+  do not engage Resend as a sub-processor. Recipient emails are
+  derived from Clerk org membership at send time — no separate
+  mailing-list state is held by SourceBox or Resend.
+
 ---
 
 ## Sub-processors used by self-hosting deployments
@@ -109,6 +131,11 @@ diff this file in the repository for the full record.
 - **2026-04-25** — Initial draft consolidated from the engineering
   source-of-truth (`/security` page + actual codebase
   configuration).
+- **2026-05-02** — Added Resend (transactional email) as an
+  optional sub-processor. Engaged only when the operator sets both
+  `EMAIL_ENABLED=true` and `RESEND_API_KEY`. v1 covers four
+  operator-critical alert kinds; motion-event emails deferred to
+  v1.1.
 
 ---
 

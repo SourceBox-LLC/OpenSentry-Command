@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateNotificationSettings, updateOrgTimezone, getCameras } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateNotificationSettings, updateOrgTimezone, getCameras, getEmailPreferences, updateEmailPreferences } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
@@ -49,6 +49,15 @@ function SettingsPage() {
   const [notifications, setNotifications] = useState(null)
   const [notificationsSaving, setNotificationsSaving] = useState(false)
   const [settingsLoading, setSettingsLoading] = useState(false)
+  // Email alert preferences (per-org, per-kind).  Separate from
+  // ``notifications`` above — that controls whether events appear
+  // in the bell-icon inbox; this controls whether they ALSO email
+  // out.  ``emailGloballyEnabled`` mirrors the EMAIL_ENABLED
+  // server kill-switch so we can show a banner when the operator
+  // has emails turned off platform-wide regardless of per-kind state.
+  const [emailPrefs, setEmailPrefs] = useState(null)
+  const [emailGloballyEnabled, setEmailGloballyEnabled] = useState(false)
+  const [emailPrefsSaving, setEmailPrefsSaving] = useState(false)
   // Per-org timezone for scheduled-recording window interpretation.
   // IANA name; defaults to "UTC" until the operator picks one.  We
   // suggest the browser's tz on first interaction so the operator
@@ -82,7 +91,21 @@ function SettingsPage() {
     try {
       setSettingsLoading(true)
       const token = await getToken()
-      const data = await getSettings(() => Promise.resolve(token))
+      const tokenFn = () => Promise.resolve(token)
+      // Parallel: inbox-level + email-level prefs come from different
+      // endpoints (legacy /api/settings vs new /api/notifications/email/preferences)
+      // but we want one round-trip-equivalent of latency on the
+      // settings page's first paint.
+      const [data, emailData] = await Promise.all([
+        getSettings(tokenFn),
+        getEmailPreferences(tokenFn).catch((err) => {
+          // Old backends won't have this endpoint — graceful degrade
+          // by leaving the email section unrendered.  Logged so an
+          // unexpected 5xx is visible in the console.
+          console.warn("Email prefs unavailable:", err?.message || err)
+          return null
+        }),
+      ])
       // Backend defaults to "all on" when the notifications block is
       // missing, but be defensive for older backends that don't send it.
       setNotifications(
@@ -93,12 +116,45 @@ function SettingsPage() {
         },
       )
       setOrgTimezone(data.timezone || "UTC")
+      if (emailData) {
+        setEmailPrefs(emailData.preferences || null)
+        setEmailGloballyEnabled(Boolean(emailData.email_globally_enabled))
+      }
     } catch (err) {
       console.error("Failed to load settings:", err)
       showToast("Failed to load settings", "error")
     } finally {
       setSettingsLoading(false)
     }
+  }
+
+  const saveEmailPrefs = async (updated) => {
+    // Optimistic — keep the toggle responsive.  Roll back to server
+    // state on failure.
+    const previous = emailPrefs
+    setEmailPrefs(updated)
+    setEmailPrefsSaving(true)
+    try {
+      const token = await getToken()
+      const result = await updateEmailPreferences(
+        () => Promise.resolve(token),
+        updated,
+      )
+      // Server is the source of truth — re-sync from response so we
+      // catch any field the backend rejected silently.
+      if (result?.preferences) setEmailPrefs(result.preferences)
+      showToast("Email preferences saved", "success")
+    } catch (err) {
+      setEmailPrefs(previous)
+      showToast(err.message || "Failed to save email preferences", "error")
+    } finally {
+      setEmailPrefsSaving(false)
+    }
+  }
+
+  const handleEmailToggle = (key) => {
+    if (!emailPrefs) return
+    saveEmailPrefs({ ...emailPrefs, [key]: !emailPrefs[key] })
   }
 
   const saveTimezone = async (tzName) => {
@@ -580,6 +636,104 @@ function SettingsPage() {
                 <span className="toggle-knob" />
               </button>
             </label>
+          </div>
+        </div>
+      )}
+
+      {/*
+        Email alerts — separate section so the visual hierarchy makes
+        the inbox-vs-email distinction obvious.  Inbox toggles control
+        the bell-icon panel; email toggles control whether the same
+        event ALSO emails out.  An event can be in the inbox OR emailed
+        OR both OR neither, which is the granularity operators have
+        asked for.
+      */}
+      {emailPrefs && (
+        <div className="settings-section" id="settings-notifications">
+          <h2>Email Alerts</h2>
+          <p className="section-description">
+            Get an email when something operator-critical happens.
+            All four default ON for new orgs — turn off the ones
+            you don't need.  Motion-event emails are coming in a
+            future release; until then, motion shows up only in the
+            in-app inbox above.
+          </p>
+          {!emailGloballyEnabled && (
+            <div
+              style={{
+                padding: "0.75rem 1rem",
+                marginBottom: "1rem",
+                background: "rgba(245, 158, 11, 0.1)",
+                border: "1px solid rgba(245, 158, 11, 0.3)",
+                borderRadius: "6px",
+                color: "#f59e0b",
+                fontSize: "0.9rem",
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>Heads up:</strong> the platform-level email
+              kill-switch is OFF on this Command Center. No emails
+              will be sent regardless of the toggles below until an
+              operator flips <code>EMAIL_ENABLED=true</code>. Per-org
+              toggles still save and will activate the moment the
+              kill-switch turns on.
+            </div>
+          )}
+          <div className="settings-toggles">
+            {[
+              {
+                key: "email_camera_offline",
+                label: "Camera went offline",
+                desc: "When a camera misses heartbeats for >90 seconds.",
+                audience: "All members",
+              },
+              {
+                key: "email_node_offline",
+                label: "CloudNode went offline",
+                desc:
+                  "When a node loses uplink — every camera attached " +
+                  "to it goes dark with it.",
+                audience: "Admins only",
+              },
+              {
+                key: "email_disk_critical",
+                label: "Command Center disk almost full",
+                desc:
+                  "When the Fly volume hits 95% — recordings start " +
+                  "failing if you don't act.",
+                audience: "Admins only",
+              },
+              {
+                key: "email_incident_created",
+                label: "AI agent created an incident",
+                desc:
+                  "When a connected MCP agent (Claude, Cursor, etc.) " +
+                  "opens a new incident report.",
+                audience: "All members",
+              },
+            ].map(({ key, label, desc, audience }) => (
+              <label key={key} className="toggle-row">
+                <div className="toggle-info">
+                  <span className="toggle-label">{label}</span>
+                  <span className="toggle-desc">
+                    {desc}{" "}
+                    <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>
+                      · {audience}
+                    </span>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className={`toggle-switch ${emailPrefs[key] ? "active" : ""}`}
+                  onClick={() => handleEmailToggle(key)}
+                  disabled={emailPrefsSaving}
+                  aria-label={`Toggle email for ${label}`}
+                  aria-pressed={Boolean(emailPrefs[key])}
+                >
+                  <span className="toggle-knob" />
+                </button>
+              </label>
+            ))}
           </div>
         </div>
       )}
