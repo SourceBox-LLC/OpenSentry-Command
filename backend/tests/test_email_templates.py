@@ -206,3 +206,26 @@ def test_render_uses_dashboard_url_override():
         dashboard_url="https://override.example.com",
     )
     assert "https://override.example.com" in body_text
+
+
+def test_render_strips_embedded_newlines_from_subject():
+    """A title containing CR/LF (operator-controlled camera name OR
+    AI-agent-supplied incident title) must NOT leak into the rendered
+    subject as embedded newlines.  Resend's API rejects subject
+    header injection today, but a future provider swap that forwards
+    subjects raw to SMTP would turn this into a Bcc-injection vector.
+
+    Covers `\\n`, `\\r`, and `\\r\\n` separators for completeness."""
+    notif = _fake_notif(title="Front Door\r\nBcc: attacker@evil.test")
+
+    subject, _, _ = email_templates.render(
+        "camera_offline", notif,
+        unsubscribe_url="https://x.test/u",
+    )
+
+    assert "\r" not in subject
+    assert "\n" not in subject
+    # The original characters survive (just as spaces / removed CRs)
+    # so the alert remains intelligible to the recipient.
+    assert "Front Door" in subject
+    assert "Bcc: attacker@evil.test" in subject

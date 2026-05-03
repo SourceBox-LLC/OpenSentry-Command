@@ -222,7 +222,14 @@ def test_worker_logs_suppressed_outcomes(db, stub_send):
 
 def test_worker_retries_on_transient_failure(db, stub_send, monkeypatch):
     """First attempt fails → row stays 'pending' with attempts=1.
-    Second tick succeeds → row flips to 'sent' with attempts=2."""
+    Second tick succeeds → row flips to 'sent' with attempts=2.
+
+    Also pins the summary-counts contract: a row that retries
+    before succeeding shows up as sent=1 in the tick that actually
+    succeeded, NOT as failed=1 + sent=1 across both ticks.  The
+    summary line is what hits operator log streams; counting per-
+    attempt would falsely imply more failures than actually
+    happened to anyone reading the steady-state log."""
     # Make sure MAX_ATTEMPTS is high enough.
     monkeypatch.setattr(email_worker.settings, "EMAIL_MAX_ATTEMPTS", 3)
 
@@ -232,37 +239,55 @@ def test_worker_retries_on_transient_failure(db, stub_send, monkeypatch):
         EmailSendResult(ok=True, message_id="msg_retry"),
     ]
 
-    # Tick 1: fails
-    email_worker.run_one_tick(db)
+    # Tick 1: fails — row stays pending, summary counts NOTHING
+    # (mid-retry isn't a terminal outcome).
+    summary1 = email_worker.run_one_tick(db)
     db.refresh(row)
     assert row.status == "pending"
     assert row.attempts == 1
     assert "ConnectionError" in (row.error or "")
+    assert summary1.get("failed", 0) == 0  # not yet a terminal failure
+    assert summary1.get("sent", 0) == 0
 
-    # Tick 2: succeeds
-    email_worker.run_one_tick(db)
+    # Tick 2: succeeds — summary now reports the eventual outcome.
+    summary2 = email_worker.run_one_tick(db)
     db.refresh(row)
     assert row.status == "sent"
     assert row.attempts == 2
     assert row.resend_message_id == "msg_retry"
     assert row.error is None
+    assert summary2["sent"] == 1
+    assert summary2.get("failed", 0) == 0
 
 
 def test_worker_gives_up_at_max_attempts(db, stub_send, monkeypatch):
     """After EMAIL_MAX_ATTEMPTS failures, row is marked 'failed'
-    permanently — no more retries for that row."""
+    permanently — no more retries for that row.
+
+    Summary contract: only the FINAL tick (which marks the row
+    terminally failed) increments summary['failed']; the prior
+    two failed-but-retrying ticks count nothing."""
     monkeypatch.setattr(email_worker.settings, "EMAIL_MAX_ATTEMPTS", 3)
 
     row = _make_outbox_row(db, recipient="alice@example.com")
     stub_send.default = EmailSendResult(ok=False, error="HTTP 500")
 
+    summaries = []
     for _ in range(3):
-        email_worker.run_one_tick(db)
+        summaries.append(email_worker.run_one_tick(db))
         db.refresh(row)
 
     assert row.status == "failed"
     assert row.attempts == 3
     assert row.error == "HTTP 500"
+
+    # Ticks 1 + 2 produced no terminal counts; tick 3 produced one
+    # terminal failure.  Total across all ticks: failed=1, NOT failed=3.
+    total_failed = sum(s.get("failed", 0) for s in summaries)
+    assert total_failed == 1, (
+        f"expected 1 terminal failure across all ticks, got {total_failed} "
+        f"(per-tick: {[s.get('failed', 0) for s in summaries]})"
+    )
 
     # Fourth tick should pick up nothing — row is no longer 'pending'.
     stub_send.calls.clear()

@@ -1078,3 +1078,41 @@ def test_unsubscribe_endpoint_idempotent(unauthenticated_client, db):
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert Setting.get(db, "org_test123", "email_camera_offline") == "false"
+
+
+def test_unsubscribe_endpoint_html_escapes_kind(unauthenticated_client):
+    """The unsubscribe HTML page builds via str.format() (not Jinja2,
+    so autoescape doesn't apply).  Even though the kind value flows
+    from a verified JWT — making this practically unreachable without
+    the Clerk secret — anything substituted into the page must be
+    HTML-escaped as defense in depth.
+
+    This test forges a token by signing a kind containing HTML; it
+    succeeds only because the test process knows the secret.  In
+    production an attacker would need CLERK_SECRET_KEY to reach
+    this code path, at which point they have everything anyway —
+    but the escape protects against future paths that might surface
+    less-trusted input here."""
+    import jwt
+    from app.core.email_unsubscribe import _get_secret
+
+    # Use an unknown kind so we hit the "not in _EMAIL_KIND_TO_SETTING"
+    # path that interpolates the raw kind verbatim (the known-kind
+    # path uses a pretty-printed version which would obscure the
+    # escape).
+    bad_kind = "<script>alert('xss')</script>"
+    token = jwt.encode(
+        {"org_id": "org_x", "kind": bad_kind, "sub": "email-unsubscribe"},
+        _get_secret(),
+        algorithm="HS256",
+    )
+
+    resp = unauthenticated_client.get(
+        f"/api/notifications/email/unsubscribe?t={token}"
+    )
+
+    body = resp.text
+    # Escaped form must be present.
+    assert "&lt;script&gt;" in body
+    # Raw form must NOT appear in the rendered HTML.
+    assert "<script>alert" not in body

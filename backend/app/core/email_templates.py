@@ -142,6 +142,14 @@ def render(
         env, f"{kind}.subject.txt.j2", context,
         fallback=f"[SourceBox Sentry] {notif_proxy.title}",
     ).strip()
+    # Defense in depth — strip embedded CR/LF.  ``.strip()`` only
+    # trims edges, not embedded newlines.  Resend's API rejects
+    # subjects with header injection today, but if a future provider
+    # swap forwards subjects raw to SMTP, an embedded ``\r\nBcc: ...``
+    # in a notification.title (which flows from operator-controlled
+    # camera names + AI agent-supplied incident titles) would be a
+    # header-injection vector.  Cheap belt-and-suspenders.
+    subject = subject.replace("\r", "").replace("\n", " ")
     body_text = _render_or_fallback(
         env, f"{kind}.body.txt.j2", context,
         fallback=_generic_body_text(notif_proxy, dash, unsubscribe_url),

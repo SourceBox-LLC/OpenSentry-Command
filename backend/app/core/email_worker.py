@@ -114,9 +114,16 @@ def run_one_tick(db: Session) -> dict:
         status, message_id, error = outcome
         _finalize_row(db, row, status, message_id, error)
         _write_log(db, row, status, message_id, error)
-        summary[status if status != "sent" else "sent"] = (
-            summary.get(status, 0) + 1
-        )
+        # Count by TERMINAL state, not per-attempt outcome.  A row
+        # that fails twice and succeeds on the third attempt should
+        # show up as sent=1 in the tick that actually succeeded, not
+        # failed=2 sent=1 across three ticks.  Mid-retry rows
+        # (status flipped back to 'pending' by _finalize_row) are
+        # uncounted — they'll show up in the bucket they end up in
+        # eventually.
+        terminal = row.status
+        if terminal in ("sent", "failed", "suppressed"):
+            summary[terminal] = summary.get(terminal, 0) + 1
 
     db.commit()
     return summary

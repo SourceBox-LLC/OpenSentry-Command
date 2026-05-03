@@ -866,6 +866,22 @@ _UNSUBSCRIBE_HTML_ERROR = """<!DOCTYPE html>
 </body></html>"""
 
 
+def _safe_html(s: str) -> str:
+    """HTML-escape a string for embedding in the unsubscribe pages.
+
+    The unsubscribe templates use ``str.format()`` (not Jinja2) so
+    autoescape doesn't apply.  Anything we substitute that COULD
+    contain user-controlled content needs explicit escaping.
+
+    Realistically the values come from a verified JWT (``kind``) and
+    server config (``frontend``), so neither is reachable by an
+    attacker without already having the Clerk secret.  But escaping
+    is one line and removes a future footgun.
+    """
+    import html as _html
+    return _html.escape(s or "", quote=True)
+
+
 @router.get("/email/unsubscribe", response_class=HTMLResponse)
 @limiter.limit("60/minute")
 async def email_unsubscribe(
@@ -897,11 +913,12 @@ async def email_unsubscribe(
     limits, so explicit @limiter.limit is required here.
     """
     frontend = (settings.FRONTEND_URL or "").rstrip("/")
+    frontend_safe = _safe_html(frontend)
 
     decoded = verify_token(t)
     if decoded is None:
         return HTMLResponse(
-            _UNSUBSCRIBE_HTML_ERROR.format(frontend=frontend),
+            _UNSUBSCRIBE_HTML_ERROR.format(frontend=frontend_safe),
             status_code=400,
         )
 
@@ -912,7 +929,9 @@ async def email_unsubscribe(
     cfg = _EMAIL_KIND_TO_SETTING.get(kind)
     if cfg is None:
         return HTMLResponse(
-            _UNSUBSCRIBE_HTML_OK.format(kind=kind, frontend=frontend),
+            _UNSUBSCRIBE_HTML_OK.format(
+                kind=_safe_html(kind), frontend=frontend_safe,
+            ),
         )
 
     setting_key, _default = cfg
@@ -941,5 +960,7 @@ async def email_unsubscribe(
     # → "camera offline" is friendlier than "email_camera_offline".
     pretty_kind = kind.replace("_", " ")
     return HTMLResponse(
-        _UNSUBSCRIBE_HTML_OK.format(kind=pretty_kind, frontend=frontend),
+        _UNSUBSCRIBE_HTML_OK.format(
+            kind=_safe_html(pretty_kind), frontend=frontend_safe,
+        ),
     )
