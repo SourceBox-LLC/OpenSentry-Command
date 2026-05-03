@@ -33,6 +33,7 @@ from app.core.auth import AuthUser, require_admin, require_view
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.core.email_unsubscribe import verify_token
+from app.core.limiter import limiter
 from app.core.recipients import get_recipient_emails
 from app.models.models import EmailOutbox, EmailSuppression, Notification, Setting, UserNotificationState
 
@@ -866,7 +867,9 @@ _UNSUBSCRIBE_HTML_ERROR = """<!DOCTYPE html>
 
 
 @router.get("/email/unsubscribe", response_class=HTMLResponse)
+@limiter.limit("60/minute")
 async def email_unsubscribe(
+    request: Request,
     t: str = Query(..., description="Signed unsubscribe token"),
     db: Session = Depends(get_db),
 ):
@@ -883,6 +886,15 @@ async def email_unsubscribe(
     Per-recipient suppression for cases where one user wants to
     opt out while their org-mates keep receiving them is a v1.1
     feature gated on per-user prefs landing.
+
+    Rate-limited via slowapi.  This endpoint is PUBLIC (no auth —
+    the JWT in the URL is the auth) so without an explicit limit,
+    one leaked link could be hammered to write Setting + AuditLog
+    rows in a tight loop.  60/min per (org_id-from-JWT|client-IP)
+    is well above any plausible legitimate use (a user clicks the
+    link once, maybe twice if they're confused) but rules out
+    burst attacks.  The shared Limiter does NOT apply default
+    limits, so explicit @limiter.limit is required here.
     """
     frontend = (settings.FRONTEND_URL or "").rstrip("/")
 

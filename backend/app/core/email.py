@@ -160,18 +160,27 @@ def send_email(
             {"name": "event", "value": kind},
             {"name": "source", "value": "command_center"},
         ],
-        "headers": {
-            # Resend's idempotency header — same value on retry
-            # short-circuits to the original send instead of duplicating.
-            "Idempotency-Key": idempotency_key or str(uuid.uuid4()),
-        },
     }
+
+    # Resend's HTTP idempotency header — same value on retry tells
+    # Resend to short-circuit to the original send instead of
+    # delivering a duplicate message.  This MUST go through the
+    # SDK's ``options`` arg, not the message-level ``headers`` dict
+    # in ``payload``: the SDK reads ``options['idempotency_key']`` and
+    # sets the HTTP ``Idempotency-Key`` header, while a ``headers``
+    # entry in the payload becomes an SMTP header on the OUTGOING
+    # email instead of an HTTP header to Resend's API.  Verified
+    # against resend/request.py:61-62 in the SDK.  Passing it via
+    # the wrong path is silent — Resend just sends a fresh message
+    # every retry — which is why the worker's reclaim path needs
+    # this to be wired correctly to be safe.
+    options = {"idempotency_key": idempotency_key or str(uuid.uuid4())}
 
     try:
         # The SDK's ``Emails.send`` returns a dict-like with at least
         # an ``id`` field on success.  Accessing it defensively because
         # SDK responses have changed shape across versions.
-        response = resend.Emails.send(payload)
+        response = resend.Emails.send(payload, options=options)
     except Exception as exc:  # noqa: BLE001 — we want to catch everything
         # Don't leak request bodies into logs (subject + recipient is
         # plenty for triage; PII / message-id stays out of the log).

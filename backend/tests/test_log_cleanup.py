@@ -23,6 +23,8 @@ from app.core.database import SessionLocal
 from app.main import run_log_cleanup
 from app.models.models import (
     AuditLog,
+    EmailLog,
+    EmailOutbox,
     McpActivityLog,
     MotionEvent,
     Notification,
@@ -37,9 +39,10 @@ def _utcnow_naive() -> datetime:
 
 
 def _seed_logs_at(db, *, org_id: str, when: datetime) -> None:
-    """Insert one row in each of the five log tables for ``org_id`` at
-    ``when``. Using all five tables every time keeps each test exercising
-    the whole UNION + DELETE matrix rather than a single column."""
+    """Insert one row in each of the six per-org log tables for
+    ``org_id`` at ``when``. Using all of them every time keeps each
+    test exercising the whole UNION + DELETE matrix rather than a
+    single column."""
     db.add(StreamAccessLog(
         org_id=org_id, user_id="u1", camera_id="cam_1", node_id="node_1",
         ip_address="127.0.0.1", user_agent="t", accessed_at=when,
@@ -59,6 +62,10 @@ def _seed_logs_at(db, *, org_id: str, when: datetime) -> None:
     db.add(Notification(
         org_id=org_id, kind="motion", audience="all",
         title="t", body="b", severity="info", created_at=when,
+    ))
+    db.add(EmailLog(
+        org_id=org_id, recipient_email="x@y.test", kind="camera_offline",
+        status="sent", timestamp=when,
     ))
 
 
@@ -86,11 +93,14 @@ def test_run_log_cleanup_deletes_rows_past_free_tier_retention():
         # tier retention is 30 days (PLAN_LIMITS["free_org"]).
         summary = run_log_cleanup(db)
 
-        # Five tables × one old row each = 5 deletions; 5 recent rows survive.
+        # Six per-org tables × one old row each = 6 deletions; 6
+        # recent rows survive.  No EmailOutbox seeded so that
+        # cleanup contributes 0 here (covered separately below).
         assert summary["orgs_processed"] == 1
-        assert summary["total_deleted"] == 5
+        assert summary["total_deleted"] == 6
         assert summary["totals"] == {
             "stream": 1, "mcp": 1, "audit": 1, "motion": 1, "notif": 1,
+            "email_log": 1, "email_outbox": 0,
         }
 
         # Spot-check that the recent rows weren't touched.
@@ -99,6 +109,7 @@ def test_run_log_cleanup_deletes_rows_past_free_tier_retention():
         assert db.query(AuditLog).filter_by(org_id="org_free").count() == 1
         assert db.query(MotionEvent).filter_by(org_id="org_free").count() == 1
         assert db.query(Notification).filter_by(org_id="org_free").count() == 1
+        assert db.query(EmailLog).filter_by(org_id="org_free").count() == 1
     finally:
         db.close()
 
@@ -136,6 +147,7 @@ def test_run_log_cleanup_respects_pro_plus_longer_retention():
         assert db.query(AuditLog).filter_by(org_id="org_pp").count() == 1
         assert db.query(MotionEvent).filter_by(org_id="org_pp").count() == 1
         assert db.query(Notification).filter_by(org_id="org_pp").count() == 1
+        assert db.query(EmailLog).filter_by(org_id="org_pp").count() == 1
     finally:
         db.close()
 
@@ -159,14 +171,16 @@ def test_run_log_cleanup_isolates_orgs_by_plan():
         summary = run_log_cleanup(db)
 
         assert summary["orgs_processed"] == 2
-        # Only org_free's 5 rows are past their 30d cutoff.
-        assert summary["total_deleted"] == 5
+        # Only org_free's 6 per-org rows are past their 30d cutoff.
+        assert summary["total_deleted"] == 6
 
         # org_pro untouched; org_free fully purged.
         assert db.query(StreamAccessLog).filter_by(org_id="org_pro").count() == 1
         assert db.query(StreamAccessLog).filter_by(org_id="org_free").count() == 0
         assert db.query(Notification).filter_by(org_id="org_pro").count() == 1
         assert db.query(Notification).filter_by(org_id="org_free").count() == 0
+        assert db.query(EmailLog).filter_by(org_id="org_pro").count() == 1
+        assert db.query(EmailLog).filter_by(org_id="org_free").count() == 0
     finally:
         db.close()
 
@@ -181,7 +195,10 @@ def test_run_log_cleanup_handles_empty_database():
         summary = run_log_cleanup(db)
         assert summary == {
             "orgs_processed": 0,
-            "totals": {"stream": 0, "mcp": 0, "audit": 0, "motion": 0, "notif": 0},
+            "totals": {
+                "stream": 0, "mcp": 0, "audit": 0, "motion": 0, "notif": 0,
+                "email_log": 0, "email_outbox": 0,
+            },
             "total_deleted": 0,
         }
     finally:
@@ -208,9 +225,97 @@ def test_run_log_cleanup_returns_summary_shape():
         assert set(summary.keys()) == {"orgs_processed", "totals", "total_deleted"}
         assert set(summary["totals"].keys()) == {
             "stream", "mcp", "audit", "motion", "notif",
+            "email_log", "email_outbox",
         }
         assert isinstance(summary["orgs_processed"], int)
         assert isinstance(summary["total_deleted"], int)
         assert summary["total_deleted"] == sum(summary["totals"].values())
+    finally:
+        db.close()
+
+
+# ── EmailOutbox cleanup (cross-org, terminal-state only) ────────────
+
+def test_run_log_cleanup_deletes_old_terminal_outbox_rows():
+    """EmailOutbox rows in 'sent', 'failed', or 'suppressed' status
+    older than 7 days are deleted regardless of org-tier — the outbox
+    is operationally a queue, not a per-org log, so it gets a fixed
+    short window.  Long-term audit history lives in EmailLog (which
+    uses the per-org tiered retention)."""
+    db = SessionLocal()
+    try:
+        now = _utcnow_naive()
+        old = now - timedelta(days=10)
+        recent = now - timedelta(days=2)
+
+        # Seed terminal-state old rows across multiple orgs to verify
+        # cross-org scope.
+        for org in ("org_a", "org_b"):
+            for status in ("sent", "failed", "suppressed"):
+                row = EmailOutbox(
+                    org_id=org, recipient_email="x@y.test",
+                    subject="x", body_text="t", body_html="<p>t</p>",
+                    kind="camera_offline", status=status,
+                )
+                db.add(row)
+        db.commit()
+        # Backdate the created_at column post-insert (the model's
+        # default fires on add; explicit assignment doesn't override
+        # it cleanly otherwise).
+        db.query(EmailOutbox).update({EmailOutbox.created_at: old})
+        db.commit()
+
+        # Plus a recent row that should NOT be deleted.
+        recent_row = EmailOutbox(
+            org_id="org_a", recipient_email="x@y.test",
+            subject="x", body_text="t", body_html="<p>t</p>",
+            kind="camera_offline", status="sent",
+        )
+        db.add(recent_row)
+        db.commit()
+        db.query(EmailOutbox).filter(EmailOutbox.id == recent_row.id).update(
+            {EmailOutbox.created_at: recent}
+        )
+        db.commit()
+
+        summary = run_log_cleanup(db)
+
+        # 6 old terminal rows deleted (3 statuses × 2 orgs).
+        assert summary["totals"]["email_outbox"] == 6
+        # Recent row survives.
+        assert db.query(EmailOutbox).count() == 1
+
+
+    finally:
+        db.close()
+
+
+def test_run_log_cleanup_never_deletes_pending_or_sending_outbox_rows():
+    """Even very old 'pending' / 'sending' rows must survive the
+    cleanup — deleting them would silently lose an email mid-retry.
+    Worth pinning explicitly because the obvious "by-age" filter
+    would lose them."""
+    db = SessionLocal()
+    try:
+        now = _utcnow_naive()
+        ancient = now - timedelta(days=365)  # way past any cutoff
+
+        for status in ("pending", "sending"):
+            row = EmailOutbox(
+                org_id="org_x", recipient_email="x@y.test",
+                subject="x", body_text="t", body_html="<p>t</p>",
+                kind="camera_offline", status=status,
+            )
+            db.add(row)
+        db.commit()
+        db.query(EmailOutbox).update({EmailOutbox.created_at: ancient})
+        db.commit()
+
+        summary = run_log_cleanup(db)
+
+        assert summary["totals"]["email_outbox"] == 0
+        # Both rows still present.
+        assert db.query(EmailOutbox).filter_by(status="pending").count() == 1
+        assert db.query(EmailOutbox).filter_by(status="sending").count() == 1
     finally:
         db.close()

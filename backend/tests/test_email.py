@@ -74,14 +74,22 @@ def test_send_email_missing_api_key_returns_unconfigured(monkeypatch):
 
 def test_send_email_success_extracts_message_id(monkeypatch):
     """A normal Resend response (dict with 'id') round-trips into
-    EmailSendResult.message_id."""
+    EmailSendResult.message_id.
+
+    Also pins the SDK call shape — payload + options as separate args.
+    Putting ``idempotency_key`` in the payload's ``headers`` dict by
+    mistake (an earlier bug) results in it being sent as an SMTP
+    header on the email rather than as the HTTP idempotency header
+    Resend's API actually inspects.  Verifying ``options`` on the
+    SDK call protects against that regression."""
     monkeypatch.setattr(email_mod.settings, "EMAIL_ENABLED", True)
     monkeypatch.setattr(email_mod.settings, "RESEND_API_KEY", "re_test_dummy")
     monkeypatch.setattr(email_mod.settings, "EMAIL_FROM_ADDRESS", "n@s.test")
 
     captured: dict = {}
-    def fake_send(payload):
+    def fake_send(payload, options=None):
         captured["payload"] = payload
+        captured["options"] = options
         return {"id": "msg_abc123"}
     monkeypatch.setattr(email_mod.resend.Emails, "send", fake_send)
 
@@ -98,15 +106,21 @@ def test_send_email_success_extracts_message_id(monkeypatch):
     assert result.message_id == "msg_abc123"
     assert result.skipped is False
 
-    # Verify we sent the right shape — tag injection, idempotency
-    # header, both body parts.
+    # Verify we sent the right shape — tag injection, both body parts.
     p = captured["payload"]
     assert p["to"] == ["alice@example.com"]
     assert p["subject"] == "Camera Front Door went offline"
     assert p["text"] == "Plain"
     assert p["html"] == "<p>HTML</p>"
     assert {"name": "event", "value": "camera_offline"} in p["tags"]
-    assert p["headers"]["Idempotency-Key"] == "outbox-42"
+    # Idempotency MUST be in options, not the message-level headers
+    # dict — Resend's SDK only sets the HTTP Idempotency-Key header
+    # when it sees options['idempotency_key'].
+    assert captured["options"] == {"idempotency_key": "outbox-42"}
+    # And the payload must NOT include a 'headers' key carrying the
+    # idempotency value — that would put it on the outgoing email
+    # as an SMTP header instead, doing nothing for retry safety.
+    assert "headers" not in p or "Idempotency-Key" not in p.get("headers", {})
 
 
 def test_send_email_no_message_id_returns_failure(monkeypatch):
@@ -117,7 +131,7 @@ def test_send_email_no_message_id_returns_failure(monkeypatch):
     monkeypatch.setattr(email_mod.settings, "EMAIL_ENABLED", True)
     monkeypatch.setattr(email_mod.settings, "RESEND_API_KEY", "re_test_dummy")
 
-    monkeypatch.setattr(email_mod.resend.Emails, "send", lambda payload: {})
+    monkeypatch.setattr(email_mod.resend.Emails, "send", lambda payload, options=None: {})
 
     result = send_email(
         to="alice@example.com",
@@ -141,7 +155,7 @@ def test_send_email_swallows_exceptions_into_error(monkeypatch):
     monkeypatch.setattr(email_mod.settings, "EMAIL_ENABLED", True)
     monkeypatch.setattr(email_mod.settings, "RESEND_API_KEY", "re_test_dummy")
 
-    def boom(payload):
+    def boom(payload, options=None):
         raise ConnectionError("DNS failure")
     monkeypatch.setattr(email_mod.resend.Emails, "send", boom)
 

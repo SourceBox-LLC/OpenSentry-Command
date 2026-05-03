@@ -386,13 +386,23 @@ def run_log_cleanup(db, *, default_retention_days: int = LOG_RETENTION_DAYS) -> 
 
         {
             "orgs_processed": int,
-            "totals": {"stream", "mcp", "audit", "motion", "notif"},
+            "totals": {"stream", "mcp", "audit", "motion", "notif", "email_log", "email_outbox"},
             "total_deleted": int,
         }
+
+    EmailOutbox cleanup is bounded to TERMINAL-state rows only —
+    pending/sending rows are never deleted regardless of age, because
+    deleting an in-flight retry would silently lose the email.  We
+    use a fixed 7-day terminal-row window (rather than per-org tier)
+    because the outbox is the worker's hot scan target and we want
+    it small at all times — the audit trail in EmailLog carries
+    long-term history per-org with the same tiered retention as
+    other logs.
     """
     from sqlalchemy import union, select
     from app.models.models import (
         StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Notification,
+        EmailLog, EmailOutbox,
     )
     from app.core.plans import get_plan_limits, resolve_org_plan
 
@@ -400,6 +410,8 @@ def run_log_cleanup(db, *, default_retention_days: int = LOG_RETENTION_DAYS) -> 
 
     # One query collects every org_id we're holding logs for.
     # UNION across the log tables — small set, runs once a day.
+    # EmailLog joins the union so an org with email-only activity
+    # still gets its retention applied.
     org_rows = db.execute(
         union(
             select(StreamAccessLog.org_id).distinct(),
@@ -407,11 +419,15 @@ def run_log_cleanup(db, *, default_retention_days: int = LOG_RETENTION_DAYS) -> 
             select(AuditLog.org_id).distinct(),
             select(MotionEvent.org_id).distinct(),
             select(Notification.org_id).distinct(),
+            select(EmailLog.org_id).distinct(),
         )
     ).all()
     org_ids = {row[0] for row in org_rows if row[0]}
 
-    totals = {"stream": 0, "mcp": 0, "audit": 0, "motion": 0, "notif": 0}
+    totals = {
+        "stream": 0, "mcp": 0, "audit": 0, "motion": 0, "notif": 0,
+        "email_log": 0,
+    }
     for org_id in org_ids:
         try:
             plan = resolve_org_plan(db, org_id)
@@ -447,6 +463,29 @@ def run_log_cleanup(db, *, default_retention_days: int = LOG_RETENTION_DAYS) -> 
             .filter(Notification.org_id == org_id, Notification.created_at < cutoff)
             .delete(synchronize_session=False)
         )
+        totals["email_log"] += (
+            db.query(EmailLog)
+            .filter(EmailLog.org_id == org_id, EmailLog.timestamp < cutoff)
+            .delete(synchronize_session=False)
+        )
+
+    # EmailOutbox cleanup: cross-org, terminal-state-only, fixed
+    # 7-day window.  Per-org tiering doesn't apply here because the
+    # outbox is operationally a queue (not a log) — long-term
+    # auditability lives in EmailLog above.  Hard-deleting old
+    # 'sent'/'failed'/'suppressed' rows keeps the worker's hot scan
+    # cheap and prevents the table from being a perpetual store of
+    # email subject lines / body content (privacy) for orgs that
+    # don't actually have a long retention tier.
+    outbox_cutoff = now - timedelta(days=7)
+    totals["email_outbox"] = (
+        db.query(EmailOutbox)
+        .filter(
+            EmailOutbox.status.in_(("sent", "failed", "suppressed")),
+            EmailOutbox.created_at < outbox_cutoff,
+        )
+        .delete(synchronize_session=False)
+    )
 
     db.commit()
 
@@ -479,9 +518,12 @@ async def _log_cleanup_loop():
                 if summary["total_deleted"] > 0:
                     t = summary["totals"]
                     logger.info(
-                        "[Cleanup] Deleted %d old logs across %d orgs (stream=%d mcp=%d audit=%d motion=%d notif=%d)",
+                        "[Cleanup] Deleted %d old logs across %d orgs "
+                        "(stream=%d mcp=%d audit=%d motion=%d notif=%d "
+                        "email_log=%d email_outbox=%d)",
                         summary["total_deleted"], summary["orgs_processed"],
                         t["stream"], t["mcp"], t["audit"], t["motion"], t["notif"],
+                        t.get("email_log", 0), t.get("email_outbox", 0),
                     )
             finally:
                 db.close()
