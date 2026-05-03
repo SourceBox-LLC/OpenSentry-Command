@@ -104,17 +104,30 @@ RELEASE_CACHE_REFRESH_INTERVAL_SECONDS = int(
 @asynccontextmanager
 async def lifespan(app):
     """Application lifespan: startup and shutdown hooks."""
+    from app.core.email_worker import email_worker_loop
+
     cleanup_task = asyncio.create_task(_log_cleanup_loop())
     offline_sweep_task = asyncio.create_task(_offline_sweep_loop())
     viewer_usage_task = asyncio.create_task(_viewer_usage_flush_loop())
     release_refresh_task = asyncio.create_task(_release_cache_refresh_loop())
-    print(f"[App] SourceBox Sentry Command Center started (log retention: {LOG_RETENTION_DAYS}d)")
+    # Email worker drains EmailOutbox via Resend.  Ships always-on so
+    # the kill-switch can be flipped via env var without a redeploy;
+    # when EMAIL_ENABLED=false the transport short-circuits and the
+    # worker just logs "would have sent" lines for any outbox row
+    # that gets enqueued.  See app/core/email_worker.py.
+    email_worker_task = asyncio.create_task(email_worker_loop())
+    print(
+        f"[App] SourceBox Sentry Command Center started "
+        f"(log retention: {LOG_RETENTION_DAYS}d, "
+        f"email: {'on' if settings.EMAIL_ENABLED else 'off'})"
+    )
     async with mcp_app.lifespan(app):
         yield
     cleanup_task.cancel()
     offline_sweep_task.cancel()
     viewer_usage_task.cancel()
     release_refresh_task.cancel()
+    email_worker_task.cancel()
     print("[System] Shutdown complete")
 
 

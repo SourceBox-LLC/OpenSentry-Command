@@ -751,3 +751,189 @@ class OrgMonthlyUsage(Base):
         }
 
 
+# ── Email notifications (Resend) ─────────────────────────────────────
+# Three tables back the operator-critical email pipeline:
+#
+#   EmailOutbox      — pending sends, drained by app/core/email_worker.py
+#   EmailLog         — append-only audit trail of every send attempt
+#   EmailSuppression — local mirror of Resend's suppression list
+#                      (bounces, complaints, manual unsubscribes)
+#
+# Why three tables and not one row that mutates through statuses:
+#   - Outbox rows get cleaned up (the dashboard doesn't need to render
+#     last week's "sent" rows; the audit trail does).
+#   - Suppression is a different lifecycle (per-address forever, not
+#     per-message) and needs a UNIQUE on the address.
+#   - Splitting them keeps the worker's hot SELECT narrow.
+#
+# See plans/gentle-coalescing-teacup.md for the full design rationale.
+
+class EmailOutbox(Base):
+    """Pending email send.  Populated by ``create_notification()`` when
+    an org has email enabled for the notification kind; drained by
+    ``app/core/email_worker.py`` in batches.
+
+    Surviving process restart is the whole point of having a table
+    here (vs. fire-and-forget asyncio).  A Fly machine restart that
+    loses an in-flight ``camera_offline`` send is exactly the kind of
+    silent failure we don't want for security alerts.
+
+    The (status, created_at) composite index is what the worker scans
+    every tick — "give me the oldest pending rows, in order."  Ordering
+    by created_at preserves the original event order so the operator
+    sees alerts in the sequence they fired, not in random worker
+    pickup order.
+
+    No FK to Notification by design: Notification rows can be cleared
+    by the per-user inbox prefs without breaking the audit trail of
+    what actually emailed out.  ``notification_id`` is a soft
+    reference for traceability only.
+    """
+
+    __tablename__ = "email_outbox"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    # 320 = max RFC 5321 local + @ + domain length.
+    recipient_email = Column(String(320), nullable=False)
+    subject = Column(String(500), nullable=False)
+    body_text = Column(Text, nullable=False, default="")
+    body_html = Column(Text, nullable=False, default="")
+    # Matches Notification.kind so the worker can tag the Resend
+    # message and the per-event prefs gate stays trivially derivable.
+    kind = Column(String(40), nullable=False)
+    # Soft reference back to the originating Notification row.  Not a
+    # FK because Notification rows can be cleaned up by retention
+    # without stranding outbox sends in the middle of the worker tick.
+    notification_id = Column(Integer, nullable=True)
+    # 'pending' | 'sending' | 'sent' | 'failed' | 'suppressed'
+    # 'sending' is the lock state — claimed by a worker, not yet
+    # acknowledged by Resend.  A row stuck in 'sending' for >60s on
+    # the next tick gets reclaimed (worker restart mid-flight).
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    last_attempt_at = Column(DateTime, nullable=True)
+    sent_at = Column(DateTime, nullable=True)
+    # Resend's id for the message.  Used for dashboard deep-links and
+    # for correlating webhook events back to our outbox row.
+    resend_message_id = Column(String(100), nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+        index=True,
+    )
+
+    __table_args__ = (
+        # The worker's hot scan: WHERE status='pending' ORDER BY created_at.
+        Index("ix_email_outbox_status_created", "status", "created_at"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "org_id": self.org_id,
+            "recipient_email": self.recipient_email,
+            "subject": self.subject,
+            "kind": self.kind,
+            "status": self.status,
+            "attempts": self.attempts,
+            "resend_message_id": self.resend_message_id,
+            "error": self.error,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "sent_at": self.sent_at.isoformat() if self.sent_at else None,
+        }
+
+
+class EmailLog(Base):
+    """Audit trail — one row per send attempt outcome.
+
+    Used to render "recent emails" in the dashboard, debug "why
+    didn't I get an email?" tickets, and (eventually) feed the
+    weekly digest of what the operator was alerted about.
+
+    Mirrors AuditLog's shape on purpose — same retention story
+    (per-org tiered cleanup in run_log_cleanup), same scannable
+    shape, same error-swallowing write pattern.  We keep this
+    separate from EmailOutbox so the outbox stays narrow (the
+    worker's hot path) while the audit trail can grow without
+    bound until retention sweeps it.
+    """
+
+    __tablename__ = "email_log"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+    timestamp = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+        index=True,
+    )
+    recipient_email = Column(String(320), nullable=False)
+    kind = Column(String(40), nullable=False, index=True)
+    # 'sent' | 'failed' | 'suppressed'.  The transient 'sending' /
+    # 'pending' states never make it here — they only exist on the
+    # outbox row before the final outcome.
+    status = Column(String(20), nullable=False)
+    resend_message_id = Column(String(100), nullable=True)
+    error = Column(Text, nullable=True)
+
+    __table_args__ = (
+        # Hot query: "show me this org's recent email activity."
+        Index("ix_email_log_org_timestamp", "org_id", "timestamp"),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "recipient_email": self.recipient_email,
+            "kind": self.kind,
+            "status": self.status,
+            "resend_message_id": self.resend_message_id,
+            "error": self.error,
+        }
+
+
+class EmailSuppression(Base):
+    """Local mirror of Resend's suppression list.
+
+    Resend's webhook tells us when an address bounces, complains
+    (marked spam), or manually unsubscribes.  We persist these so
+    the worker can short-circuit before the API call — saves a
+    round-trip and prevents accidentally re-suppressing an address
+    Resend already knows about (which counts against deliverability
+    reputation).
+
+    Address is the natural key (UNIQUE) because the same address
+    can't be suppressed twice for different reasons — most recent
+    reason wins.  Inserts are upserts in practice (handler swallows
+    UniqueConstraint violations silently).
+
+    Manual unsubscribes (via the email's unsubscribe link) write
+    here too with source='unsubscribe', so the worker treats them
+    identically to bounces — no special-case code on the send path.
+    """
+
+    __tablename__ = "email_suppression"
+
+    id = Column(Integer, primary_key=True)
+    address = Column(String(320), nullable=False, unique=True, index=True)
+    # 'bounce' | 'complaint' | 'unsubscribe' | 'manual'
+    reason = Column(String(40), nullable=False)
+    # 'resend_webhook' | 'unsubscribe_link' | 'admin_action'
+    source = Column(String(40), nullable=False)
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=timezone.utc).replace(tzinfo=None),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            "address": self.address,
+            "reason": self.reason,
+            "source": self.source,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+

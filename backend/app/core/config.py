@@ -91,9 +91,51 @@ class Config:
     MIN_SUPPORTED_NODE_VERSION: str = os.getenv("MIN_SUPPORTED_NODE_VERSION", "0.1.0")
     LATEST_NODE_VERSION: str = os.getenv("LATEST_NODE_VERSION", "0.1.26")
 
+    # ── Email notifications (Resend) ─────────────────────────────────
+    # Resend transactional email integration for operator-critical
+    # notifications (camera offline, node offline, disk critical, new
+    # incident).  See docs/legal/SUB_PROCESSORS.md for the disclosure
+    # and app/core/email_worker.py for the send path.
+    #
+    # EMAIL_ENABLED is the global kill-switch — code can ship with it
+    # off (the default), then operator flips it on once DNS propagates
+    # and a smoke test passes.  Worker still runs when off, but the
+    # transport short-circuits with a logged "would have sent" line so
+    # local dev doesn't burn the free-tier daily limit.
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+    RESEND_WEBHOOK_SECRET: str = os.getenv("RESEND_WEBHOOK_SECRET", "")
+    EMAIL_FROM_ADDRESS: str = os.getenv(
+        "EMAIL_FROM_ADDRESS", "notifications@sourceboxsentry.com"
+    )
+    EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "SourceBox Sentry")
+    EMAIL_ENABLED: bool = os.getenv("EMAIL_ENABLED", "false").lower() == "true"
+    # Worker tunables.  5s tick keeps median time-to-deliver under 10s
+    # without hammering SQLite; 20-row batch keeps a single tick under
+    # Resend's default rate limit (10 req/sec on new accounts).
+    EMAIL_WORKER_INTERVAL_SECONDS: int = int(
+        os.getenv("EMAIL_WORKER_INTERVAL_SECONDS", "5")
+    )
+    EMAIL_WORKER_BATCH_SIZE: int = int(
+        os.getenv("EMAIL_WORKER_BATCH_SIZE", "20")
+    )
+    # Max attempts before a row gets marked 'failed' permanently and
+    # the worker stops retrying.  3 covers transient Resend 5xx /
+    # network blips without piling up infinite zombie rows when their
+    # API has a real outage.
+    EMAIL_MAX_ATTEMPTS: int = int(os.getenv("EMAIL_MAX_ATTEMPTS", "3"))
+
     @classmethod
     def is_clerk_configured(cls) -> bool:
         return bool(cls.CLERK_SECRET_KEY and cls.CLERK_PUBLISHABLE_KEY)
+
+    @classmethod
+    def is_email_configured(cls) -> bool:
+        """True iff the Resend transport has the credentials it needs.
+        EMAIL_ENABLED is the operator switch; this checks the wiring.
+        Health endpoint reports both separately so an operator can tell
+        'I forgot to set the secret' from 'I left the kill-switch off'.
+        """
+        return bool(cls.RESEND_API_KEY and cls.EMAIL_FROM_ADDRESS)
 
 
 settings = Config()
