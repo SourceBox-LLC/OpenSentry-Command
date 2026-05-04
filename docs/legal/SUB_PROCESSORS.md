@@ -93,8 +93,9 @@ terminate the affected Service per Section 4.4 of the
   critical alerts (camera offline + recovered, CloudNode offline +
   recovered, AI-agent-created incidents, MCP API key audit events,
   CloudNode host disk approaching full, organization membership
-  lifecycle — added / role-changed / removed). Each setting is
-  opt-in per-org; defaults to ON for new orgs.
+  lifecycle — added / role-changed / removed, and motion detection
+  with per-camera cooldown + digest). All settings are opt-in
+  per-org; six default ON for new orgs, motion defaults OFF.
 - **Personal Data processed:** Recipient email address (for org
   members opted-in to email alerts), subject line and body content
   (which may include camera names, node names, and incident

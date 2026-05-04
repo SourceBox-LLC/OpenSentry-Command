@@ -898,13 +898,14 @@ def test_get_email_preferences_returns_defaults(admin_client):
     data = resp.json()
     assert "email_globally_enabled" in data
     prefs = data["preferences"]
-    # All six customer-facing setting keys default to enabled.
+    # Six setting keys default to enabled, ONE (motion) defaults OFF.
     # Some keys gate multiple notification kinds:
     #   - ``email_camera_offline`` → camera_offline + camera_online
     #   - ``email_node_offline``   → node_offline + node_online
     #   - ``email_mcp_key_audit``  → mcp_key_created + mcp_key_revoked
     #   - ``email_member_audit``   → member_added + member_role_changed
     #                                + member_removed
+    #   - ``email_motion``         → motion + motion_digest
     # See _EMAIL_KIND_TO_SETTING for the full kind→setting fan-out.
     assert prefs["email_camera_offline"] is True
     assert prefs["email_node_offline"] is True
@@ -912,6 +913,10 @@ def test_get_email_preferences_returns_defaults(admin_client):
     assert prefs["email_mcp_key_audit"] is True
     assert prefs["email_cloudnode_disk_low"] is True
     assert prefs["email_member_audit"] is True
+    # Motion is the ONLY email kind that defaults OFF — see the
+    # comment block above _EMAIL_KIND_TO_SETTING for rationale
+    # (per-org volume variance + sender-reputation protection).
+    assert prefs["email_motion"] is False
     # disk_critical was REMOVED from this map on 2026-05-04 — it's
     # platform-infrastructure state, routed via Sentry instead.
     assert "email_disk_critical" not in prefs

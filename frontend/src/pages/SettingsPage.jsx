@@ -653,10 +653,12 @@ function SettingsPage() {
           <h2>Email Alerts</h2>
           <p className="section-description">
             Get an email when something operator-critical happens.
-            All six default ON for new orgs — turn off the ones
-            you don't need.  Motion-event emails are coming in a
-            future release; until then, motion shows up only in the
-            in-app inbox above.
+            The first six default ON for new orgs — turn off the
+            ones you don't need.  <strong>Motion detection emails
+            default OFF</strong> and must be opted in below; they
+            ship with cooldown + digest behavior so you get one
+            "first motion" email plus at most one summary per
+            camera per cooldown window, not a flood.
           </p>
           {!emailGloballyEnabled && (
             <div
@@ -733,6 +735,18 @@ function SettingsPage() {
                   "Catches \"someone just got admin access to my " +
                   "cameras\" within seconds.",
                 audience: "Admins only",
+              },
+              {
+                key: "email_motion",
+                label: "Motion detection (with digest)",
+                desc:
+                  "First motion event from each camera triggers an " +
+                  "immediate email.  Any additional events in the " +
+                  "next ~15 minutes are summarised in a single digest " +
+                  "email (\"X more motion events on Front Door\") so " +
+                  "a flappy outdoor camera doesn't flood your inbox.  " +
+                  "Default OFF — opt in if you want it.",
+                audience: "All members",
               },
             ].map(({ key, label, desc, audience }) => (
               <label key={key} className="toggle-row">

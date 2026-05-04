@@ -123,6 +123,16 @@ DISK_CRITICAL_REEMIT_INTERVAL_SECONDS = int(
     os.getenv("DISK_CRITICAL_REEMIT_INTERVAL_SECONDS", str(6 * 3600))
 )
 
+# Cadence for the motion-email digest sweep.  60s is fast enough that
+# a 15-minute cooldown's digest is delivered within ~1 minute of window
+# expiry (acceptable lag for "here's a summary of the last 15 min"),
+# but slow enough that the LIKE scan over Setting rows is a rounding
+# error.  See app/api/notifications.py::_claim_motion_cooldown_or_silence
+# for the per-camera anchor mechanism this loop drains.
+MOTION_DIGEST_INTERVAL_SECONDS = int(
+    os.getenv("MOTION_DIGEST_INTERVAL_SECONDS", "60")
+)
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -146,6 +156,13 @@ async def lifespan(app):
     # _check_and_emit_disk_critical for the rationale.  Pure in-
     # memory debounce, no DB persistence.
     disk_check_task = asyncio.create_task(_disk_check_loop())
+    # Motion-email digest sweep — drains expired per-camera cooldown
+    # anchors written by the email-immediate path in
+    # app/api/notifications.py::_claim_motion_cooldown_or_silence and
+    # emits a single ``motion_digest`` notification per camera that
+    # accumulated additional motion events during the cooldown window.
+    # See _motion_digest_loop below for the full lifecycle.
+    motion_digest_task = asyncio.create_task(_motion_digest_loop())
     print(
         f"[App] SourceBox Sentry Command Center started "
         f"(log retention: {LOG_RETENTION_DAYS}d, "
@@ -159,6 +176,7 @@ async def lifespan(app):
     release_refresh_task.cancel()
     email_worker_task.cancel()
     disk_check_task.cancel()
+    motion_digest_task.cancel()
     print("[System] Shutdown complete")
 
 
@@ -808,6 +826,157 @@ async def _disk_check_loop():
                 db.close()
         except Exception:
             logger.exception("[DiskCheck] tick failed")
+
+
+async def _motion_digest_loop():
+    """Per-camera motion-email digest sweep.
+
+    Runs every ``MOTION_DIGEST_INTERVAL_SECONDS`` (60s default).  Drains
+    cooldown anchors written by the immediate-email path (see
+    ``app/api/notifications.py::_claim_motion_cooldown_or_silence``).
+    For each anchor whose window has expired, counts MotionEvent rows
+    that landed in the window and — if there were extras AND the org
+    still has email_motion enabled — emits a single ``motion_digest``
+    notification (which itself enqueues an email via the standard
+    create_notification path).  The anchor is deleted regardless of
+    whether a digest was emitted, so the next motion event for that
+    camera triggers a fresh immediate email + new anchor.
+
+    Per-anchor try/except so one corrupt row can't poison the tick;
+    the outer try/except catches anything that escapes (DB connection
+    drops, session reset) so the loop survives transient failures and
+    picks up where it left off on the next tick.
+    """
+    from app.models.models import Camera, MotionEvent, Setting
+    from app.api.notifications import (
+        create_notification,
+        email_enabled_for_kind,
+        _motion_cooldown_minutes,
+    )
+
+    while True:
+        await asyncio.sleep(MOTION_DIGEST_INTERVAL_SECONDS)
+
+        try:
+            db = SessionLocal()
+            try:
+                now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+                anchors = (
+                    db.query(Setting)
+                    .filter(Setting.key.like("motion_email_cooldown_start:%"))
+                    .all()
+                )
+                for anchor_row in anchors:
+                    try:
+                        # Parse camera_id back from the colon-suffixed key.
+                        # ``split(":", 1)`` handles the (extremely unlikely)
+                        # case of a colon in the camera_id itself.
+                        if ":" not in anchor_row.key:
+                            db.delete(anchor_row)
+                            db.commit()
+                            continue
+                        camera_id = anchor_row.key.split(":", 1)[1]
+
+                        if not anchor_row.value:
+                            db.delete(anchor_row)
+                            db.commit()
+                            continue
+                        try:
+                            anchor_ts = datetime.fromisoformat(anchor_row.value)
+                        except ValueError:
+                            # Corrupt timestamp — drop the row so the next
+                            # motion event starts fresh rather than being
+                            # silenced forever by an unparseable anchor.
+                            db.delete(anchor_row)
+                            db.commit()
+                            continue
+
+                        cooldown_min = _motion_cooldown_minutes(db, anchor_row.org_id)
+                        if (now - anchor_ts).total_seconds() < cooldown_min * 60:
+                            # Window still open — leave the anchor alone.
+                            continue
+
+                        window_end = anchor_ts + timedelta(minutes=cooldown_min)
+                        # Count events strictly AFTER the anchor (the immediate
+                        # email already covered the anchor-time event itself)
+                        # and up to the window edge.  Events past window_end
+                        # belong to a later cycle — but no later cycle exists
+                        # yet because the anchor is still here, so this filter
+                        # is defensive against clock skew + late-arriving events.
+                        extra_count = (
+                            db.query(MotionEvent)
+                            .filter(
+                                MotionEvent.org_id == anchor_row.org_id,
+                                MotionEvent.camera_id == camera_id,
+                                MotionEvent.timestamp > anchor_ts,
+                                MotionEvent.timestamp <= window_end,
+                            )
+                            .count()
+                        )
+
+                        if extra_count > 0 and email_enabled_for_kind(
+                            db, anchor_row.org_id, "motion"
+                        ):
+                            # Re-resolve display name at digest-emit time.
+                            # The camera might have been renamed since the
+                            # immediate email; show the current name.
+                            cam = (
+                                db.query(Camera)
+                                .filter_by(
+                                    camera_id=camera_id,
+                                    org_id=anchor_row.org_id,
+                                )
+                                .first()
+                            )
+                            display = (
+                                cam.name if cam and cam.name else camera_id
+                            )
+                            create_notification(
+                                org_id=anchor_row.org_id,
+                                kind="motion_digest",
+                                title=(
+                                    f"{extra_count} more motion event"
+                                    f"{'s' if extra_count != 1 else ''} "
+                                    f"on {display}"
+                                ),
+                                body=(
+                                    f"{extra_count} additional motion event"
+                                    f"{'s were' if extra_count != 1 else ' was'} "
+                                    f'detected on "{display}" in the '
+                                    f"{cooldown_min}-minute window after the "
+                                    f"first alert."
+                                ),
+                                severity="info",
+                                audience="all",
+                                link=f"/dashboard?camera={camera_id}",
+                                camera_id=camera_id,
+                                meta={
+                                    "event_count": extra_count,
+                                    "window_start": anchor_ts.isoformat(),
+                                    "window_end": window_end.isoformat(),
+                                    "cooldown_minutes": cooldown_min,
+                                },
+                                db=db,
+                            )
+
+                        # Always delete the anchor — window has closed.  Next
+                        # motion on this camera starts a fresh cycle.
+                        db.delete(anchor_row)
+                        db.commit()
+                    except Exception:
+                        logger.exception(
+                            "[MotionDigest] anchor processing failed key=%s org=%s",
+                            anchor_row.key,
+                            anchor_row.org_id,
+                        )
+                        try:
+                            db.rollback()
+                        except Exception:
+                            pass
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("[MotionDigest] tick failed")
 
 
 async def _offline_sweep_loop():

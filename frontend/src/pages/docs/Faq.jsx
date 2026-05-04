@@ -46,20 +46,23 @@ function Faq() {
         <strong>Email: yes</strong> for the operator-critical events — camera
         offline + recovered, CloudNode offline + recovered, AI-agent-created
         incidents, MCP API key audit (created or revoked), CloudNode disk
-        almost full, and member audit (added / role changed / removed).
-        Each kind is opt-in per-org via the{" "}
-        <a href="/settings#settings-notifications">notification settings page</a>;
-        all six toggles default ON for new orgs.  Paired events (offline +
-        recovered, create + revoke, member lifecycle) share one toggle so
-        you don't have to opt in twice.
+        almost full, member audit (added / role changed / removed), and
+        motion detection (with cooldown + digest).  Each kind is opt-in
+        per-org via the{" "}
+        <a href="/settings#settings-notifications">notification settings page</a>.
+        Six default ON; <strong>motion defaults OFF</strong> and must be
+        opted in (per-org volume variance is too wide for a safe default-on).
+        Motion uses a per-camera cooldown window — one immediate "first motion"
+        email plus at most one digest summary per ~15 minutes per camera, no
+        matter how many events fire.
       </p>
       <p>
-        <strong>Motion-event emails are intentionally deferred</strong> until we ship
-        per-camera cooldown + digest logic — without it, a single flappy outdoor
-        camera blasts hundreds of emails a day, your spam-marker tanks our sender
-        reputation for everyone, and you unsubscribe out of self-defense. We'd
-        rather ship the events that matter most first and add motion later
-        properly.
+        <strong>Motion-event emails ship in v1.1 with cooldown + digest mode</strong>{" "}
+        — per-camera cooldown (15 min default) caps volume to at most 2 emails per
+        cycle per camera regardless of event count: one immediate "first motion"
+        alert, plus an optional digest summary if more events landed during the
+        window. Default OFF to protect sender reputation against high-volume
+        outdoor cameras; opt in via the notification settings page if you want it.
       </p>
       <p>
         <strong>SMS and mobile push: not built in.</strong> Point an MCP agent

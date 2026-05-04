@@ -438,13 +438,14 @@ function SecurityPage() {
               for operator-critical events <em>are</em> built in (camera
               offline + recovered, CloudNode offline + recovered,
               AI-created incident, MCP API key audit, CloudNode disk
-              almost full, member audit — opt-in per setting in your
-              notification page).  Motion-event emails are deferred
-              until we ship per-camera digest / cooldown logic to keep
-              a flappy outdoor camera from blasting your inbox.  SMS
-              and mobile push remain MCP-only — wire your agent to
-              Twilio or your existing PagerDuty webhook if you need
-              them.
+              almost full, member audit, motion detection with
+              cooldown + digest — opt-in per setting in your
+              notification page).  Motion defaults OFF and uses a
+              per-camera cooldown so a flappy outdoor camera caps
+              out at ~2 emails per 15-minute window regardless of
+              event volume.  SMS and mobile push remain MCP-only —
+              wire your agent to Twilio or your existing PagerDuty
+              webhook if you need them.
             </li>
             <li>
               <strong>No public status page yet.</strong> If Command Center

@@ -21,6 +21,7 @@ function Notifications() {
         <li><strong>MCP API key revoked</strong> — An admin revoked an existing MCP key. Paired with the create event so the audit trail is symmetric.</li>
         <li><strong>CloudNode disk almost full</strong> — Your CloudNode hardware crossed 90% disk usage. Recordings will fail when the disk caps out. Customer-actionable (clean up files, expand storage).</li>
         <li><strong>Member added / role changed / removed</strong> — Org membership lifecycle. Catches "did someone just give themselves admin access to my cameras?" within seconds via the Clerk webhook.</li>
+        <li><strong>Motion digest</strong> — When a camera with motion-email enabled accumulates additional events during the cooldown window (15 min default), a single summary fires at window close. Paired with the immediate "first motion" email so volume is bounded to 2 emails per cycle per camera.</li>
       </ul>
 
       <h3>Where they show up</h3>
@@ -32,8 +33,8 @@ function Notifications() {
         </li>
         <li>
           <strong>Email</strong> — Opt-in per setting key via{" "}
-          <a href="/settings#settings-notifications">notification settings</a>. v1
-          ships six toggles enabled by default for new orgs:{" "}
+          <a href="/settings#settings-notifications">notification settings</a>. v1.1
+          ships seven toggles. Six default ON for new orgs:{" "}
           <em>Camera offline / recovered</em> (gates both
           <code>camera_offline</code> and <code>camera_online</code>),{" "}
           <em>CloudNode offline / recovered</em> (gates both
@@ -44,6 +45,13 @@ function Notifications() {
           <em>CloudNode disk almost full</em> (<code>cloudnode_disk_low</code>),
           and <em>Member audit</em> (gates <code>member_added</code>,{" "}
           <code>member_role_changed</code>, and <code>member_removed</code>).
+          The seventh — <em>Motion detection (with digest)</em> — defaults
+          OFF and gates both <code>motion</code> (immediate first event per
+          camera) and <code>motion_digest</code> (single summary at the end
+          of the per-camera cooldown window). Default-OFF on motion is
+          deliberate: per-org volume variance is too wide for a safe default
+          opt-in, and aggressive day-one volume risks spam-marks that
+          tank deliverability for every other email kind.
           Recipients are derived from the event's audience field — admin-only events
           email only org admins; everyone-else events email all members. Every email
           carries a one-click unsubscribe link that disables that setting for the org.
@@ -75,13 +83,16 @@ function Notifications() {
         <p>
           <span className="docs-callout-icon">ℹ️</span>
           <span>
-            <strong>Motion-event emails are intentionally deferred.</strong> Sending an
-            email per motion event without per-camera cooldown + digest mode would
-            blast hundreds of messages a day on any active outdoor camera, get marked
-            as spam, and tank deliverability for everyone. They'll ship in v1.1 with
-            proper rate-limit + digest logic. Until then, motion stays in the in-app
-            inbox; for live external alerts on motion, point an MCP agent (Claude,
-            Cursor, your own) at the motion stream and route to your own transport.
+            <strong>Motion-event emails ship in v1.1 with cooldown + digest behavior.</strong>{" "}
+            Per-camera cooldown (15 min default) caps volume to at most 2 emails per
+            cycle per camera regardless of event count: one immediate "first motion"
+            alert, plus an optional digest "X more motion events on Front Door" if
+            additional events landed during the window. Default OFF to protect sender
+            reputation against high-volume outdoor cameras; opt in via the{" "}
+            <a href="/settings#settings-notifications">Email Alerts</a> section.
+            For real-time external alerting (Twilio, PagerDuty, etc.), wire your
+            preferred MCP agent to the motion event stream — every plan has full MCP
+            access.
           </span>
         </p>
       </div>
