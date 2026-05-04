@@ -3738,6 +3738,16 @@ body {
     border-radius: 8px;
 }
 
+/* Override the base .btn { flex: 1 } so the Revoke button sizes to
+   its content instead of stretching across the row.  The base flex:1
+   is intentional for hero CTA pairs ("Get Started" / "Learn More")
+   and similar even-split layouts, but bleeds into every .btn placed
+   in a flex container.  Scoped override here keeps both use cases
+   happy without ripping the global rule out. */
+.mcp-key-item .btn {
+    flex: 0 0 auto;
+}
+
 .mcp-key-info {
     display: flex;
     flex-direction: column;
