@@ -94,10 +94,20 @@ jobs:
       # create a new machine.  ~30-60s of downtime per deploy (same as
       # `strategy = "immediate"` on a good day) but reliably works.
       #
-      # Note: `--depot=false` is intentional — depot.dev timed out
-      # twice in a row on 2026-04-28 (5 min each), wedging CI for
-      # ~10 min before failing.  Standard remote builder is slower
-      # (~3 min cached vs ~30s depot) but reliable.
+      # Builder choice has flipped twice now:
+      #   - 2026-04-28: tried depot.dev, timed out 5 min × 2 in a row
+      #     (~10 min wasted per deploy).  Switched to --depot=false
+      #     (Fly's standard remote builder).  ~100 deploys worked.
+      #   - 2026-05-04: Fly's standard remote builder started returning
+      #     `unauthorized` on the WireGuard heartbeat for valid deploy
+      #     tokens (Request ID 01KQTE4AHWKB2PAAS8A372EKNP-iad).
+      #     Swapped tokens — same failure.  Server-side scope change
+      #     or platform incident; either way, our CI was wedged.
+      #     Switched back to depot.dev which uses its own builder
+      #     infrastructure, bypassing the broken Fly path.
+      # If depot.dev's timeouts return, the next move is probably
+      # Buildkit-on-runner via `docker/build-push-action` and pushing
+      # the resulting tag to registry.fly.io ourselves.
       - name: Build + push image to Fly registry
         id: build
         run: |
@@ -107,7 +117,10 @@ jobs:
           # printed on a line like:
           #   image: registry.fly.io/opensentry-command:deployment-XXXX
           # Capture it so the next step can target it explicitly.
-          OUT=$(flyctl deploy --remote-only --depot=false --build-only --push 2>&1 | tee /dev/stderr)
+          # --depot=true: route the build through depot.dev rather
+          # than Fly's standard remote builder.  See the long comment
+          # above for why we're back on depot.
+          OUT=$(flyctl deploy --remote-only --depot=true --build-only --push 2>&1 | tee /dev/stderr)
           IMAGE=$(echo "$OUT" | grep -oP 'image:\s+\K[^\s]+' | tail -1)
           if [ -z "$IMAGE" ]; then
             echo "::error::Could not find image tag in flyctl output"
