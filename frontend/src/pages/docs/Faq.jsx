@@ -45,12 +45,13 @@ function Faq() {
       <p>
         <strong>Email: yes</strong> for the operator-critical events — camera
         offline + recovered, CloudNode offline + recovered, AI-agent-created
-        incidents, and MCP API key audit (created or revoked). Each kind is
-        opt-in per-org via the{" "}
+        incidents, MCP API key audit (created or revoked), CloudNode disk
+        almost full, and member audit (added / role changed / removed).
+        Each kind is opt-in per-org via the{" "}
         <a href="/settings#settings-notifications">notification settings page</a>;
-        all four toggles default ON for new orgs.  Recovery events
-        (camera/CloudNode came back online) share the same toggle as their
-        offline counterpart, so one click controls the whole transition pair.
+        all six toggles default ON for new orgs.  Paired events (offline +
+        recovered, create + revoke, member lifecycle) share one toggle so
+        you don't have to opt in twice.
       </p>
       <p>
         <strong>Motion-event emails are intentionally deferred</strong> until we ship

@@ -28,6 +28,98 @@ router = APIRouter(prefix="/api/nodes", tags=["nodes"])
 
 _PLAN_LIMIT_NOTIF_THROTTLE_SECONDS = 3600  # 1 hour between plan-limit notifications
 
+# Threshold at which a CloudNode's host disk is considered alert-worthy.
+# Filling = local recordings start failing to write.  90% (rather than the
+# 95% used for our Command Center disk) gives the operator more lead time
+# because acting on customer hardware (cleaning up old recordings, plugging
+# in another drive) takes longer than ``fly volumes extend``.
+_CLOUDNODE_DISK_LOW_THRESHOLD_PERCENT = 90
+# How long to wait before re-emitting on a still-stuck-low disk.  6h
+# matches the Command Center disk pattern — long enough that an admin
+# isn't paged twice for the same incident, short enough that a real
+# recurrence isn't silently lost.
+_CLOUDNODE_DISK_LOW_REEMIT_INTERVAL_SECONDS = 6 * 60 * 60
+
+
+def _check_and_emit_cloudnode_disk_low(
+    db: Session,
+    *,
+    node: CameraNode,
+    free_bytes: int | None,
+    total_bytes: int | None,
+) -> None:
+    """Emit a ``cloudnode_disk_low`` notification when this node's host
+    disk is at/over the threshold.  Debounced per-node via a persistent
+    Setting row (survives process restarts; an in-memory dict would
+    re-spam after every deploy).
+
+    Called from the heartbeat handler after the storage stats are
+    persisted.  No-ops cleanly when the node didn't report disk stats
+    (older CloudNode versions) or when the math doesn't make sense
+    (zero/negative total).  Wrapped in a try/except by the caller —
+    a notification fault must not break the heartbeat path.
+    """
+    if not free_bytes or not total_bytes or total_bytes <= 0:
+        return
+    pct_used = ((total_bytes - free_bytes) / total_bytes) * 100
+    if pct_used < _CLOUDNODE_DISK_LOW_THRESHOLD_PERCENT:
+        # Crossed back below threshold — clear the debounce so the
+        # next time it goes critical, the alert fires immediately
+        # rather than waiting out a stale 6h cooldown.
+        Setting.set(db, node.org_id, f"cloudnode_disk_low_emit_at:{node.node_id}", "")
+        return
+
+    last_emit_iso = Setting.get(
+        db, node.org_id, f"cloudnode_disk_low_emit_at:{node.node_id}", "",
+    )
+    if last_emit_iso:
+        try:
+            last_emit = datetime.fromisoformat(last_emit_iso)
+            now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+            if (now - last_emit).total_seconds() < _CLOUDNODE_DISK_LOW_REEMIT_INTERVAL_SECONDS:
+                return
+        except ValueError:
+            # Malformed setting value (manually edited / corrupt) —
+            # fall through and emit, then overwrite with a fresh
+            # timestamp.
+            pass
+
+    pct_rounded = round(pct_used, 1)
+    free_gb = round(free_bytes / (1024 ** 3), 1)
+    total_gb = round(total_bytes / (1024 ** 3), 1)
+    display = node.name or node.node_id
+
+    from app.api.notifications import create_notification
+
+    create_notification(
+        org_id=node.org_id,
+        kind="cloudnode_disk_low",
+        title=f"CloudNode disk low: {display}",
+        body=(
+            f"The host disk on CloudNode \"{display}\" is "
+            f"{pct_rounded}% full ({free_gb} GB free of {total_gb} GB). "
+            f"Local recordings will fail to write when the disk fills. "
+            f"Free up space (delete old recordings, expand storage, or "
+            f"raise the recording retention cap on the node)."
+        ),
+        severity="warning",
+        audience="admin",
+        link="/settings",
+        meta={
+            "node_id": node.node_id,
+            "percent_used": pct_rounded,
+            "disk_free_bytes": free_bytes,
+            "disk_total_bytes": total_bytes,
+        },
+        db=db,
+    )
+
+    Setting.set(
+        db, node.org_id,
+        f"cloudnode_disk_low_emit_at:{node.node_id}",
+        datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
+    )
+
 
 def _emit_plan_limit_notification(
     db: Session,
@@ -415,6 +507,23 @@ async def node_heartbeat(
         node.storage_disk_free_bytes = s.disk_free_bytes
         node.storage_disk_total_bytes = s.disk_total_bytes
         node.storage_reported_at = node.last_seen
+
+        # Best-effort disk-low alert.  A failure here (template missing,
+        # email path broken, recipient lookup down) must not break the
+        # heartbeat — node ↔ Command Center connectivity is more
+        # important than the alert fanout.
+        try:
+            _check_and_emit_cloudnode_disk_low(
+                db,
+                node=node,
+                free_bytes=s.disk_free_bytes,
+                total_bytes=s.disk_total_bytes,
+            )
+        except Exception:
+            logger.exception(
+                "[Heartbeat] cloudnode_disk_low check failed for node=%s",
+                node.node_id,
+            )
 
     camera_updates = data.cameras or []
     if camera_updates:

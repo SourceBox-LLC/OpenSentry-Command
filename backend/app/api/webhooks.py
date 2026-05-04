@@ -199,6 +199,122 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
         if org_id:
             logger.info("Org %s free trial ending in 3 days", org_id)
 
+    # ── Membership lifecycle (security audit) ──────────────────────
+    # Three sibling events fire for the same org's user list churn.
+    # Each emits an admin notification so a "did someone just add
+    # themselves to my org?" question is answered within seconds
+    # rather than the next time someone reads the audit log.  The
+    # actor (who DID this — Clerk dashboard admin, the user
+    # themselves accepting an invite, etc.) isn't always present in
+    # the payload, so the body describes the result rather than the
+    # cause; admins can correlate via timing if needed.
+    elif event_type == "organizationMembership.created":
+        org_data = data.get("organization") or {}
+        user_data = data.get("public_user_data") or {}
+        org_id = org_data.get("id")
+        if org_id:
+            try:
+                from app.api.notifications import create_notification
+                identifier = user_data.get("identifier") or user_data.get("user_id") or "unknown user"
+                role = (data.get("role") or "").replace("org:", "") or "member"
+                create_notification(
+                    org_id=org_id,
+                    kind="member_added",
+                    title=f"Member added: {identifier}",
+                    body=(
+                        f"{identifier} was just added to your organization "
+                        f"with the {role} role.  If this was via an invite "
+                        f"you sent, no action needed.  If you don't recognize "
+                        f"this user, audit the org's member list and remove "
+                        f"any unexpected accounts."
+                    ),
+                    severity="warning" if role == "admin" else "info",
+                    audience="admin",
+                    link="/settings",
+                    meta={
+                        "user_id": user_data.get("user_id"),
+                        "identifier": identifier,
+                        "role": role,
+                    },
+                    db=db,
+                )
+            except Exception:
+                logger.exception(
+                    "[ClerkWebhook] member_added notification failed for org=%s",
+                    org_id,
+                )
+
+    elif event_type == "organizationMembership.updated":
+        org_data = data.get("organization") or {}
+        user_data = data.get("public_user_data") or {}
+        org_id = org_data.get("id")
+        if org_id:
+            try:
+                from app.api.notifications import create_notification
+                identifier = user_data.get("identifier") or user_data.get("user_id") or "unknown user"
+                role = (data.get("role") or "").replace("org:", "") or "member"
+                create_notification(
+                    org_id=org_id,
+                    kind="member_role_changed",
+                    title=f"Member role changed: {identifier}",
+                    body=(
+                        f"{identifier}'s role in your organization is now "
+                        f"{role}.  Role changes — especially promotions to "
+                        f"admin — are security-relevant.  If you didn't "
+                        f"authorize this change, audit your org's member "
+                        f"list immediately."
+                    ),
+                    # Role escalations to admin are always warning-worthy;
+                    # demotions / member-tier changes are informational.
+                    severity="warning" if role == "admin" else "info",
+                    audience="admin",
+                    link="/settings",
+                    meta={
+                        "user_id": user_data.get("user_id"),
+                        "identifier": identifier,
+                        "new_role": role,
+                    },
+                    db=db,
+                )
+            except Exception:
+                logger.exception(
+                    "[ClerkWebhook] member_role_changed notification failed for org=%s",
+                    org_id,
+                )
+
+    elif event_type == "organizationMembership.deleted":
+        org_data = data.get("organization") or {}
+        user_data = data.get("public_user_data") or {}
+        org_id = org_data.get("id")
+        if org_id:
+            try:
+                from app.api.notifications import create_notification
+                identifier = user_data.get("identifier") or user_data.get("user_id") or "unknown user"
+                create_notification(
+                    org_id=org_id,
+                    kind="member_removed",
+                    title=f"Member removed: {identifier}",
+                    body=(
+                        f"{identifier} was just removed from your "
+                        f"organization.  No further access from this user.  "
+                        f"If you didn't expect this removal, audit the org's "
+                        f"recent admin activity."
+                    ),
+                    severity="info",
+                    audience="admin",
+                    link="/settings",
+                    meta={
+                        "user_id": user_data.get("user_id"),
+                        "identifier": identifier,
+                    },
+                    db=db,
+                )
+            except Exception:
+                logger.exception(
+                    "[ClerkWebhook] member_removed notification failed for org=%s",
+                    org_id,
+                )
+
     # ── Organization deleted ───────────────────────────────────────
     elif event_type == "organization.deleted":
         org_id = data.get("id")

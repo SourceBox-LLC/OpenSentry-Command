@@ -350,7 +350,8 @@ Organization.
   user identifiers beyond what's required for triage are captured.
 - Operator-critical alerts (camera offline + recovered, CloudNode
   offline + recovered, AI-agent-created incident, MCP API key audit
-  events) are delivered via email through Resend when
+  events, CloudNode host disk approaching full, organization
+  membership lifecycle) are delivered via email through Resend when
   `EMAIL_ENABLED=true` and per-org per-setting
   preference allows. Each email includes a one-click unsubscribe link
   scoped to the (org, kind) pair. Recipients are derived live from

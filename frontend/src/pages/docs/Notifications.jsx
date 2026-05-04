@@ -19,6 +19,8 @@ function Notifications() {
         <li><strong>Incident opened</strong> — A human or MCP agent filed a new incident report.</li>
         <li><strong>MCP API key created</strong> — An admin generated a new MCP API key (full programmatic access to cameras + nodes + incidents). Security-audit signal.</li>
         <li><strong>MCP API key revoked</strong> — An admin revoked an existing MCP key. Paired with the create event so the audit trail is symmetric.</li>
+        <li><strong>CloudNode disk almost full</strong> — Your CloudNode hardware crossed 90% disk usage. Recordings will fail when the disk caps out. Customer-actionable (clean up files, expand storage).</li>
+        <li><strong>Member added / role changed / removed</strong> — Org membership lifecycle. Catches "did someone just give themselves admin access to my cameras?" within seconds via the Clerk webhook.</li>
       </ul>
 
       <h3>Where they show up</h3>
@@ -31,14 +33,17 @@ function Notifications() {
         <li>
           <strong>Email</strong> — Opt-in per setting key via{" "}
           <a href="/settings#settings-notifications">notification settings</a>. v1
-          ships four toggles enabled by default for new orgs:{" "}
+          ships six toggles enabled by default for new orgs:{" "}
           <em>Camera offline / recovered</em> (gates both
           <code>camera_offline</code> and <code>camera_online</code>),{" "}
           <em>CloudNode offline / recovered</em> (gates both
           <code>node_offline</code> and <code>node_online</code>),{" "}
-          <em>AI agent created an incident</em> (<code>incident_created</code>),
-          and <em>MCP API key audit</em> (gates both <code>mcp_key_created</code>{" "}
-          and <code>mcp_key_revoked</code>).
+          <em>AI agent created an incident</em> (<code>incident_created</code>),{" "}
+          <em>MCP API key audit</em> (gates both <code>mcp_key_created</code>{" "}
+          and <code>mcp_key_revoked</code>),{" "}
+          <em>CloudNode disk almost full</em> (<code>cloudnode_disk_low</code>),
+          and <em>Member audit</em> (gates <code>member_added</code>,{" "}
+          <code>member_role_changed</code>, and <code>member_removed</code>).
           Recipients are derived from the event's audience field — admin-only events
           email only org admins; everyone-else events email all members. Every email
           carries a one-click unsubscribe link that disables that setting for the org.

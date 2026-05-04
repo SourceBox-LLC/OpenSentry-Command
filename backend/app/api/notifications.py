@@ -57,6 +57,19 @@ _NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     # or neither).
     "mcp_key_created": ("mcp_key_audit_notifications", True),
     "mcp_key_revoked": ("mcp_key_audit_notifications", True),
+    # CloudNode-side disk warning.  Customer hardware running their
+    # own CloudNode has filled past the threshold — recordings will
+    # fail when it caps out.  Customer-actionable (clean up files,
+    # expand storage), unlike our Command Center disk which is
+    # operator-side and routed via Sentry.
+    "cloudnode_disk_low": ("cloudnode_disk_notifications", True),
+    # Org membership lifecycle (security audit) — fired by Clerk
+    # webhooks.  All three share a single inbox toggle; same logic
+    # as the email side (admins want the whole audit trail or none
+    # of it, not "I care about additions but not removals").
+    "member_added":        ("member_audit_notifications", True),
+    "member_role_changed": ("member_audit_notifications", True),
+    "member_removed":      ("member_audit_notifications", True),
 }
 
 
@@ -99,6 +112,18 @@ _EMAIL_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     # access; nobody should miss that being granted.
     "mcp_key_created":  ("email_mcp_key_audit",    True),
     "mcp_key_revoked":  ("email_mcp_key_audit",    True),
+    # CloudNode host disk approaching full.  Customer hardware,
+    # customer-actionable, separate from the Command Center disk
+    # we route via Sentry (operator-side).
+    "cloudnode_disk_low": ("email_cloudnode_disk_low", True),
+    # Org membership lifecycle = high-value security audit signal.
+    # All three events (add, role change, remove) share one setting
+    # key — admins consistently want the whole audit trail or none
+    # of it.  Defaults ON because admin escalation is the kind of
+    # thing nobody should miss happening to their org.
+    "member_added":        ("email_member_audit", True),
+    "member_role_changed": ("email_member_audit", True),
+    "member_removed":      ("email_member_audit", True),
 }
 # Note: ``disk_critical`` is intentionally NOT in this map.  Disk-full
 # is platform infrastructure state (our Fly volume) — irrelevant to
@@ -769,6 +794,8 @@ class EmailPreferences(BaseModel):
     email_node_offline: Optional[bool] = None
     email_incident_created: Optional[bool] = None
     email_mcp_key_audit: Optional[bool] = None
+    email_cloudnode_disk_low: Optional[bool] = None
+    email_member_audit: Optional[bool] = None
 
 
 def _current_email_prefs(db: Session, org_id: str) -> dict:

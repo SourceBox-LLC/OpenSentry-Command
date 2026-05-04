@@ -317,3 +317,165 @@ def test_org_deleted_purges_settings(webhook_client, db):
     assert resp.status_code == 200
     assert Setting.get(db, TEST_ORG_ID, "org_plan") is None
     assert Setting.get(db, TEST_ORG_ID, "payment_past_due") is None
+
+
+# ─── Membership lifecycle (security audit notifications) ────────────
+# These pin the 2026-05-04 wiring: Clerk membership webhooks fire
+# admin notifications so a "did someone just add themselves to my
+# org?" question is answered within seconds.
+
+def test_membership_created_emits_member_added_notification(webhook_client, db):
+    """`organizationMembership.created` → one member_added
+    notification with the actor's identifier in the body."""
+    from app.models.models import Notification
+
+    resp = _signed_post(webhook_client, "organizationMembership.created", {
+        "id": "orgmem_xyz",
+        "organization": {"id": TEST_ORG_ID, "name": "Test Org"},
+        "public_user_data": {
+            "user_id": "user_new",
+            "identifier": "newbie@example.com",
+        },
+        "role": "org:member",
+    })
+
+    assert resp.status_code == 200
+    notifs = (
+        db.query(Notification)
+        .filter_by(kind="member_added", org_id=TEST_ORG_ID)
+        .all()
+    )
+    assert len(notifs) == 1
+    n = notifs[0]
+    assert n.audience == "admin"
+    # Member role → info severity (admin role would be warning).
+    assert n.severity == "info"
+    assert "newbie@example.com" in n.title
+    assert "newbie@example.com" in n.body
+
+
+def test_membership_created_admin_role_is_warning_severity(webhook_client, db):
+    """A new member added directly as ADMIN is more security-relevant
+    than a new member at lower role — bumped to warning severity so
+    inbox UI treatment / email subject prefix can reflect it."""
+    from app.models.models import Notification
+
+    _signed_post(webhook_client, "organizationMembership.created", {
+        "id": "orgmem_admin",
+        "organization": {"id": TEST_ORG_ID, "name": "Test Org"},
+        "public_user_data": {
+            "user_id": "user_new_admin",
+            "identifier": "admin@example.com",
+        },
+        "role": "org:admin",
+    })
+
+    notif = (
+        db.query(Notification)
+        .filter_by(kind="member_added", org_id=TEST_ORG_ID)
+        .first()
+    )
+    assert notif is not None
+    assert notif.severity == "warning"
+
+
+def test_membership_updated_emits_role_changed_notification(webhook_client, db):
+    """`organizationMembership.updated` → one member_role_changed
+    notification with the new role in the body."""
+    from app.models.models import Notification
+
+    resp = _signed_post(webhook_client, "organizationMembership.updated", {
+        "id": "orgmem_promo",
+        "organization": {"id": TEST_ORG_ID, "name": "Test Org"},
+        "public_user_data": {
+            "user_id": "user_promoted",
+            "identifier": "promoted@example.com",
+        },
+        "role": "org:admin",
+    })
+
+    assert resp.status_code == 200
+    notif = (
+        db.query(Notification)
+        .filter_by(kind="member_role_changed", org_id=TEST_ORG_ID)
+        .first()
+    )
+    assert notif is not None
+    assert notif.audience == "admin"
+    assert notif.severity == "warning"  # promotion to admin
+    assert "promoted@example.com" in notif.body
+    import json as _json
+    meta = _json.loads(notif.meta_json)
+    assert meta["new_role"] == "admin"
+
+
+def test_membership_deleted_emits_member_removed_notification(webhook_client, db):
+    """`organizationMembership.deleted` → one member_removed
+    notification."""
+    from app.models.models import Notification
+
+    resp = _signed_post(webhook_client, "organizationMembership.deleted", {
+        "id": "orgmem_gone",
+        "organization": {"id": TEST_ORG_ID, "name": "Test Org"},
+        "public_user_data": {
+            "user_id": "user_gone",
+            "identifier": "exit@example.com",
+        },
+    })
+
+    assert resp.status_code == 200
+    notif = (
+        db.query(Notification)
+        .filter_by(kind="member_removed", org_id=TEST_ORG_ID)
+        .first()
+    )
+    assert notif is not None
+    assert notif.audience == "admin"
+    assert notif.severity == "info"
+    assert "exit@example.com" in notif.body
+
+
+def test_membership_event_without_org_id_is_noop(webhook_client, db):
+    """A malformed payload missing the organization.id field must
+    not crash the handler — just return 200 and skip."""
+    from app.models.models import Notification
+
+    resp = _signed_post(webhook_client, "organizationMembership.created", {
+        "id": "orgmem_orphan",
+        # No "organization" field at all.
+        "public_user_data": {"identifier": "ghost@example.com"},
+        "role": "org:member",
+    })
+
+    assert resp.status_code == 200
+    assert (
+        db.query(Notification)
+        .filter_by(kind="member_added")
+        .count()
+    ) == 0
+
+
+def test_membership_notification_failure_does_not_break_webhook(webhook_client, db, monkeypatch):
+    """If create_notification raises during a membership event,
+    the webhook MUST still return 200 — Clerk retries on non-2xx
+    and we don't want a notification fault to cause webhook
+    backpressure that blocks unrelated events."""
+    from app.api import webhooks as webhooks_mod
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("notification system down")
+    # Patch the function reference inside the webhooks module's
+    # namespace at the level the handler imports it (lazy import
+    # inside the handler — patch via the source module).
+    monkeypatch.setattr(
+        "app.api.notifications.create_notification", boom,
+    )
+
+    resp = _signed_post(webhook_client, "organizationMembership.created", {
+        "id": "orgmem_resilience",
+        "organization": {"id": TEST_ORG_ID, "name": "Test Org"},
+        "public_user_data": {"identifier": "test@example.com"},
+        "role": "org:member",
+    })
+
+    assert resp.status_code == 200

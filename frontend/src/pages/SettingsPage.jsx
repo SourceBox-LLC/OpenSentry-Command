@@ -653,7 +653,7 @@ function SettingsPage() {
           <h2>Email Alerts</h2>
           <p className="section-description">
             Get an email when something operator-critical happens.
-            All four default ON for new orgs — turn off the ones
+            All six default ON for new orgs — turn off the ones
             you don't need.  Motion-event emails are coming in a
             future release; until then, motion shows up only in the
             in-app inbox above.
@@ -712,6 +712,26 @@ function SettingsPage() {
                   "When a new MCP key is generated OR an existing " +
                   "key is revoked.  Catches \"who just got " +
                   "programmatic access to my cameras?\" early.",
+                audience: "Admins only",
+              },
+              {
+                key: "email_cloudnode_disk_low",
+                label: "CloudNode disk almost full",
+                desc:
+                  "When YOUR CloudNode hardware passes 90% disk " +
+                  "use — recordings will fail when it caps out.  " +
+                  "Different from our Command Center disk; this " +
+                  "one is on the device you can act on.",
+                audience: "Admins only",
+              },
+              {
+                key: "email_member_audit",
+                label: "Member added / role changed / removed",
+                desc:
+                  "Whenever your org's member list changes — new " +
+                  "user added, role updated, or member removed.  " +
+                  "Catches \"someone just got admin access to my " +
+                  "cameras\" within seconds.",
                 audience: "Admins only",
               },
             ].map(({ key, label, desc, audience }) => (

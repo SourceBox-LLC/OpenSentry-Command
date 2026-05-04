@@ -683,3 +683,170 @@ def test_heartbeat_disabled_cameras_is_empty_when_none_suspended(admin_client):
     )
     assert hb.status_code == 200
     assert hb.json().get("disabled_cameras") == []
+
+
+# ── CloudNode disk-low alert ────────────────────────────────────────
+
+def _heartbeat_with_disk(admin_client, node_id, api_key, *, used_pct):
+    """Helper: heartbeat the node with disk usage at the given percent."""
+    total = 1_000_000_000_000  # 1 TB for nice numbers
+    used = int(total * used_pct / 100.0)
+    free = total - used
+    return admin_client.post(
+        "/api/nodes/heartbeat",
+        headers={"X-Node-API-Key": api_key},
+        json={
+            "node_id": node_id,
+            "node_version": "0.1.41",
+            "storage_stats": {
+                "used_bytes": used,
+                "max_bytes": total,
+                "disk_free_bytes": free,
+                "disk_total_bytes": total,
+            },
+        },
+    )
+
+
+def test_cloudnode_disk_low_emits_below_threshold_no_op(admin_client):
+    """50% disk usage → no notification fired."""
+    from app.models.models import Notification
+
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.41")
+    _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=50.0)
+
+    session = TestSession()
+    try:
+        notifs = (
+            session.query(Notification)
+            .filter_by(kind="cloudnode_disk_low")
+            .all()
+        )
+        assert len(notifs) == 0
+    finally:
+        session.close()
+
+
+def test_cloudnode_disk_low_emits_at_threshold(admin_client):
+    """92% disk usage → one cloudnode_disk_low notification.
+    Threshold is 90% so 92% should trip; pin the side of the
+    boundary so a future tweak surfaces in the diff."""
+    from app.models.models import Notification
+
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.41")
+    _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=92.0)
+
+    session = TestSession()
+    try:
+        notifs = (
+            session.query(Notification)
+            .filter_by(kind="cloudnode_disk_low")
+            .all()
+        )
+        assert len(notifs) == 1
+        n = notifs[0]
+        assert n.audience == "admin"
+        assert n.severity == "warning"
+        # Body / meta carries the actionable detail.
+        import json as _json
+        meta = _json.loads(n.meta_json)
+        assert meta["node_id"] == node_id
+        assert meta["percent_used"] == 92.0
+        assert meta["disk_free_bytes"] > 0
+    finally:
+        session.close()
+
+
+def test_cloudnode_disk_low_debounces_within_window(admin_client):
+    """Two heartbeats back-to-back at 95% → only one notification.
+    Debounce is 6h per-node and persists in Setting so a process
+    restart doesn't re-fire."""
+    from app.models.models import Notification
+
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.41")
+    _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=95.0)
+    _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=95.0)
+
+    session = TestSession()
+    try:
+        notifs = (
+            session.query(Notification)
+            .filter_by(kind="cloudnode_disk_low")
+            .all()
+        )
+        assert len(notifs) == 1
+    finally:
+        session.close()
+
+
+def test_cloudnode_disk_low_recovery_clears_debounce(admin_client):
+    """95% → 50% → 95% — the recovery dip resets the debounce so
+    the second crisis emits immediately rather than waiting out
+    a stale 6h cooldown.  Otherwise a transient cleanup that
+    fixes-then-refills would silently lose the second alert."""
+    from app.models.models import Notification
+
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.41")
+
+    _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=95.0)
+    _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=50.0)  # clears debounce
+    _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=95.0)
+
+    session = TestSession()
+    try:
+        notifs = (
+            session.query(Notification)
+            .filter_by(kind="cloudnode_disk_low")
+            .all()
+        )
+        assert len(notifs) == 2
+    finally:
+        session.close()
+
+
+def test_cloudnode_disk_low_per_node_independent(admin_client):
+    """Two different nodes both at 95% → two notifications (one
+    per node).  The debounce key includes node_id so an alert on
+    Node A doesn't suppress an alert on Node B."""
+    from app.models.models import Notification
+
+    node_a, key_a, _ = _create_and_register(admin_client, version="0.1.41")
+    node_b, key_b, _ = _create_and_register(admin_client, version="0.1.41")
+
+    _heartbeat_with_disk(admin_client, node_a, key_a, used_pct=95.0)
+    _heartbeat_with_disk(admin_client, node_b, key_b, used_pct=95.0)
+
+    session = TestSession()
+    try:
+        notifs = (
+            session.query(Notification)
+            .filter_by(kind="cloudnode_disk_low")
+            .all()
+        )
+        assert len(notifs) == 2
+        node_ids = {
+            __import__("json").loads(n.meta_json)["node_id"]
+            for n in notifs
+        }
+        assert node_ids == {node_a, node_b}
+    finally:
+        session.close()
+
+
+def test_cloudnode_disk_low_check_failure_does_not_break_heartbeat(admin_client, monkeypatch):
+    """If the disk-low check raises (template missing, recipient
+    lookup down, etc.), the heartbeat must still return 200.
+    Node ↔ Command Center connectivity is more important than the
+    alert emission."""
+    from app.api import nodes as nodes_mod
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("notification system having a fit")
+    monkeypatch.setattr(
+        nodes_mod, "_check_and_emit_cloudnode_disk_low", boom,
+    )
+
+    node_id, api_key, _ = _create_and_register(admin_client, version="0.1.41")
+    hb = _heartbeat_with_disk(admin_client, node_id, api_key, used_pct=99.0)
+
+    assert hb.status_code == 200
