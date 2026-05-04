@@ -653,7 +653,7 @@ function SettingsPage() {
           <h2>Email Alerts</h2>
           <p className="section-description">
             Get an email when something operator-critical happens.
-            All four default ON for new orgs — turn off the ones
+            All three default ON for new orgs — turn off the ones
             you don't need.  Motion-event emails are coming in a
             future release; until then, motion shows up only in the
             in-app inbox above.
