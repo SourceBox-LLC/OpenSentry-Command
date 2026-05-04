@@ -1087,8 +1087,23 @@ body {
     border-top: 1px solid var(--border-color);
 }
 
-.btn {
+/* Camera control buttons (Record + Snapshot) are the one place that
+   genuinely wants the buttons to split available space evenly.  Kept
+   here as a scoped rule rather than as a default on .btn — see the
+   .btn block below for the rationale. */
+.camera-controls .btn {
     flex: 1;
+}
+
+.btn {
+    /* NOTE: do NOT set flex: 1 on .btn by default.  It bleeds into
+       every flex container that holds a .btn — modals (.modal-actions
+       has justify-content: flex-end which gets defeated), notification
+       panel (.notif-panel-actions), upgrade dialogs, the MCP API keys
+       list (.mcp-key-item) — and forces the button to fill the row
+       instead of sitting at content width.  The one place that DOES
+       want even-split layout is camera-controls; that's handled by
+       the scoped rule above. */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3736,16 +3751,6 @@ body {
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
-}
-
-/* Override the base .btn { flex: 1 } so the Revoke button sizes to
-   its content instead of stretching across the row.  The base flex:1
-   is intentional for hero CTA pairs ("Get Started" / "Learn More")
-   and similar even-split layouts, but bleeds into every .btn placed
-   in a flex container.  Scoped override here keeps both use cases
-   happy without ripping the global rule out. */
-.mcp-key-item .btn {
-    flex: 0 0 auto;
 }
 
 .mcp-key-info {
