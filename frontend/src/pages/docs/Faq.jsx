@@ -44,10 +44,10 @@ function Faq() {
       <h3>Will I get email or SMS alerts when something happens?</h3>
       <p>
         <strong>Email: yes</strong> for the operator-critical events — camera went
-        offline, CloudNode went offline, Command Center disk approaching full, and
-        AI-agent-created incidents. Each kind is opt-in per-org via the{" "}
+        offline, CloudNode went offline, and AI-agent-created incidents. Each kind
+        is opt-in per-org via the{" "}
         <a href="/settings#settings-notifications">notification settings page</a>;
-        all four default ON for new orgs.
+        all three default ON for new orgs.
       </p>
       <p>
         <strong>Motion-event emails are intentionally deferred</strong> until we ship

@@ -100,14 +100,14 @@ RELEASE_CACHE_REFRESH_INTERVAL_SECONDS = int(
     os.getenv("RELEASE_CACHE_REFRESH_INTERVAL_SECONDS", "600")
 )
 
-# How often to poll disk usage and emit ``disk_critical`` notifications.
+# How often to poll disk usage and emit operator-side disk-full alerts.
 # 5 min is fast enough that we beat /data filling up between ticks
 # (writes are bytes-per-second scale, not megabytes-per-second), but
 # slow enough to keep the system call cost trivial.  Per-tick work is
 # one ``shutil.disk_usage`` and one in-memory threshold compare.
 DISK_CHECK_INTERVAL_SECONDS = int(os.getenv("DISK_CHECK_INTERVAL_SECONDS", "300"))
-# Threshold at which we email "your disk is filling up — act now."
-# Mirrors the 95% threshold used by /api/health/detailed so the email
+# Threshold at which we Sentry-alert "your disk is filling up — act now."
+# Mirrors the 95% threshold used by /api/health/detailed so the alert
 # and the dashboard agree.  Below this we leave it to the inbox + the
 # status page to communicate "approaching" warnings.
 DISK_CRITICAL_THRESHOLD_PERCENT = float(
@@ -139,10 +139,12 @@ async def lifespan(app):
     # worker just logs "would have sent" lines for any outbox row
     # that gets enqueued.  See app/core/email_worker.py.
     email_worker_task = asyncio.create_task(email_worker_loop())
-    # Disk-check loop polls /data every 5 min and emits a
-    # 'disk_critical' notification (which the email side-channel
-    # then routes to org admins) when usage crosses 95%.  Pure
-    # in-memory debounce, no DB persistence — see _disk_check_loop.
+    # Disk-check loop polls /data every 5 min and emits an
+    # OPERATOR-SIDE alert via logger.error (Sentry-captured when
+    # SENTRY_DSN is set) when usage crosses 95%.  Customer org
+    # admins are intentionally NOT in the alert path — see
+    # _check_and_emit_disk_critical for the rationale.  Pure in-
+    # memory debounce, no DB persistence.
     disk_check_task = asyncio.create_task(_disk_check_loop())
     print(
         f"[App] SourceBox Sentry Command Center started "
@@ -700,20 +702,30 @@ _disk_critical_last_emit_monotonic: Optional[float] = None
 
 
 def _check_and_emit_disk_critical(db) -> bool:
-    """Sample disk usage and emit a disk_critical notification on
-    crossing the threshold.  Returns True if an alert was emitted
-    this call (used by the test suite to drive the function
-    deterministically).
+    """Sample disk usage and emit an OPERATOR-SIDE disk_critical alert
+    via logger.error on crossing the threshold.  Returns True if an
+    alert was emitted this call (used by the test suite to drive the
+    function deterministically).
 
-    Extracted from the loop so tests can call it directly with a
-    fake disk_usage stub instead of waiting on the 5-min sleep.
+    The ``db`` parameter is kept in the signature for forward-compat
+    (and to avoid changing the caller signature in ``_log_cleanup_loop``)
+    but is no longer queried — disk-full is platform infrastructure
+    state, not customer-org state, and routing it through customer
+    notifications was a multi-tenant violation we removed in 2026-05-04.
 
-    The emit goes to every org in the system because the disk
-    belongs to the Command Center, not to any single tenant — every
-    org admin is downstream of the same volume filling up.  We
-    iterate orgs that have at least one membership in the database
-    rather than guessing at a global broadcast: org-scoped
-    notifications still need an org_id.
+    Channels operators actually use for this signal:
+      - ``/api/health/detailed`` — reports ``disk.percent_used`` and
+        flips the ``disk.status`` field to ``critical`` at 95%.  Any
+        external monitor (UptimeRobot, BetterStack, status-page polling)
+        picks this up in seconds.
+      - Sentry — the ``logger.error`` below renders into a Sentry event
+        when SENTRY_DSN is configured (which it is in production).
+        That's the path that wakes someone up.
+      - Fly metrics — Fly's own dashboards show volume usage.
+
+    What we DON'T do anymore: email customer admins.  They cannot
+    ``fly volumes extend`` our infrastructure, and getting paged about
+    SourceBox's disk is not what they signed up for.
     """
     global _disk_critical_last_emit_monotonic
 
@@ -738,69 +750,49 @@ def _check_and_emit_disk_critical(db) -> bool:
     now = monotonic()
     last = _disk_critical_last_emit_monotonic
     if last is not None and (now - last) < DISK_CRITICAL_REEMIT_INTERVAL_SECONDS:
-        # Still within the re-emit window — log but don't emit.
-        return False
-
-    # Find orgs to notify.  Pull from CameraNode (every org with at
-    # least one node has skin in this game) — small set, fast scan.
-    from app.api.notifications import create_notification
-    from app.models.models import CameraNode
-
-    org_ids = {row[0] for row in db.query(CameraNode.org_id).distinct() if row[0]}
-    if not org_ids:
-        # Nothing to notify (test installs / brand-new deploy).  Don't
-        # set the debounce so the FIRST org to register a node still
-        # gets the alert.
+        # Still within the re-emit window — silent until cooldown clears.
         return False
 
     pct_rounded = round(pct, 1)
     bytes_free_gb = round(usage.free / (1024 ** 3), 1)
-    title = "Command Center disk usage is critical"
-    body = (
-        f"The Command Center volume is {pct_rounded}% full "
-        f"({bytes_free_gb} GB free).  Recordings and audit logs may "
-        f"start failing to persist when the disk fills.  Resize the "
-        f"Fly volume or free space immediately."
-    )
 
-    for org_id in org_ids:
-        try:
-            create_notification(
-                org_id=org_id,
-                kind="disk_critical",
-                title=title,
-                body=body,
-                severity="critical",
-                audience="admin",
-                link="/admin/health",
-                meta={"percent_used": pct_rounded, "bytes_free": usage.free},
-                db=db,
-            )
-        except Exception:
-            logger.exception(
-                "[DiskCheck] notification emit failed for org=%s", org_id,
-            )
+    # Sentry-captured operator alert.  ``logger.error`` ensures the
+    # Sentry SDK wraps this as an event (warnings get sampled away
+    # by default).  Structured fields make the dashboard readable
+    # without parsing the message string.
+    logger.error(
+        "[DiskCheck] OPERATOR ALERT — Command Center volume %s%% full "
+        "(%.1f GB free, threshold %s%%).  Resize the Fly volume or "
+        "trigger early log retention cleanup.  This is platform-level "
+        "infrastructure state and is intentionally NOT routed to "
+        "customer notifications — see /api/health/detailed for the "
+        "monitoring contract.",
+        pct_rounded, bytes_free_gb, DISK_CRITICAL_THRESHOLD_PERCENT,
+        extra={
+            "disk_percent_used": pct_rounded,
+            "disk_bytes_free": usage.free,
+            "disk_path": disk_path,
+            "alert_audience": "operator_only",
+        },
+    )
 
     _disk_critical_last_emit_monotonic = now
-    logger.warning(
-        "[DiskCheck] emitted disk_critical to %d org(s) at %.1f%% used",
-        len(org_ids), pct_rounded,
-    )
     return True
 
 
 async def _disk_check_loop():
-    """Background task — poll disk usage, emit disk_critical when full.
+    """Background task — poll disk usage, alert operators when full.
 
     Runs every ``DISK_CHECK_INTERVAL_SECONDS`` (5 min default).  Per-tick
     work: one ``shutil.disk_usage`` call and one threshold compare,
-    plus (on alert) one notification emit per org.
+    plus (on alert) one ``logger.error`` call which Sentry captures.
 
     Emits are debounced per-process for 6h via
     ``_disk_critical_last_emit_monotonic`` so a stuck-at-99% volume
-    doesn't generate an email every 5 minutes.  The debounce resets
-    automatically when usage drops back below threshold OR when the
-    process restarts (deliberate — see ``_check_and_emit_disk_critical``).
+    doesn't burn Sentry quota or page-flood the operator.  The
+    debounce resets automatically when usage drops back below
+    threshold OR when the process restarts (deliberate — see
+    ``_check_and_emit_disk_critical``).
     """
     while True:
         try:

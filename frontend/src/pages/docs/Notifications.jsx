@@ -16,7 +16,6 @@ function Notifications() {
         <li><strong>Camera offline</strong> — A camera on an online node stopped reporting segments (cable unplugged, USB error, camera held open by another app).</li>
         <li><strong>Camera recovered</strong> — A previously offline camera started reporting segments again.</li>
         <li><strong>Motion detected</strong> — A camera's FFmpeg scene-change scorer crossed the configured threshold. See <a href="#motion-detection">Motion Detection</a>.</li>
-        <li><strong>Disk almost full</strong> — Command Center's persistent volume crossed 95% used. Recordings and audit logs start failing if you don't act.</li>
         <li><strong>Incident opened</strong> — A human or MCP agent filed a new incident report.</li>
       </ul>
 
@@ -30,12 +29,16 @@ function Notifications() {
         <li>
           <strong>Email</strong> — Opt-in per event kind via{" "}
           <a href="/settings#settings-notifications">notification settings</a>. v1
-          ships with four kinds enabled by default for new orgs:
-          <code>camera_offline</code>, <code>node_offline</code>,
-          <code>disk_critical</code>, and <code>incident_created</code>.
+          ships with three kinds enabled by default for new orgs:
+          <code>camera_offline</code>, <code>node_offline</code>, and
+          <code>incident_created</code>.
           Recipients are derived from the event's audience field — admin-only events
           email only org admins; everyone-else events email all members. Every email
           carries a one-click unsubscribe link that disables that kind for the org.
+          Platform-level alerts (Command Center disk approaching full, Fly machine
+          health) are operator-side concerns surfaced via{" "}
+          <a href="#api-health">/api/health/detailed</a> and Sentry, not customer
+          notifications.
         </li>
         <li><strong>Incidents tab</strong> — Any notification filed as an incident appears there for triage.</li>
         <li><strong>MCP tool log</strong> — Admin dashboard shows every MCP call, including ones that fired on a motion event.</li>

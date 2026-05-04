@@ -80,7 +80,7 @@ def test_audience_all_returns_every_member(fake_clerk):
 
 def test_audience_admin_filters_to_admins_only(fake_clerk):
     """Audience='admin' drops non-admin members.  Used for
-    operator-only events (node_offline, disk_critical)."""
+    admin-only customer events (e.g. node_offline)."""
     fake_clerk.members = [
         _membership("org:admin", "admin@example.com"),
         _membership("org:member", "member@example.com"),

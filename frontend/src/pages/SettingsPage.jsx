@@ -696,14 +696,6 @@ function SettingsPage() {
                 audience: "Admins only",
               },
               {
-                key: "email_disk_critical",
-                label: "Command Center disk almost full",
-                desc:
-                  "When the Fly volume hits 95% — recordings start " +
-                  "failing if you don't act.",
-                audience: "Admins only",
-              },
-              {
                 key: "email_incident_created",
                 label: "AI agent created an incident",
                 desc:

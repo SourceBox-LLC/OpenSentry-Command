@@ -694,10 +694,21 @@ def test_email_enabled_for_kind_uses_default_when_unset(db, monkeypatch):
     still gets the alerts."""
     _enable_email(monkeypatch)
 
-    for kind in ("camera_offline", "node_offline", "disk_critical", "incident_created"):
+    for kind in ("camera_offline", "node_offline", "incident_created"):
         assert notifications_mod.email_enabled_for_kind(
             db, "org_test123", kind,
         ) is True, f"{kind} should default to enabled"
+
+    # disk_critical was REMOVED as a customer-facing kind on
+    # 2026-05-04 — see project_notification_channels memory.  The
+    # email-enabled gate now refuses it (returns False) the same way
+    # it refuses any kind not in _EMAIL_KIND_TO_SETTING.
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "disk_critical",
+    ) is False, (
+        "disk_critical must NOT email customers — it's a platform-"
+        "infrastructure signal routed via Sentry instead"
+    )
 
 
 def test_email_enabled_for_kind_respects_per_org_setting(db, monkeypatch):
@@ -887,11 +898,13 @@ def test_get_email_preferences_returns_defaults(admin_client):
     data = resp.json()
     assert "email_globally_enabled" in data
     prefs = data["preferences"]
-    # All four operator-critical kinds default to enabled.
+    # All three customer-facing operator-critical kinds default to enabled.
     assert prefs["email_camera_offline"] is True
     assert prefs["email_node_offline"] is True
-    assert prefs["email_disk_critical"] is True
     assert prefs["email_incident_created"] is True
+    # disk_critical was REMOVED from this map on 2026-05-04 — it's
+    # platform-infrastructure state, routed via Sentry instead.
+    assert "email_disk_critical" not in prefs
 
 
 def test_get_email_preferences_reflects_overrides(admin_client, db):
@@ -905,7 +918,7 @@ def test_get_email_preferences_reflects_overrides(admin_client, db):
     assert prefs["email_camera_offline"] is False
     assert prefs["email_node_offline"] is False
     # Untouched ones stay at default.
-    assert prefs["email_disk_critical"] is True
+    assert prefs["email_incident_created"] is True
 
 
 def test_get_email_preferences_surfaces_global_kill_switch(admin_client, monkeypatch):
@@ -927,18 +940,18 @@ def test_post_email_preferences_updates_settings(admin_client, db):
     """POST a partial pref dict → only those keys flip."""
     resp = admin_client.post(
         "/api/notifications/email/preferences",
-        json={"email_camera_offline": False, "email_disk_critical": False},
+        json={"email_camera_offline": False, "email_incident_created": False},
     )
 
     assert resp.status_code == 200
     data = resp.json()
     assert data["preferences"]["email_camera_offline"] is False
-    assert data["preferences"]["email_disk_critical"] is False
+    assert data["preferences"]["email_incident_created"] is False
     # Unspecified keys keep their default.
     assert data["preferences"]["email_node_offline"] is True
     # Confirm via direct Setting query.
     assert Setting.get(db, "org_test123", "email_camera_offline") == "false"
-    assert Setting.get(db, "org_test123", "email_disk_critical") == "false"
+    assert Setting.get(db, "org_test123", "email_incident_created") == "false"
 
 
 def test_post_email_preferences_partial_update_does_not_clobber(admin_client, db):

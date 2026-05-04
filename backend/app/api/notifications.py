@@ -76,9 +76,17 @@ _NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
 _EMAIL_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     "camera_offline":   ("email_camera_offline",   True),
     "node_offline":     ("email_node_offline",     True),
-    "disk_critical":    ("email_disk_critical",    True),
     "incident_created": ("email_incident_created", True),
 }
+# Note: ``disk_critical`` is intentionally NOT in this map.  Disk-full
+# is platform infrastructure state (our Fly volume) — irrelevant to
+# customer org admins, who can't act on it and shouldn't be paged
+# about our infra.  Operator-side disk monitoring lives in three
+# existing channels instead: ``/api/health/detailed`` (status-page-
+# pollable), Sentry (catches the actual SQLite write failures when
+# disk fills), Fly's resource dashboards.  Adding disk_critical
+# back here would re-create the multi-tenant violation we removed
+# in 2026-05-04.
 
 
 def notifications_enabled(db: Session, org_id: str, kind: str) -> bool:
@@ -731,7 +739,6 @@ class EmailPreferences(BaseModel):
     """
     email_camera_offline: Optional[bool] = None
     email_node_offline: Optional[bool] = None
-    email_disk_critical: Optional[bool] = None
     email_incident_created: Optional[bool] = None
 
 
