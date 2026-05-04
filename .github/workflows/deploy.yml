@@ -94,42 +94,67 @@ jobs:
       # create a new machine.  ~30-60s of downtime per deploy (same as
       # `strategy = "immediate"` on a good day) but reliably works.
       #
-      # Builder choice has flipped twice now:
-      #   - 2026-04-28: tried depot.dev, timed out 5 min × 2 in a row
+      # Builder choice has flipped THREE times now:
+      #   - Original: --depot=true (depot.dev managed builder).
+      #   - 2026-04-28: depot.dev timed out 5 min × 2 in a row
       #     (~10 min wasted per deploy).  Switched to --depot=false
       #     (Fly's standard remote builder).  ~100 deploys worked.
-      #   - 2026-05-04: Fly's standard remote builder started returning
-      #     `unauthorized` on the WireGuard heartbeat for valid deploy
-      #     tokens (Request ID 01KQTE4AHWKB2PAAS8A372EKNP-iad).
+      #   - 2026-05-04 morning: Fly's standard remote builder started
+      #     returning `unauthorized` on the WireGuard heartbeat for
+      #     valid deploy tokens (Request ID 01KQTE4AHWKB2PAAS8A372EKNP).
       #     Swapped tokens — same failure.  Server-side scope change
-      #     or platform incident; either way, our CI was wedged.
-      #     Switched back to depot.dev which uses its own builder
-      #     infrastructure, bypassing the broken Fly path.
-      # If depot.dev's timeouts return, the next move is probably
-      # Buildkit-on-runner via `docker/build-push-action` and pushing
-      # the resulting tag to registry.fly.io ourselves.
+      #     or platform incident; either way, CI was wedged.  Tried
+      #     --depot=true again briefly: depot built fine but tagged
+      #     the manifest under its own internal namespace
+      #     (vo4x1o84n7ozql5y), so the subsequent `fly machine update`
+      #     got MANIFEST_UNKNOWN looking for the image at the
+      #     opensentry-command path.  Mismatch between depot's push
+      #     and the two-step pattern we use.
+      #   - 2026-05-04 afternoon (current): build locally on the
+      #     GitHub runner with docker/build-push-action and push
+      #     directly to registry.fly.io.  No third-party builders.
+      #     No WireGuard.  Same FLY_API_TOKEN works for the registry
+      #     push (proven on the failed depot run — depot's push to
+      #     registry.fly.io itself succeeded; the namespace mismatch
+      #     was on its side, not the registry's).  Dockerfile is a
+      #     standard multi-stage build (node:20-alpine for frontend,
+      #     uv:python3.12-bookworm-slim for backend) — no special
+      #     build hardware needed.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Fly registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.fly.io
+          # Fly's registry ignores the username; only the token matters.
+          username: x
+          password: ${{ secrets.FLY_API_TOKEN }}
+
       - name: Build + push image to Fly registry
         id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Tag with the commit SHA so each deploy is uniquely
+          # addressable + grep-friendly.  The previous flyctl-managed
+          # format was deployment-<ULID> — a SHA is more useful for
+          # cross-referencing the image to the source revision when
+          # debugging.
+          tags: registry.fly.io/opensentry-command:deployment-${{ github.sha }}
+          # GitHub Actions cache for layers — ~30s saved on warm
+          # builds vs. cold.  scope=deploy keeps it isolated from
+          # any future workflows that might also use buildx.
+          cache-from: type=gha,scope=deploy
+          cache-to: type=gha,scope=deploy,mode=max
+
+      - name: Export image tag for next step
+        id: image
         run: |
-          set -e
-          # --build-only --push: build the image and push to Fly's
-          # registry, but do NOT touch any machines.  The image tag is
-          # printed on a line like:
-          #   image: registry.fly.io/opensentry-command:deployment-XXXX
-          # Capture it so the next step can target it explicitly.
-          # --depot=true: route the build through depot.dev rather
-          # than Fly's standard remote builder.  See the long comment
-          # above for why we're back on depot.
-          OUT=$(flyctl deploy --remote-only --depot=true --build-only --push 2>&1 | tee /dev/stderr)
-          IMAGE=$(echo "$OUT" | grep -oP 'image:\s+\K[^\s]+' | tail -1)
-          if [ -z "$IMAGE" ]; then
-            echo "::error::Could not find image tag in flyctl output"
-            exit 1
-          fi
+          IMAGE="registry.fly.io/opensentry-command:deployment-${{ github.sha }}"
           echo "Captured image: $IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
       - name: Update machine in place
         run: |
@@ -146,4 +171,6 @@ jobs:
           flyctl machine update "$MACHINE" --image "$IMAGE" --yes -a opensentry-command
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-          IMAGE: ${{ steps.build.outputs.image }}
+          # Image tag comes from the `image` step (the export step
+          # after docker/build-push-action), not the build step.
+          IMAGE: ${{ steps.image.outputs.image }}
