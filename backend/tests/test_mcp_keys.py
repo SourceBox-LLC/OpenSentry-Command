@@ -69,6 +69,78 @@ def test_revoke_nonexistent_key(admin_client):
     assert resp.status_code == 404
 
 
+# ── Audit notification emission ────────────────────────────────────
+
+def test_create_mcp_key_emits_audit_notification(admin_client, db):
+    """Creating an MCP key fires a ``mcp_key_created`` notification
+    so admins can spot "who just got programmatic access to my
+    cameras?" via the bell-icon panel and (when EMAIL_ENABLED)
+    via email.  Audit-trail companion to the existing AuditLog row."""
+    from app.models.models import Notification
+
+    resp = admin_client.post("/api/mcp/keys", json={"name": "Audit Probe"})
+    assert resp.status_code == 200
+
+    notifs = (
+        db.query(Notification)
+        .filter_by(kind="mcp_key_created", org_id="org_test123")
+        .all()
+    )
+    assert len(notifs) == 1
+    n = notifs[0]
+    assert n.audience == "admin"  # security signal — admins only
+    assert n.severity == "warning"
+    # Title + body include the key name so the email subject is
+    # immediately recognisable in the inbox preview.
+    assert "Audit Probe" in n.title
+    assert "Audit Probe" in n.body
+    # Meta carries the key_id for any UI that wants to deep-link.
+    import json as _json
+    meta = _json.loads(n.meta_json)
+    assert meta["key_id"] == resp.json()["id"]
+
+
+def test_revoke_mcp_key_emits_audit_notification(admin_client, db):
+    """Revoking an MCP key fires the paired ``mcp_key_revoked``
+    notification so the audit trail is symmetric."""
+    from app.models.models import Notification
+
+    create_resp = admin_client.post("/api/mcp/keys", json={"name": "Revoke Me"})
+    key_id = create_resp.json()["id"]
+
+    admin_client.delete(f"/api/mcp/keys/{key_id}")
+
+    revoked_notifs = (
+        db.query(Notification)
+        .filter_by(kind="mcp_key_revoked", org_id="org_test123")
+        .all()
+    )
+    assert len(revoked_notifs) == 1
+    n = revoked_notifs[0]
+    assert n.audience == "admin"
+    # Lower severity than create — revoking is the safe direction.
+    assert n.severity == "info"
+    assert "Revoke Me" in n.title
+
+
+def test_mcp_key_notification_failure_does_not_break_endpoint(admin_client, db, monkeypatch):
+    """The notification emit is wrapped in try/except — a failure in
+    the notification path must NOT break the MCP key API call.
+    The audit log row is the load-bearing record; the notification
+    is best-effort companion."""
+    from app.api import notifications as notifications_mod
+
+    def boom(**kwargs):
+        raise RuntimeError("notifications system having a fit")
+    monkeypatch.setattr(notifications_mod, "create_notification", boom)
+
+    # The key creation should still succeed even though notification
+    # emission throws.
+    resp = admin_client.post("/api/mcp/keys", json={"name": "Resilience"})
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Resilience"
+
+
 # ──────────────────────────────────────────────────────────────────
 # Per-key tool scoping — unit + endpoint tests
 # ──────────────────────────────────────────────────────────────────

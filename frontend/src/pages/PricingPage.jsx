@@ -102,7 +102,7 @@ function PricingPage() {
           </div>
           <div className="pricing-faq-item">
             <h3>Do you send email or SMS alerts?</h3>
-            <p>Yes for email — every plan gets opt-in email alerts for the operator-critical events: camera offline, CloudNode offline, and AI-agent-created incidents. Toggle each kind on or off per-org in your notification settings. Motion-event emails are deferred until we ship per-camera digest / cooldown logic (a flappy outdoor camera shouldn't blast your inbox). SMS and mobile push remain MCP-only — wire your agent to Twilio, PagerDuty, or whatever you already use.</p>
+            <p>Yes for email — every plan gets opt-in email alerts for the operator-critical events: camera offline + recovered, CloudNode offline + recovered, AI-agent-created incidents, and MCP API key audit (created or revoked). Toggle each kind on or off per-org in your notification settings. Motion-event emails are deferred until we ship per-camera digest / cooldown logic (a flappy outdoor camera shouldn't blast your inbox). SMS and mobile push remain MCP-only — wire your agent to Twilio, PagerDuty, or whatever you already use.</p>
           </div>
         </div>
       </div>

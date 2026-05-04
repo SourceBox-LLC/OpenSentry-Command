@@ -653,7 +653,7 @@ function SettingsPage() {
           <h2>Email Alerts</h2>
           <p className="section-description">
             Get an email when something operator-critical happens.
-            All three default ON for new orgs — turn off the ones
+            All four default ON for new orgs — turn off the ones
             you don't need.  Motion-event emails are coming in a
             future release; until then, motion shows up only in the
             in-app inbox above.
@@ -683,16 +683,18 @@ function SettingsPage() {
             {[
               {
                 key: "email_camera_offline",
-                label: "Camera went offline",
-                desc: "When a camera misses heartbeats for >90 seconds.",
+                label: "Camera offline / recovered",
+                desc:
+                  "When a camera misses heartbeats for >90 seconds — " +
+                  "AND the all-clear when it comes back.",
                 audience: "All members",
               },
               {
                 key: "email_node_offline",
-                label: "CloudNode went offline",
+                label: "CloudNode offline / recovered",
                 desc:
-                  "When a node loses uplink — every camera attached " +
-                  "to it goes dark with it.",
+                  "When a node loses uplink (every camera on it goes " +
+                  "dark) — AND when it heartbeats again.",
                 audience: "Admins only",
               },
               {
@@ -702,6 +704,15 @@ function SettingsPage() {
                   "When a connected MCP agent (Claude, Cursor, etc.) " +
                   "opens a new incident report.",
                 audience: "All members",
+              },
+              {
+                key: "email_mcp_key_audit",
+                label: "MCP API key audit",
+                desc:
+                  "When a new MCP key is generated OR an existing " +
+                  "key is revoked.  Catches \"who just got " +
+                  "programmatic access to my cameras?\" early.",
+                audience: "Admins only",
               },
             ].map(({ key, label, desc, audience }) => (
               <label key={key} className="toggle-row">

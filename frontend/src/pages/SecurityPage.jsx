@@ -436,13 +436,14 @@ function SecurityPage() {
             <li>
               <strong>No SMS or mobile push alerts.</strong> Email alerts
               for operator-critical events <em>are</em> built in (camera
-              offline, CloudNode offline, AI-created incident — opt-in
-              per kind in your settings). Motion-event emails are
-              deferred until we ship per-camera digest / cooldown logic
-              to keep a flappy outdoor camera from blasting your inbox.
-              SMS and mobile push remain MCP-only — wire your agent to
-              Twilio or your existing PagerDuty webhook if you need
-              them.
+              offline + recovered, CloudNode offline + recovered,
+              AI-created incident, MCP API key audit — opt-in per
+              setting in your notification page). Motion-event emails
+              are deferred until we ship per-camera digest / cooldown
+              logic to keep a flappy outdoor camera from blasting your
+              inbox.  SMS and mobile push remain MCP-only — wire your
+              agent to Twilio or your existing PagerDuty webhook if
+              you need them.
             </li>
             <li>
               <strong>No public status page yet.</strong> If Command Center

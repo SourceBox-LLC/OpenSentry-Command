@@ -898,13 +898,75 @@ def test_get_email_preferences_returns_defaults(admin_client):
     data = resp.json()
     assert "email_globally_enabled" in data
     prefs = data["preferences"]
-    # All three customer-facing operator-critical kinds default to enabled.
+    # All four customer-facing operator-critical setting keys default
+    # to enabled.  Note that ``email_camera_offline`` and
+    # ``email_node_offline`` each gate two notification kinds (the
+    # offline event AND the recovery event); ``email_mcp_key_audit``
+    # gates both create and revoke.  See _EMAIL_KIND_TO_SETTING for
+    # the full kind→setting fan-out.
     assert prefs["email_camera_offline"] is True
     assert prefs["email_node_offline"] is True
     assert prefs["email_incident_created"] is True
+    assert prefs["email_mcp_key_audit"] is True
     # disk_critical was REMOVED from this map on 2026-05-04 — it's
     # platform-infrastructure state, routed via Sentry instead.
     assert "email_disk_critical" not in prefs
+
+
+def test_recovery_kinds_share_setting_with_offline_kinds(db, monkeypatch):
+    """Camera/Node ONLINE emails are gated by the SAME setting key
+    as their OFFLINE counterpart.  One toggle controls the whole
+    transition pair so users don't have to opt in twice for "I want
+    to know about my camera's connection state."  Pin the routing
+    so a future refactor that splits the keys apart surfaces here."""
+    _enable_email(monkeypatch)
+
+    # Default: both directions enabled.
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "camera_offline",
+    ) is True
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "camera_online",
+    ) is True
+
+    # Flip the offline setting to false → recovery emails ALSO stop.
+    Setting.set(db, "org_test123", "email_camera_offline", "false")
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "camera_offline",
+    ) is False
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "camera_online",
+    ) is False
+
+    # Same pairing for nodes.
+    Setting.set(db, "org_test123", "email_node_offline", "false")
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "node_offline",
+    ) is False
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "node_online",
+    ) is False
+
+
+def test_mcp_key_kinds_share_audit_setting(db, monkeypatch):
+    """MCP key created/revoked share email_mcp_key_audit — one
+    toggle for the whole security-audit pair."""
+    _enable_email(monkeypatch)
+
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "mcp_key_created",
+    ) is True
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "mcp_key_revoked",
+    ) is True
+
+    Setting.set(db, "org_test123", "email_mcp_key_audit", "false")
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "mcp_key_created",
+    ) is False
+    assert notifications_mod.email_enabled_for_kind(
+        db, "org_test123", "mcp_key_revoked",
+    ) is False
 
 
 def test_get_email_preferences_reflects_overrides(admin_client, db):

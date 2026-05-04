@@ -17,6 +17,8 @@ function Notifications() {
         <li><strong>Camera recovered</strong> — A previously offline camera started reporting segments again.</li>
         <li><strong>Motion detected</strong> — A camera's FFmpeg scene-change scorer crossed the configured threshold. See <a href="#motion-detection">Motion Detection</a>.</li>
         <li><strong>Incident opened</strong> — A human or MCP agent filed a new incident report.</li>
+        <li><strong>MCP API key created</strong> — An admin generated a new MCP API key (full programmatic access to cameras + nodes + incidents). Security-audit signal.</li>
+        <li><strong>MCP API key revoked</strong> — An admin revoked an existing MCP key. Paired with the create event so the audit trail is symmetric.</li>
       </ul>
 
       <h3>Where they show up</h3>
@@ -27,14 +29,19 @@ function Notifications() {
           regular members.
         </li>
         <li>
-          <strong>Email</strong> — Opt-in per event kind via{" "}
+          <strong>Email</strong> — Opt-in per setting key via{" "}
           <a href="/settings#settings-notifications">notification settings</a>. v1
-          ships with three kinds enabled by default for new orgs:
-          <code>camera_offline</code>, <code>node_offline</code>, and
-          <code>incident_created</code>.
+          ships four toggles enabled by default for new orgs:{" "}
+          <em>Camera offline / recovered</em> (gates both
+          <code>camera_offline</code> and <code>camera_online</code>),{" "}
+          <em>CloudNode offline / recovered</em> (gates both
+          <code>node_offline</code> and <code>node_online</code>),{" "}
+          <em>AI agent created an incident</em> (<code>incident_created</code>),
+          and <em>MCP API key audit</em> (gates both <code>mcp_key_created</code>{" "}
+          and <code>mcp_key_revoked</code>).
           Recipients are derived from the event's audience field — admin-only events
           email only org admins; everyone-else events email all members. Every email
-          carries a one-click unsubscribe link that disables that kind for the org.
+          carries a one-click unsubscribe link that disables that setting for the org.
           Platform-level alerts (Command Center disk approaching full, Fly machine
           health) are operator-side concerns surfaced via{" "}
           <a href="#api-health">/api/health/detailed</a> and Sentry, not customer

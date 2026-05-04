@@ -83,6 +83,47 @@ async def create_mcp_key(
         request=request,
     )
 
+    # Notify admins (inbox + email if enabled) — security audit
+    # signal.  Includes the actor in the body so a recipient who
+    # IS the actor immediately recognises their own action vs. a
+    # potential compromise.
+    try:
+        from app.api.notifications import create_notification
+        actor = audit_label(user) or user.user_id or "unknown user"
+        scope_summary = (
+            f"all tools" if scope_mode != "custom"
+            else f"{len(scope_tools or [])} scoped tool(s)"
+        )
+        create_notification(
+            org_id=user.org_id,
+            kind="mcp_key_created",
+            title=f"New MCP API key created: {payload.name}",
+            body=(
+                f"{actor} just created a new MCP API key "
+                f"\"{payload.name}\" with access to {scope_summary}. "
+                f"If this was you, no action needed.  If not, revoke "
+                f"it from the MCP settings page immediately."
+            ),
+            severity="warning",
+            audience="admin",
+            link="/mcp",
+            meta={
+                "key_id": mcp_key.id,
+                "key_name": payload.name,
+                "scope_mode": scope_mode,
+                "actor_user_id": user.user_id,
+            },
+            db=db,
+        )
+    except Exception:
+        # Audit row already written above — losing the notification
+        # email is annoying but not a security regression.  Don't
+        # fail the API call.
+        import logging
+        logging.getLogger(__name__).exception(
+            "[McpKeys] notification emit failed for key_id=%s", mcp_key.id,
+        )
+
     return {
         "id": mcp_key.id,
         "name": mcp_key.name,
@@ -179,5 +220,37 @@ async def revoke_mcp_key(
         details={"key_id": mcp_key.id, "name": mcp_key.name},
         request=request,
     )
+
+    # Notify admins — security audit signal, paired with the
+    # creation notification so the audit trail is symmetric.
+    try:
+        from app.api.notifications import create_notification
+        actor = audit_label(user) or user.user_id or "unknown user"
+        create_notification(
+            org_id=user.org_id,
+            kind="mcp_key_revoked",
+            title=f"MCP API key revoked: {mcp_key.name}",
+            body=(
+                f"{actor} just revoked the MCP API key "
+                f"\"{mcp_key.name}\". Any AI client that was using "
+                f"this key will start receiving 401 errors on its "
+                f"next request and will need to be reconfigured."
+            ),
+            severity="info",
+            audience="admin",
+            link="/admin/audit-log",
+            meta={
+                "key_id": mcp_key.id,
+                "key_name": mcp_key.name,
+                "actor_user_id": user.user_id,
+            },
+            db=db,
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception(
+            "[McpKeys] notification emit failed for revoke key_id=%s",
+            mcp_key.id,
+        )
 
     return {"success": True, "revoked": key_id}

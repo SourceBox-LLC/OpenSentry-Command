@@ -90,9 +90,9 @@ terminate the affected Service per Section 4.4 of the
 
 ### Resend — *optional, off by default*
 - **Service provided:** Transactional email delivery for operator-
-  critical alerts (camera offline, CloudNode offline, AI-agent-
-  created incidents). Each kind is opt-in per-org; defaults to ON
-  for new orgs.
+  critical alerts (camera offline + recovered, CloudNode offline +
+  recovered, AI-agent-created incidents, MCP API key audit events).
+  Each setting is opt-in per-org; defaults to ON for new orgs.
 - **Personal Data processed:** Recipient email address (for org
   members opted-in to email alerts), subject line and body content
   (which may include camera names, node names, and incident

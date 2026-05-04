@@ -43,11 +43,14 @@ function Faq() {
 
       <h3>Will I get email or SMS alerts when something happens?</h3>
       <p>
-        <strong>Email: yes</strong> for the operator-critical events — camera went
-        offline, CloudNode went offline, and AI-agent-created incidents. Each kind
-        is opt-in per-org via the{" "}
+        <strong>Email: yes</strong> for the operator-critical events — camera
+        offline + recovered, CloudNode offline + recovered, AI-agent-created
+        incidents, and MCP API key audit (created or revoked). Each kind is
+        opt-in per-org via the{" "}
         <a href="/settings#settings-notifications">notification settings page</a>;
-        all three default ON for new orgs.
+        all four toggles default ON for new orgs.  Recovery events
+        (camera/CloudNode came back online) share the same toggle as their
+        offline counterpart, so one click controls the whole transition pair.
       </p>
       <p>
         <strong>Motion-event emails are intentionally deferred</strong> until we ship

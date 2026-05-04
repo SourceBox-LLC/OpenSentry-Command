@@ -50,6 +50,13 @@ _NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     "camera_offline": ("camera_transition_notifications", True),
     "node_online": ("node_transition_notifications", True),
     "node_offline": ("node_transition_notifications", True),
+    # MCP key lifecycle — security audit signal that's worth seeing
+    # in the bell-icon panel even for admins who turned off the
+    # email side-channel.  Both events share one inbox toggle key
+    # for the same reason the email side does (admins want both
+    # or neither).
+    "mcp_key_created": ("mcp_key_audit_notifications", True),
+    "mcp_key_revoked": ("mcp_key_audit_notifications", True),
 }
 
 
@@ -75,8 +82,23 @@ _NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
 # rows just to have the worker discard them.
 _EMAIL_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     "camera_offline":   ("email_camera_offline",   True),
+    # camera_online intentionally shares the camera_offline setting
+    # key — one toggle controls the whole transition pair so users
+    # don't have to opt in twice for "I want to know about my
+    # camera's connection state."  If you got the offline email at
+    # 3am, you want the recovery email when it comes back so you
+    # can stop worrying — same toggle, same intent.
+    "camera_online":    ("email_camera_offline",   True),
     "node_offline":     ("email_node_offline",     True),
+    "node_online":      ("email_node_offline",     True),
     "incident_created": ("email_incident_created", True),
+    # MCP key lifecycle = security audit signal.  Both create and
+    # revoke share one setting key (admins want both or neither —
+    # there's no "I care about new keys but not revocations" use
+    # case).  Defaults ON because new MCP keys = full programmatic
+    # access; nobody should miss that being granted.
+    "mcp_key_created":  ("email_mcp_key_audit",    True),
+    "mcp_key_revoked":  ("email_mcp_key_audit",    True),
 }
 # Note: ``disk_critical`` is intentionally NOT in this map.  Disk-full
 # is platform infrastructure state (our Fly volume) — irrelevant to
@@ -736,10 +758,17 @@ class EmailPreferences(BaseModel):
 
     Each field is optional — clients only send the toggles they're
     actually changing.  Unset fields keep their existing values.
+
+    Note that some setting keys gate multiple notification kinds
+    (``email_camera_offline`` controls both ``camera_offline`` and
+    ``camera_online`` emails; ``email_mcp_key_audit`` controls both
+    create and revoke).  See ``_EMAIL_KIND_TO_SETTING`` for the
+    full mapping.  The UI shows one toggle per setting key.
     """
     email_camera_offline: Optional[bool] = None
     email_node_offline: Optional[bool] = None
     email_incident_created: Optional[bool] = None
+    email_mcp_key_audit: Optional[bool] = None
 
 
 def _current_email_prefs(db: Session, org_id: str) -> dict:

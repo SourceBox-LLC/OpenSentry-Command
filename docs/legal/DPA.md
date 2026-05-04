@@ -348,9 +348,10 @@ Organization.
 - Application errors are captured by Sentry (when `SENTRY_DSN` is
   configured) at a 10% trace sample rate. No video, body content, or
   user identifiers beyond what's required for triage are captured.
-- Operator-critical alerts (camera offline, CloudNode offline,
-  AI-agent-created incident) are delivered via email through
-  Resend when `EMAIL_ENABLED=true` and per-org per-kind
+- Operator-critical alerts (camera offline + recovered, CloudNode
+  offline + recovered, AI-agent-created incident, MCP API key audit
+  events) are delivered via email through Resend when
+  `EMAIL_ENABLED=true` and per-org per-setting
   preference allows. Each email includes a one-click unsubscribe link
   scoped to the (org, kind) pair. Recipients are derived live from
   Clerk org membership at send time; no separate mailing list is
