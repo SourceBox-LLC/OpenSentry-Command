@@ -159,43 +159,86 @@ error overlay.
 
 ---
 
-## Scenario D: Database is slow or unresponsive
+## Scenario D: Database is slow, unresponsive, or out-of-disk
 
 **Symptoms.** `/api/health/detailed` shows
-`checks.database.status == "error"` or
-`latency_ms > 1000`. Sentry firing `OperationalError` or
-`TimeoutError`.
+`checks.database.status == "error"`, `latency_ms > 1000`, or
+`checks.disk.status == "critical"`. Sentry firing `OperationalError`,
+`SqliteError`, or our own `[DiskCheck] OPERATOR ALERT` event.
+
+**Important context.** We use **SQLite on a Fly volume**, NOT Fly's
+managed Postgres. There is no separate database app to check. The
+DB lives at `/data/opensentry.db` on the same machine as the
+FastAPI process. WAL mode + NullPool + busy_timeout=5000 (see
+`backend/app/core/database.py`).
 
 **First checks.**
-1. `fly status -a opensentry-command-db` (or whatever the Postgres
-   app name is). Is it up?
-2. `fly logs -a opensentry-command-db` for connection errors,
-   replication lag, or out-of-disk warnings.
-3. Check the Fly dashboard for the database app's CPU and memory
-   metrics over the last hour.
+1. `fly status -a opensentry-command` — is the machine itself up
+   and healthy? Check the "events" timeline for recent restarts.
+2. `curl https://opensentry-command.fly.dev/api/health/detailed` —
+   look at:
+   - `checks.database.status` and `latency_ms`
+   - `checks.disk.percent_used` and `checks.disk.status`
+   - `checks.viewer_usage.pending_writes` (high = flush loop wedged)
+3. `fly logs -a opensentry-command` — search for `SqliteError`,
+   `database is locked`, `no space left`, or `[DiskCheck]`.
+4. `fly ssh console -a opensentry-command` then
+   `df -h /data` to see actual volume usage.
 
 **Likely causes.**
-- Postgres ran out of disk. Logs will show `no space left on
-  device`. Fly auto-extends in many cases; if not, manual disk
-  expansion.
-- Connection pool exhausted. SQLAlchemy's pool default is 5 with
-  10 overflow. If the app process leaks connections (forgotten
-  `db.close()` somewhere) the pool refills slowly.
-- Long-running query holding a lock — usually triggered by a
-  bad migration script or an unindexed query on a growing table.
-  Check `pg_stat_activity` from a `fly postgres connect`.
+
+- **Disk full on `/data`.** Logs show `no space left on device` or
+  the disk-check loop's `OPERATOR ALERT` Sentry event fired.
+  Recordings + audit logs + email outbox all share this volume.
+  Most common growth driver: an org with high motion-event volume
+  (every event is a row in `MotionEvent` until the daily cleanup
+  loop runs).
+- **WAL file got huge.** SQLite's WAL grows during writes and
+  collapses on read checkpoints. A long-running read transaction
+  can prevent checkpointing → WAL grows unbounded → disk fills
+  faster than expected.
+- **`database is locked` errors.** Should be rare with WAL +
+  busy_timeout, but a slow-running transaction (e.g. a 10K-row
+  delete in `run_log_cleanup`) can briefly block writers.
+- **Viewer-usage flush wedged.** If
+  `checks.viewer_usage.pending_writes` is climbing, the 60s flush
+  loop is failing. Could be a SQLite lock or an app-level
+  exception.
 
 **Fix paths.**
-- Disk full: extend the volume via Fly.
-- Pool exhausted: restart the app machine (`fly machine restart`)
-  to drain the pool. Then root-cause the leak.
-- Locked query: kill the offending PID via psql `SELECT
-  pg_cancel_backend(pid)`.
+
+- **Disk full:**
+  ```
+  # Extend the volume (downtime: machine restart while resize completes)
+  fly volumes extend <volume_id> --size <new_GB> -a opensentry-command
+  ```
+  Then trigger early log cleanup if needed:
+  ```
+  fly ssh console -a opensentry-command \
+    -C "uv run python -c 'from app.main import run_log_cleanup; \
+        from app.core.database import SessionLocal; \
+        db = SessionLocal(); \
+        print(run_log_cleanup(db))'"
+  ```
+- **WAL bloat:** force a checkpoint:
+  ```
+  fly ssh console -a opensentry-command \
+    -C "sqlite3 /data/opensentry.db 'PRAGMA wal_checkpoint(TRUNCATE);'"
+  ```
+- **`database is locked`:** restart the app machine to clear any
+  stuck readers. `fly machine restart <id> -a opensentry-command`.
+- **Viewer-usage flush wedged:** restart the app. Root-cause via
+  the app exception trail in Sentry.
 
 **When to escalate.**
-- After a restart the app comes back up but then degrades again
-  within 5 minutes — that's a leak, not a transient. Get a second
-  pair of eyes, root-cause before another restart.
+
+- After a restart the app comes back up but the disk fills
+  again within hours — there's a runaway write somewhere (motion
+  spam, broken background loop). Read recent commits + Sentry
+  for clues before another restart.
+- The volume is at its plan max (Fly volumes don't auto-extend
+  past plan limits). Need a paid plan upgrade or migration to
+  larger storage.
 
 ---
 
@@ -296,7 +339,162 @@ initiate; an audit log row your monitoring flagged.
 
 ---
 
-## Scenario H: Pre-deploy sanity check before pushing master
+## Scenario H: Email isn't sending (Resend transport failures)
+
+**Symptoms.** Customer reports they didn't get an expected camera-
+offline email. `/api/health/detailed` shows `checks.resend.queue_depth`
+climbing or `checks.resend.status == "error"`. Sentry firing
+exceptions from `app.core.email_worker`.
+
+**First checks.**
+1. `/api/health/detailed` — `checks.resend.status` tells you the
+   transport's overall state:
+   - `"ok"` — sending fine
+   - `"unconfigured"` — `EMAIL_ENABLED=false` OR `RESEND_API_KEY` unset
+   - `"error"` — recent send attempts are failing
+2. `fly logs -a opensentry-command | grep -E "\\[Email\\]|\\[Worker\\]"` —
+   look for lines like `[Email] Resend send failed` or
+   `[Worker] reclaimed N stuck sending rows`.
+3. Resend dashboard — check the "Emails" tab for recent attempts.
+   Are they marked sent / bounced / blocked? Resend's dashboard
+   shows the SMTP-level reason.
+4. SSH and query the outbox directly:
+   ```
+   fly ssh console -a opensentry-command \
+     -C "sqlite3 /data/opensentry.db \
+       'SELECT status, COUNT(*) FROM email_outbox GROUP BY status;'"
+   ```
+
+**Likely causes.**
+
+- **Sender reputation hit.** A burst of complaints (users marking
+  emails as spam) caused Resend to suspend our sending. Check the
+  Resend dashboard for warnings. Most common trigger: someone with
+  many flappy outdoor cameras opted INTO motion email + the digest
+  cooldown wasn't enough. Recovery: investigate the suppression list
+  for the affected addresses, possibly tighten cooldown via
+  `Setting.email_motion_cooldown_minutes` for that org.
+- **DNS / SPF / DKIM regression.** A registrar change broke the
+  Resend domain verification. Resend dashboard → Domains tab will
+  show "verification failed." Re-add the records and wait for
+  propagation.
+- **API key rotated / revoked.** `[Email] Resend send failed
+  err=AuthenticationError` everywhere. Generate a new API key in
+  Resend, update the Fly secret:
+  ```
+  fly secrets set RESEND_API_KEY=re_... -a opensentry-command
+  ```
+- **Resend platform incident.** Check status.resend.com. Just wait
+  it out. The outbox queue will drain on its own when Resend
+  recovers (rows stay `pending` and the worker keeps retrying up to
+  `EMAIL_MAX_ATTEMPTS=3` per row).
+- **Worker crash loop.** The `email_worker_loop` is supposed to
+  swallow per-row exceptions but might be failing at the outer
+  `SessionLocal()` open. Sentry traces will show the actual
+  exception.
+
+**Fix paths.**
+
+- **Stuck rows:** rows in `status='sending'` for >60s are
+  auto-reclaimed by the worker. If a lot are stuck, restart the
+  app to force a fresh worker tick.
+- **Drain queue manually after fixing root cause:** the worker
+  resumes automatically once the underlying issue clears. No
+  manual drain needed — just confirm `queue_depth` is decreasing
+  on `/api/health/detailed`.
+- **Kill switch as last resort:**
+  ```
+  fly secrets set EMAIL_ENABLED=false -a opensentry-command
+  ```
+  This silences the transport entirely. Outbox rows still queue
+  but the worker logs "would have sent" and marks them skipped.
+  Useful when a sender-reputation hit needs days to recover.
+
+**When to escalate.**
+
+- Resend suspended our domain entirely (not just a single bounce).
+  This is a customer-facing trust issue and may require migrating
+  to a fresh sending domain. Contact Resend support with the suspension
+  notice.
+
+---
+
+## Scenario I: CI deploy is failing
+
+**Symptoms.** A push to `master` succeeded the test + frontend jobs
+but the "Deploy to Fly.io" job failed. The live site is fine — just
+not yet on the latest commit.
+
+**First checks.**
+1. `gh run list --workflow="Test & Deploy" --limit 5 -R SourceBox-LLC/OpenSentry-Command` —
+   recent run history. Multiple failures in a row = real problem,
+   single failure = could be transient flake.
+2. `gh run view <run_id> --log-failed -R SourceBox-LLC/OpenSentry-Command | tail -30` —
+   show the failure tail.
+3. Compare to the most recent successful run's log to spot what
+   changed:
+   ```
+   gh run view <good_run_id> --log -R SourceBox-LLC/OpenSentry-Command \
+     | grep -E "WARN|Error|builder" | tail -10
+   ```
+
+**Likely causes.**
+
+- **Fly remote builder auth flake.** WireGuard tunnel auth flap
+  (we hit this 2026-05-04). Pattern in logs:
+  `WARN Failed to start remote builder heartbeat: unauthorized`.
+  Our current workflow (since `882780c`, 2026-05-04) builds locally
+  on the GitHub runner via `docker/build-push-action` and pushes
+  directly to `registry.fly.io` — this bypasses the remote builder
+  entirely, so this should NOT recur in the current setup. If it
+  does, we somehow regressed the workflow.
+- **`docker/build-push-action` failure.** Buildkit issue, runner
+  out of disk, or a Dockerfile syntax error. Should be obvious
+  from the log.
+- **Registry push 401.** Token in `FLY_API_TOKEN` is dead. Rotate:
+  ```
+  fly tokens create deploy -x 8760h -a opensentry-command \
+    | gh secret set FLY_API_TOKEN -R SourceBox-LLC/OpenSentry-Command
+  fly tokens revoke <old_id>
+  gh run rerun <failed_run_id> --failed -R SourceBox-LLC/OpenSentry-Command
+  ```
+- **`fly machine update` failed.** The build + push succeeded but
+  rolling the live machine hit an error. Check `fly status` and
+  `fly logs` for what happened on the machine side.
+
+**Fix paths.**
+
+- **Single transient flake:** retry the failed jobs:
+  ```
+  gh run rerun <run_id> --failed -R SourceBox-LLC/OpenSentry-Command
+  ```
+  If the next attempt succeeds, log the incident in this runbook
+  and move on.
+- **Persistent failure:** read the workflow's long comment block
+  in `.github/workflows/deploy.yml` for context on the THREE prior
+  builder regressions (depot timeout 2026-04-28; Fly remote builder
+  WireGuard auth 2026-05-04; depot manifest namespace mismatch
+  2026-05-04). Each was solved differently. The current local-
+  Buildkit setup is the most resilient path we've found.
+- **Deploy is BLOCKING a critical fix:** as a one-time emergency
+  override, you can bypass CI and deploy manually:
+  ```
+  cd backend && uv run python -c "..."  # tests still must pass locally
+  cd frontend && npm run build
+  fly deploy -a opensentry-command  # USE WITH CAUTION
+  ```
+  This breaks the "every deploy goes through CI" guarantee, so use
+  only when truly necessary and document in the runbook log.
+
+**When to escalate.**
+
+- Multiple distinct failure modes in a short window (e.g. tests
+  flaking AND deploy flaking AND audit failing) — that's a
+  GitHub Actions / Fly platform incident. Pivot to Scenario E.
+
+---
+
+## Scenario J: Pre-deploy sanity check before pushing master
 
 > Not a fire — but if you're deploying at 11pm, walk through this
 > checklist before pushing.

@@ -31,16 +31,29 @@ Backend config is loaded from environment variables (see `backend/.env.example`)
 - `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` — Clerk auth
 
 **Optional:**
-- `CLERK_WEBHOOK_SECRET` — Svix signature for Clerk subscription webhooks
-- `DATABASE_URL` — defaults to `sqlite:///./opensentry.db`
+- `CLERK_WEBHOOK_SECRET` — Svix signature for Clerk subscription + organizationMembership webhooks
+- `DATABASE_URL` — defaults to `sqlite:///./opensentry.db`. Production uses `sqlite:////data/opensentry.db` on a Fly volume — single-machine deploy, NullPool, WAL, busy_timeout=5000 (see `app/core/database.py`).
 - `FRONTEND_URL` — extra CORS origin (must have scheme, no trailing slash)
-- `SEGMENT_CACHE_MAX_PER_CAMERA` — segments cached in memory per camera (default 15, ~30s)
+- `REDIS_URL` — slowapi rate-limiter shared storage. Without it, per-process in-memory counters (single-VM safe; multi-VM round-robins around the limit). Currently in production via Upstash on Fly.
+- `SEGMENT_CACHE_MAX_PER_CAMERA` — segments cached in memory per camera (default **60**, ~60s — CloudNode emits 1-second segments)
+- `SEGMENT_CACHE_MAX_TOTAL_BYTES` — global byte ceiling across all camera caches (default 2 GiB). When exceeded, `hls.py` evicts oldest segments across ALL cameras until back under cap.
 - `SEGMENT_PUSH_MAX_BYTES` — max bytes per pushed segment (default 2 MB)
+- `PLAYLIST_PUSH_MAX_BYTES` — max bytes per pushed playlist (default 64 KB)
 - `CLEANUP_INTERVAL` — run cache eviction every N playlist updates (default 20)
 - `INACTIVE_CAMERA_CLEANUP_HOURS` — free caches for cameras offline this long (default 24)
-- `LOG_RETENTION_DAYS` — stream + MCP + audit + motion + notification log retention (default 90)
+- `LOG_RETENTION_DAYS` — stream + MCP + audit + motion + notification + email log retention (default 90; per-tier override via plan slug — Free 30 / Pro 90 / Pro Plus 365)
 - `OFFLINE_SWEEP_INTERVAL_SECONDS` — how often to mark stale rows offline (default 30)
 - `SENTRY_DSN` — error tracking. In production this is managed by the Fly Sentry extension (`fly ext sentry create -a opensentry-command`) which provisions a sponsored Team plan and auto-injects the secret; you rarely set this by hand. `app/core/sentry.py::init_sentry()` is a no-op when the DSN is absent, so local dev needs no extra config. Dashboard: `fly ext sentry dashboard -a opensentry-command`.
+
+**Email (Resend, optional):**
+- `EMAIL_ENABLED` — global kill-switch (default `false`). Code can ship with it off; flip to `true` once DNS propagates and a smoke test passes. Worker still runs when off; transport short-circuits with a logged "would have sent" line.
+- `RESEND_API_KEY` — Resend transactional API key (`re_…`)
+- `RESEND_WEBHOOK_SECRET` — Svix signing secret for the `/api/webhooks/resend` bounce/complaint handler
+- `EMAIL_FROM_ADDRESS` — default `notifications@sourceboxsentry.com` (must be on a verified Resend domain)
+- `EMAIL_FROM_NAME` — default `SourceBox Sentry`
+- `EMAIL_WORKER_INTERVAL_SECONDS` — outbox-drain tick interval (default 5)
+- `EMAIL_WORKER_BATCH_SIZE` — max rows drained per tick (default 20)
+- `EMAIL_MAX_ATTEMPTS` — retries before a row is permanently failed (default 3)
 
 Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
 
@@ -50,34 +63,58 @@ Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
 backend/
 ├── app/
 │   ├── main.py                   # FastAPI app, CORS, SPA middleware, rate limiting,
-│   │                             # log cleanup + offline sweep loops, MCP mount
+│   │                             # lifespan startup (7 background loops), MCP mount,
+│   │                             # disk-check + motion-digest loop bodies
+│   ├── templates/emails/         # 22 Jinja2 email templates — _layout.html.j2 +
+│   │                             # 7 kinds (camera offline/recovered, node offline/
+│   │                             # recovered, incident_created, MCP key created/
+│   │                             # revoked, cloudnode_disk_low, member added/role-
+│   │                             # changed/removed, motion, motion_digest) × 3 files
 │   ├── api/
 │   │   ├── cameras.py            # Cameras, groups, settings, audit logs, danger zone
-│   │   ├── nodes.py              # CloudNode registration, heartbeat, CRUD, plan info
-│   │   ├── hls.py                # HLS playlist + segment memory cache + push-segment + HTTP motion fallback
+│   │   ├── nodes.py              # CloudNode register/heartbeat/CRUD, plan info,
+│   │   │                         # cloudnode_disk_low alert helper (per-node debounce
+│   │   │                         # via Setting key colon-suffix pattern)
+│   │   ├── hls.py                # HLS playlist + segment memory cache + push-segment
+│   │   │                         # + HTTP motion fallback + global byte-cap eviction
 │   │   ├── audit.py              # Stream access logs + stats
 │   │   ├── incidents.py          # AI-generated incident reports (CRUD + evidence blobs)
-│   │   ├── mcp_keys.py           # MCP API key management + live tool catalog
+│   │   ├── mcp_keys.py           # MCP API key management + tool catalog + audit
+│   │   │                         # notifications (mcp_key_created/revoked)
 │   │   ├── mcp_activity.py       # MCP activity logs, stats, SSE stream
 │   │   ├── motion.py             # Motion event queries, stats, SSE stream
-│   │   ├── notifications.py      # Notification inbox, unread count, SSE, broadcaster
+│   │   ├── notifications.py      # Notification inbox, unread count, SSE, broadcaster,
+│   │   │                         # email kind map, email cooldown gate (motion v1.1),
+│   │   │                         # email prefs endpoints, signed unsubscribe
 │   │   ├── install.py            # CloudNode + MCP setup script endpoints
 │   │   ├── ws.py                 # CloudNode WebSocket channel
-│   │   └── webhooks.py           # Clerk subscription webhook handler
+│   │   └── webhooks.py           # Clerk subscription + organizationMembership +
+│   │                             # Resend bounce/complaint webhook handlers
 │   ├── mcp/
-│   │   └── server.py             # FastMCP server + 22 tools + ScopeMiddleware
+│   │   └── server.py             # FastMCP server + 23 tools + ScopeMiddleware
 │   ├── core/
+│   │   ├── audit.py              # Audit-log writer (error-swallowing pattern)
 │   │   ├── auth.py               # Clerk JWT validation (V1 + V2 permissions), dependencies
 │   │   ├── config.py             # Environment loading (Config class)
 │   │   ├── clerk.py              # Clerk SDK init
 │   │   ├── database.py           # SQLAlchemy engine + session factory + Base
+│   │   ├── email.py              # Resend SDK touchpoint (single send entry; honors
+│   │   │                         # EMAIL_ENABLED kill-switch + suppression list)
+│   │   ├── email_templates.py    # Jinja2 renderer (per-template autoescape selection;
+│   │   │                         # .html.j2 escapes, .txt.j2 doesn't)
+│   │   ├── email_unsubscribe.py  # Signed JWT for one-click footer unsubscribe links
+│   │   ├── email_worker.py       # EmailOutbox drain loop + retry + reclaim-stuck-sending
 │   │   ├── errors.py             # ApiError class — structured 4xx/5xx envelope
 │   │   ├── limiter.py            # slowapi Limiter instance (tenant-aware key)
 │   │   ├── migrations.py         # sync_schema (column adder), drop_orphan_tables,
 │   │   │                         # sanitize_existing_codecs — stand-in for Alembic
 │   │   ├── plans.py              # PLAN_LIMITS, effective_plan_for_caps, grace period
+│   │   ├── recipients.py         # Clerk org member lookup + 5-min TTL cache + audience
+│   │   │                         # filter (admin / all) + suppression-list exclusion
+│   │   ├── release_cache.py      # GitHub /releases/latest cache for CloudNode
+│   │   │                         # update_available signal
 │   │   └── sentry.py             # Sentry SDK init (no-op when SENTRY_DSN unset)
-│   ├── models/models.py          # 14 ORM models (see Data Models below)
+│   ├── models/models.py          # 18 ORM models (see Data Models below)
 │   └── schemas/schemas.py        # Pydantic request/response schemas incl. McpKeyCreate
 ├── scripts/
 │   ├── install.sh                # CloudNode installer for Linux/macOS (served by install.py).
@@ -224,24 +261,28 @@ MCP endpoint (`POST /mcp`) validates `Authorization: Bearer osc_<hex>`:
 
 ## Data Models
 
-All 14 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation.
+All 18 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation EXCEPT `ProcessedWebhook` (global webhook dedup, keyed on Svix msg_id).
 
 | Model | Key Fields | Purpose |
 |-------|------------|---------|
 | `Camera` | `camera_id`, `node_id` (FK), `name`, `status`, `video_codec`, `audio_codec`, `group_id`, `last_seen` | Camera registered by a CloudNode; `effective_status` flips to offline after a 90s heartbeat gap |
-| `CameraNode` | `node_id`, `api_key_hash`, `hostname`, `status`, `video_codec`, `audio_codec`, `last_seen`, `key_rotated_at` | Physical CloudNode device |
+| `CameraNode` | `node_id`, `api_key_hash`, `hostname`, `status`, `video_codec`, `audio_codec`, `last_seen`, `key_rotated_at`, `storage_*` | Physical CloudNode device + storage stats from heartbeat (drives `cloudnode_disk_low` alert) |
 | `CameraGroup` | `name`, `color`, `icon` | User-defined camera grouping |
-| `Setting` | `key`, `value` | Per-org key/value settings |
-| `AuditLog` | `event`, `user_id`, `ip_address`, `details` | Security audit trail |
-| `StreamAccessLog` | `user_id`, `camera_id`, `ip_address`, `user_agent`, `accessed_at` | Stream playback audit |
+| `Setting` | `key`, `value` | Per-org key/value store. Used for plan slug, recording config, email toggles, motion email cooldown anchors (`motion_email_cooldown_start:{camera_id}`), CloudNode disk debounce (`cloudnode_disk_low_emit_at:{node_id}`), payment past-due flags. |
+| `AuditLog` | `event`, `user_id`, `ip_address`, `details`, `(org_id, timestamp)` index | Security audit trail |
+| `StreamAccessLog` | `user_id`, `camera_id`, `ip_address`, `user_agent`, `accessed_at`, `(org_id, accessed_at)` index | Stream playback audit |
 | `McpApiKey` | `name`, `key_hash`, `scope_mode`, `scope_tools` (JSON text), `last_used_at`, `revoked` | MCP API keys — **scope_mode**: `all` / `readonly` / `custom` |
-| `McpActivityLog` | `tool_name`, `key_name`, `status`, `duration_ms`, `args_summary`, `error`, `timestamp` | Per-call MCP audit log |
+| `McpActivityLog` | `tool_name`, `key_name`, `status`, `duration_ms`, `args_summary`, `error`, `timestamp`, `(org_id, timestamp)` index | Per-call MCP audit log |
 | `Incident` | `title`, `summary`, `report` (markdown), `severity`, `status`, `camera_id`, `created_by`, `resolved_at`, `resolved_by` | AI-generated incident (`open` / `acknowledged` / `resolved` / `dismissed`) |
 | `IncidentEvidence` | `incident_id` (FK cascade), `kind` (`snapshot` / `clip` / `observation`), `text`, `camera_id`, `data` (LargeBinary), `data_mime` | Snapshot JPEG, clip (MPEG-TS bytes), or text observation — evidence travels inline with the incident |
-| `MotionEvent` | `camera_id`, `node_id`, `score` (0–100), `segment_seq`, `timestamp` | Motion detected by CloudNode scene-change analysis |
-| `Notification` | `kind`, `audience` (`all` / `admin`), `title`, `body`, `severity`, `link`, `camera_id`, `node_id`, `meta_json` | Unified inbox entry (motion, camera/node online/offline, errors) |
+| `MotionEvent` | `camera_id`, `node_id`, `score` (0–100), `segment_seq`, `timestamp`, `(org_id, timestamp)` index | Motion detected by CloudNode scene-change analysis |
+| `Notification` | `kind`, `audience` (`all` / `admin`), `title`, `body`, `severity`, `link`, `camera_id`, `node_id`, `meta_json` | Unified inbox entry (12 kinds: motion, motion_digest, camera/node transitions, MCP key audit, member audit, CloudNode disk, AI-agent incidents) |
 | `UserNotificationState` | `clerk_user_id` + `org_id` (unique), `last_viewed_at` | Per-user read cursor for the inbox |
 | `OrgMonthlyUsage` | `org_id` + `year_month` (unique), `viewer_seconds` | One row per org per calendar month; aggregates live-playback viewer-seconds for viewer-hour cap enforcement |
+| `EmailOutbox` | `recipient_email`, `subject`, `body_text`, `body_html`, `kind`, `notification_id` (soft FK), `status` (`pending`/`sending`/`sent`/`failed`/`suppressed`), `attempts`, `resend_message_id`, `(status, created_at)` index | Pending email send queue. Drained by `email_worker_loop` every 5s. Survives process restart. |
+| `EmailLog` | `recipient_email`, `kind`, `status`, `resend_message_id`, `error`, `timestamp`, `(org_id, timestamp)` index | Per-org email send/delivery audit. Per-tier retention via `run_log_cleanup`. |
+| `EmailSuppression` | `address` (unique, lowercased), `reason`, `source`, `created_at` | Local mirror of Resend's suppression list. Worker checks before every send. |
+| `ProcessedWebhook` | `svix_msg_id` (unique), `event_type`, `created_at` | Webhook dedup table for both Clerk and Resend (idempotency under Svix retry) |
 
 Validation constants (also in `models.py`):
 - `INCIDENT_STATUSES` = `("open", "acknowledged", "resolved", "dismissed")`
@@ -362,7 +403,7 @@ Validation constants (also in `models.py`):
 
 ## MCP Server
 
-Mounted at `/mcp` via FastMCP streamable HTTP. Authenticates with `Authorization: Bearer osc_...` against `McpApiKey.key_hash`. Exposes **22 tools** (16 read + 6 write).
+Mounted at `/mcp` via FastMCP streamable HTTP. Authenticates with `Authorization: Bearer osc_...` against `McpApiKey.key_hash`. Exposes **23 tools** (16 read + 7 write).
 
 ### Scope middleware
 
@@ -441,13 +482,34 @@ HLS `GET` paths (`stream.m3u8`, `segment/{file}`) are not per-request rate limit
 
 ## Webhook Handling
 
-`POST /api/webhooks/clerk` handles Clerk subscription events:
+Two endpoints, both Svix-signed (signature verification mandatory in production):
+
+### `POST /api/webhooks/clerk` — Clerk events
+
 - Verifies signature with Svix when `CLERK_WEBHOOK_SECRET` is set; accepts unsigned JSON otherwise (dev mode)
-- On `subscription.{created,updated,active}` — writes `Setting(org_plan)`, updates the Clerk org member limit, and runs `enforce_camera_cap` so a plan change (in either direction) flips the `Camera.disabled_by_plan` flags to match the new cap.
-- On `subscription.pastDue` / `subscriptionItem.pastDue` — writes `Setting(payment_past_due="true")` and a timestamped `payment_past_due_at`. No camera enforcement at this stage; see the grace-period note below.
-- On `paymentAttempt.updated` with `status="paid"` — clears both past-due settings and re-runs `enforce_camera_cap`, so cameras suspended during a grace-expired past-due window light back up.
-- On `subscriptionItem.{canceled,ended}` — reverts to `free_org`, resets member limit, and re-runs `enforce_camera_cap`. Camera rows are preserved (not deleted) so re-subscribe instantly restores streaming.
-- On `organization.deleted` — full wipe.
+- Dedup via `ProcessedWebhook(svix_msg_id)` so retries are idempotent
+
+**Subscription lifecycle:**
+- `subscription.{created,updated,active}` — writes `Setting(org_plan)`, updates the Clerk org member limit, and runs `enforce_camera_cap` so a plan change (in either direction) flips the `Camera.disabled_by_plan` flags to match the new cap.
+- `subscription.pastDue` / `subscriptionItem.pastDue` — writes `Setting(payment_past_due="true")` and a timestamped `payment_past_due_at`. No camera enforcement at this stage; see the grace-period note below.
+- `paymentAttempt.updated` with `status="paid"` — clears both past-due settings and re-runs `enforce_camera_cap`, so cameras suspended during a grace-expired past-due window light back up.
+- `subscriptionItem.{canceled,ended}` — reverts to `free_org`, resets member limit, and re-runs `enforce_camera_cap`. Camera rows are preserved (not deleted) so re-subscribe instantly restores streaming.
+
+**Organization membership lifecycle (security audit):**
+- `organizationMembership.created` — emits `member_added` notification (audience: admin). Severity is `warning` for promotion-to-admin, `info` for member-tier additions.
+- `organizationMembership.updated` — emits `member_role_changed` notification.
+- `organizationMembership.deleted` — emits `member_removed` notification.
+- All three notifications wrapped in try/except so a notification fault never causes Clerk webhook backpressure.
+
+**Org lifecycle:**
+- `organization.deleted` — full org wipe (cameras, nodes, groups, MCP keys, all logs, settings).
+
+### `POST /api/webhooks/resend` — Resend events
+
+- Verifies signature with Svix using `RESEND_WEBHOOK_SECRET`
+- Dedup via the same `ProcessedWebhook` table (Svix msg_ids are high-entropy; cross-source collision is astronomical)
+- `email.bounced` → insert `EmailSuppression(address, reason='bounce', source='resend_webhook')` so the worker stops sending to that address
+- `email.complained` → insert `EmailSuppression(address, reason='complaint', source='resend_webhook')`. User marked our email as spam — protects sender reputation by removing them from the list immediately.
 
 ## Plan Enforcement
 
@@ -493,13 +555,17 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 
 ## Background Loops
 
-`main.py` starts three long-running tasks on lifespan startup:
+`main.py` starts SEVEN long-running tasks on lifespan startup:
 
 | Task | Cadence | What it does |
 |------|---------|--------------|
-| `_log_cleanup_loop` | Every `LOG_CLEANUP_INTERVAL_HOURS` (24h) | Thin scheduler around `run_log_cleanup(db) -> dict` (extracted into `main.py` for direct test coverage — same pattern as `run_offline_sweep`). Iterates distinct `org_id` values across the log tables, resolves each org's plan, and deletes records older than that org's `log_retention_days` (30 / 90 / 365). The loop also flushes in-memory segment/playlist caches for cameras offline >`INACTIVE_CAMERA_CLEANUP_HOURS`. |
+| `_log_cleanup_loop` | Every `LOG_CLEANUP_INTERVAL_HOURS` (24h) | Thin scheduler around `run_log_cleanup(db) -> dict` (extracted for direct test coverage). Iterates distinct `org_id` values across all log tables (StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Notification, EmailLog), resolves each org's plan, and deletes records older than that org's `log_retention_days` (30 / 90 / 365). Also sweeps terminal-state EmailOutbox rows older than 7 days (cross-org; pending/sending NEVER deleted regardless of age). |
 | `_offline_sweep_loop` | Every `OFFLINE_SWEEP_INTERVAL_SECONDS` (30s) | Flips nodes/cameras whose `last_seen` is older than 90s from `status='online'` to `'offline'` and emits `Notification` rows + broadcasts SSE events |
 | `_viewer_usage_flush_loop` | Every 60s | Flushes pending in-memory viewer-second counters to the `org_monthly_usage` table with one UPSERT per active org. Keeps the hot HLS-serve path O(1) in memory. |
+| `_release_cache_refresh_loop` | Every `RELEASE_CACHE_REFRESH_INTERVAL_SECONDS` (600s) | Polls GitHub `/releases/latest` for the CloudNode repo so the heartbeat handler's `update_available` field stays fresh without blocking on GitHub per request. Cold-boot fallback is `LATEST_NODE_VERSION` env var. |
+| `_disk_check_loop` | Every `DISK_CHECK_INTERVAL_SECONDS` (300s = 5min) | Polls `/data` disk usage. When ≥95%, fires a single `logger.error()` with structured `extra` fields (Sentry-captured). 6h re-emit debounce per process. **Operator-side only** — does NOT route through customer notifications (multi-tenant violation removed 2026-05-04). |
+| `_motion_digest_loop` | Every `MOTION_DIGEST_INTERVAL_SECONDS` (60s) | Drains expired per-camera motion email cooldown anchors (Setting rows keyed `motion_email_cooldown_start:{camera_id}`). For each expired window: counts MotionEvent rows in the window, emits a `motion_digest` notification (which itself enqueues a digest email) if extras > 0, deletes the anchor regardless. Volume cap: 2 emails per cycle per camera. |
+| `email_worker_loop` (in `app/core/email_worker.py`, spawned from `main.py` lifespan) | Every `EMAIL_WORKER_INTERVAL_SECONDS` (5s) | Drains EmailOutbox `status='pending'` rows in batches of `EMAIL_WORKER_BATCH_SIZE`. Per row: check suppression list → call `email.send_email()` → mark `sent`/`failed`/`suppressed` → write EmailLog row. Reclaims rows stuck in `sending` for >60s (worker crash). Idempotency-Key on the Resend send protects against duplicate delivery on retry. |
 
 ## Key Patterns
 
@@ -543,13 +609,16 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 
 - `fastapi` / `uvicorn` — Web framework and ASGI server
 - `fastmcp` — Model Context Protocol server (streamable HTTP)
-- `sqlalchemy` — ORM (SQLite dev, PostgreSQL production)
+- `sqlalchemy` — ORM (SQLite both dev + prod; production runs on a Fly volume)
 - `pydantic` — Request/response validation
 - `clerk-backend-api` — Clerk authentication
-- `pyjwt` — JWT token handling (for V2 permission decoding)
-- `slowapi` — Rate limiting
+- `pyjwt` — JWT token handling (V2 permission decoding + signed unsubscribe tokens)
+- `jinja2` — Email template rendering (`backend/app/templates/emails/`)
+- `resend` — Resend SDK for transactional email
+- `slowapi` — Rate limiting (Redis-backed via `REDIS_URL` in production; in-memory fallback)
 - `httpx` — HTTP client
-- `svix` — Webhook signature verification
+- `svix` — Webhook signature verification (Clerk + Resend share the library)
+- `sentry-sdk` — Error tracking (no-op when `SENTRY_DSN` is unset)
 - `python-dotenv` — Environment variable loading
 
 ## Development Notes

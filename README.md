@@ -28,9 +28,10 @@ SourceBox Sentry Command Center is the cloud hub for the SourceBox Sentry ecosys
 - Manages camera nodes and groups, with per-org Clerk authentication
 - Multi-tenant with organization-based access control (V2 JWT permissions)
 - Motion detection events from CloudNodes with per-camera aggregates and a live SSE feed
-- Unified notification inbox for motion, camera/node status transitions, and errors
+- Unified notification inbox for motion, camera/node status transitions, MCP key audit, member audit, CloudNode disk warnings, AI-agent incidents, and errors
+- **Email notifications** via Resend — opt-in per-org per-kind, with per-camera cooldown + digest mode for high-volume motion events (12 notification kinds gated by 7 setting toggles)
 - Audit logging for stream access, admin actions, and MCP tool calls
-- MCP server exposing 22 tools (16 read, 6 write) so AI clients can view cameras, file incident reports with snapshots and short video clips, and read back past investigations — with per-key scoping (all / readonly / custom allow-list)
+- MCP server exposing 23 tools (16 read, 7 write) so AI clients can view cameras, file incident reports with snapshots and short video clips, and read back past investigations — with per-key scoping (all / readonly / custom allow-list)
 
 ---
 
@@ -92,18 +93,21 @@ The scripts detect which clients you already have and merge an `opensentry` entr
   │ USB Camera   │            │  FastAPI Backend      │         │  React 19    │
   │      ↓       │            │                       │         │              │
   │ FFmpeg (HLS) │──push─────→│  In-memory segment    │←─GET───→│  HLS.js      │
-  │              │  segments  │  cache (~15 segs/cam) │  proxy  │  (video)     │
-  │              │──register─→│  SQLite / PostgreSQL  │  URLs   │              │
+  │              │  segments  │  cache (~60 segs/cam) │  proxy  │  (video)     │
+  │              │──register─→│  SQLite (Fly volume)  │  URLs   │              │
   │              │──heartbeat→│  Clerk Auth           │←─JWT───→│  Clerk Auth  │
   │              │──WS events │  FastMCP (/mcp)       │←──SSE───│  Motion feed │
+  │              │            │  Resend (email out)   │         │              │
   └──────────────┘            └───────────────────────┘         └──────────────┘
 ```
 
-**Video pipeline:** CloudNode transcodes USB camera video into HLS segments and pushes each `.ts` file directly to the backend via `POST /api/cameras/{id}/push-segment`. The backend caches segments in memory (15 per camera by default, ~30s buffer) and serves them through the same-origin proxy at `GET /api/cameras/{id}/segment/{file}`. The rewritten playlist contains relative segment URLs, so the browser's Clerk JWT auth header is automatically attached. No S3, no presigned URLs, no third-party storage in the live path.
+**Video pipeline:** CloudNode transcodes USB camera video into HLS segments and pushes each `.ts` file directly to the backend via `POST /api/cameras/{id}/push-segment`. The backend caches segments in memory (60 per camera by default, ~60s buffer) and serves them through the same-origin proxy at `GET /api/cameras/{id}/segment/{file}`. The rewritten playlist contains relative segment URLs, so the browser's Clerk JWT auth header is automatically attached. No S3, no presigned URLs, no third-party storage in the live path. A global byte ceiling (`SEGMENT_CACHE_MAX_TOTAL_BYTES`, default 2 GiB) bounds total cache size across all cameras and evicts oldest-first when exceeded.
 
 **Authentication:** Clerk handles user sign-up, login, and organization management. The backend validates JWT tokens (V1 and V2 permission formats) and extracts organization-scoped permissions. CloudNodes authenticate with API keys (SHA-256 hashed in the database) passed via `X-Node-API-Key`. MCP clients authenticate with `Authorization: Bearer osc_...` keys (also hashed).
 
-**Storage:** Live segments live in the backend's in-memory cache; they expire automatically once `SEGMENT_CACHE_MAX_PER_CAMERA` is exceeded. Recordings and snapshots live on the CloudNode itself. SQLite is used for development (`opensentry.db`); PostgreSQL for production. Incident snapshots and clips are stored inline on `IncidentEvidence.data` (LargeBinary) — evidence travels with the incident.
+**Storage:** Live segments live in the backend's in-memory cache; they expire automatically once `SEGMENT_CACHE_MAX_PER_CAMERA` is exceeded. Recordings and snapshots live on the CloudNode itself. **SQLite** is the production database (single-machine deploy on a Fly volume at `/data`); `DATABASE_URL` defaults to `sqlite:///./opensentry.db` for local dev. Incident snapshots and clips are stored inline on `IncidentEvidence.data` (LargeBinary) — evidence travels with the incident.
+
+**Email:** Operator-critical notifications (camera offline, CloudNode offline, AI-agent incident, MCP key audit, CloudNode disk warning, member audit, motion w/ digest) flow through `EmailOutbox` → background worker → Resend transactional API. Per-org per-kind opt-in toggles (all default ON except motion, which defaults OFF). See `app/core/email_worker.py` and the `_motion_digest_loop` background task.
 
 **Real-time:** CloudNodes maintain a WebSocket channel (`/ws/node`) used for commands, status, and motion events. The dashboard subscribes to SSE feeds for motion events (`/api/motion/events/stream`), notifications (`/api/notifications/stream`), and MCP activity (`/api/mcp/activity/stream`).
 
@@ -115,17 +119,39 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
+| **Auth** | | | |
 | `CLERK_SECRET_KEY` | Yes | | Clerk backend API key |
 | `CLERK_PUBLISHABLE_KEY` | Yes | | Clerk frontend key |
 | `CLERK_WEBHOOK_SECRET` | No | | Svix signature secret for Clerk webhooks |
-| `DATABASE_URL` | No | `sqlite:///./opensentry.db` | SQLAlchemy connection string |
+| **Storage** | | | |
+| `DATABASE_URL` | No | `sqlite:///./opensentry.db` | SQLAlchemy connection string. Production uses `sqlite:////data/opensentry.db` on a Fly volume. |
 | `FRONTEND_URL` | No | `http://localhost:5173` | Extra CORS origin (must include scheme, no trailing slash) |
-| `SEGMENT_CACHE_MAX_PER_CAMERA` | No | `15` | Segments cached in memory per camera (~2s each) |
+| `REDIS_URL` | No | | Rate-limiter shared storage. Without it, slowapi falls back to per-process in-memory counters (fine for single-VM; required for multi-VM) |
+| **HLS cache** | | | |
+| `SEGMENT_CACHE_MAX_PER_CAMERA` | No | `60` | Segments cached in memory per camera (~1s each, ~60s buffer) |
+| `SEGMENT_CACHE_MAX_TOTAL_BYTES` | No | `2147483648` | Hard byte ceiling on the SUM of all camera caches (2 GiB) — global eviction kicks in when exceeded |
 | `SEGMENT_PUSH_MAX_BYTES` | No | `2097152` | Max bytes per pushed segment (2 MB) |
+| `PLAYLIST_PUSH_MAX_BYTES` | No | `65536` | Max bytes per pushed playlist (64 KB) |
 | `CLEANUP_INTERVAL` | No | `20` | Run cache eviction every N playlist updates |
 | `INACTIVE_CAMERA_CLEANUP_HOURS` | No | `24` | Free caches for cameras offline this long |
-| `LOG_RETENTION_DAYS` | No | `90` | Stream, MCP, audit, motion, and notification log retention |
+| **Logs + sweeps** | | | |
+| `LOG_RETENTION_DAYS` | No | `90` | Stream, MCP, audit, motion, notification, and email log retention (per-tier override via plan slug — Free 30, Pro 90, Pro Plus 365) |
 | `OFFLINE_SWEEP_INTERVAL_SECONDS` | No | `30` | How often to flip stale `online` rows to `offline` |
+| **Sentry (optional)** | | | |
+| `SENTRY_DSN` | No | | Project DSN. In production this is auto-injected by Fly's Sentry extension (`fly ext sentry create`). Init is a no-op when unset. |
+| `SENTRY_TRACES_SAMPLE_RATE` | No | `0.1` | Trace sample rate (10% keeps us inside Sentry's free-tier event budget) |
+| **Email (Resend, optional)** | | | |
+| `EMAIL_ENABLED` | No | `false` | Global kill-switch. Code can ship with it off; flip to `true` once DNS propagates and a smoke test passes. |
+| `RESEND_API_KEY` | No | | Resend transactional API key (`re_…`) |
+| `RESEND_WEBHOOK_SECRET` | No | | Svix signing secret for the bounce/complaint webhook (`whsec_…`) |
+| `EMAIL_FROM_ADDRESS` | No | `notifications@sourceboxsentry.com` | Sender address (must be on a verified Resend domain) |
+| `EMAIL_FROM_NAME` | No | `SourceBox Sentry` | Display name in the From header |
+| `EMAIL_WORKER_INTERVAL_SECONDS` | No | `5` | Outbox-drain tick interval |
+| `EMAIL_WORKER_BATCH_SIZE` | No | `20` | Max rows drained per tick (kept under Resend's 10 req/sec default) |
+| `EMAIL_MAX_ATTEMPTS` | No | `3` | Retries before a row is marked `failed` permanently |
+| **CloudNode version compatibility** | | | |
+| `MIN_SUPPORTED_NODE_VERSION` | No | `0.1.0` | Reject older CloudNode register/heartbeat with HTTP 426 |
+| `LATEST_NODE_VERSION` | No | `0.1.26` | Disaster fallback for `update_available`; runtime polls GitHub /releases/latest in normal operation |
 
 ### Frontend environment variables
 
@@ -229,14 +255,17 @@ Agents author incidents via the MCP write tools below; admins review them from t
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/notifications` | User | Paginated inbox (motion, camera/node online/offline, errors) |
+| GET | `/api/notifications` | User | Paginated inbox (motion, camera/node online/offline, MCP key audit, member audit, CloudNode disk warnings, AI-agent incidents, motion digests, errors) |
 | GET | `/api/notifications/unread-count` | User | Unread badge count (capped at 99) |
 | POST | `/api/notifications/mark-viewed` | User | Mark the whole inbox viewed |
 | GET | `/api/notifications/stream` | User | SSE stream for live bell updates |
+| GET | `/api/notifications/email/preferences` | User | Returns per-org email toggle state + global kill-switch flag |
+| POST | `/api/notifications/email/preferences` | Admin | Update per-org per-kind email opt-in toggles (audited) |
+| GET | `/api/notifications/email/unsubscribe?t=…` | None (token in URL) | One-click unsubscribe from email footers (signed JWT, rate-limited 60/min) |
 
 ### MCP (for AI clients)
 
-Streamable HTTP MCP server exposing **22 tools** (16 read + 6 write). Requires a Pro or Pro Plus plan + an API key generated from the dashboard. Each key has a scope (`all` / `readonly` / `custom`) enforced server-side by a middleware layer — agents never see or can invoke tools the key isn't scoped for.
+Streamable HTTP MCP server exposing **23 tools** (16 read + 7 write). Requires a Pro or Pro Plus plan + an API key generated from the dashboard. Each key has a scope (`all` / `readonly` / `custom`) enforced server-side by a middleware layer — agents never see or can invoke tools the key isn't scoped for.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
@@ -265,8 +294,10 @@ See [AGENTS.md](AGENTS.md) for the full per-tool list.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/health` | None | Health check |
-| POST | `/api/webhooks/clerk` | Webhook | Clerk subscription events (Svix-signed) |
+| GET | `/api/health` | None | Liveness check (cheap; for load balancers) |
+| GET | `/api/health/detailed` | None | Verbose status: DB latency, HLS cache depth, viewer-usage queue, SSE subscribers, disk usage, Resend transport state, email outbox depth. Public on purpose — every value is metric-shaped, never an org/camera/user identifier (pinned by a privacy regression test). |
+| POST | `/api/webhooks/clerk` | Webhook | Clerk subscription + organization membership events (Svix-signed) |
+| POST | `/api/webhooks/resend` | Webhook | Resend bounce/complaint events → suppression list (Svix-signed) |
 | WS | `/ws/node` | Node (query) | CloudNode real-time channel (heartbeat, commands, motion) |
 
 **Auth types:** `User` = Clerk JWT, `Admin` = Clerk JWT with admin permission, `Node` = `X-Node-API-Key` header, `MCP Key` = `Authorization: Bearer osc_...`.
@@ -289,14 +320,14 @@ Admin access is required for node management, group management, settings, audit 
 
 ## Data Models
 
-All 14 ORM models live in `backend/app/models/models.py`; every row is scoped by `org_id`.
+All 18 ORM models live in `backend/app/models/models.py`; every row is scoped by `org_id` (except `ProcessedWebhook`, which is global webhook dedup).
 
 | Model | Purpose |
 |-------|---------|
 | `Camera` | Camera device registered by a CloudNode; tracks codec, status, group |
 | `CameraNode` | Physical CloudNode device; holds `api_key_hash` + codec info |
 | `CameraGroup` | User-defined grouping (name, color, icon) |
-| `Setting` | Per-org key/value store (e.g. recording config) |
+| `Setting` | Per-org key/value store (recording config, plan slug, email toggles, motion cooldown anchors, etc.) |
 | `AuditLog` | Admin / security-relevant audit trail |
 | `StreamAccessLog` | Per-stream playback audit (user, IP, UA) |
 | `McpApiKey` | Hashed MCP API key + scope (`scope_mode`, `scope_tools`) |
@@ -304,9 +335,13 @@ All 14 ORM models live in `backend/app/models/models.py`; every row is scoped by
 | `Incident` | AI-generated incident report (open / acknowledged / resolved / dismissed) |
 | `IncidentEvidence` | Inline snapshot, clip (MPEG-TS blob), or text observation attached to an incident |
 | `MotionEvent` | Motion detection event reported by a node (`score`, `segment_seq`, timestamp) |
-| `Notification` | Unified inbox entry (motion, camera/node online/offline, errors) |
+| `Notification` | Unified inbox entry (motion, motion_digest, camera/node transitions, MCP key audit, member audit, CloudNode disk warnings, AI-agent incidents, errors) |
 | `UserNotificationState` | Per-`(clerk_user_id, org_id)` read cursor (`last_viewed_at`) |
 | `OrgMonthlyUsage` | Per-`(org_id, year_month)` viewer-second counter — populated by `_viewer_usage_flush_loop` for billing-cap enforcement |
+| `EmailOutbox` | Pending email send queue, drained by `email_worker_loop`. Survives process restart so a crash never drops a "camera offline" email. |
+| `EmailLog` | Per-org email send/delivery audit (kind, status, message_id, error). Mirrors `AuditLog` shape. |
+| `EmailSuppression` | Local mirror of Resend's suppression list (bounce / complaint / manual unsubscribe). Worker checks this before every send. |
+| `ProcessedWebhook` | Svix-msg-id dedup table for both Clerk and Resend webhook handlers (idempotency guarantee under retry). |
 
 ---
 
@@ -315,34 +350,59 @@ All 14 ORM models live in `backend/app/models/models.py`; every row is scoped by
 ```
 backend/
 ├── app/
-│   ├── main.py                  # FastAPI app, CORS, SPA middleware, cleanup + offline sweep loops
+│   ├── main.py                  # FastAPI app, CORS, SPA middleware, lifespan
+│   │                            # (spawns 7 background loops: log cleanup, offline
+│   │                            # sweep, viewer-usage flush, release-cache refresh,
+│   │                            # disk check, motion digest, email worker)
+│   ├── templates/emails/        # 22 Jinja2 templates — _layout.html.j2 + 7 kinds
+│   │                            # (camera offline/recovered, node offline/recovered,
+│   │                            # incident_created, MCP key created/revoked,
+│   │                            # cloudnode_disk_low, member_added/role_changed/
+│   │                            # removed, motion, motion_digest) × 3 files each
 │   ├── api/
 │   │   ├── cameras.py           # Cameras, groups, settings, audit logs, danger zone
-│   │   ├── nodes.py             # CloudNode registration, heartbeat, CRUD, plan info
+│   │   ├── nodes.py             # CloudNode registration, heartbeat, CRUD, plan info,
+│   │   │                        # cloudnode_disk_low alert helper
 │   │   ├── hls.py               # HLS playlist + in-memory segment cache + push-segment + HTTP motion fallback
 │   │   ├── audit.py             # Stream access logging
 │   │   ├── incidents.py         # AI-generated incident reports (CRUD + evidence blobs)
 │   │   ├── mcp_keys.py          # MCP key management + tool catalog
 │   │   ├── mcp_activity.py      # MCP tool call logs, stats, SSE stream
 │   │   ├── motion.py            # Motion events: queries, stats, SSE stream
-│   │   ├── notifications.py     # Notification inbox + unread + SSE + broadcaster
+│   │   ├── notifications.py     # Notification inbox + email kind map + email
+│   │   │                        # cooldown gate + email prefs endpoints +
+│   │   │                        # signed unsubscribe link
 │   │   ├── install.py           # CloudNode + MCP setup scripts
 │   │   ├── ws.py                # WebSocket channel (heartbeat, commands, motion events)
-│   │   └── webhooks.py          # Clerk subscription webhooks
+│   │   └── webhooks.py          # Clerk + Resend webhook handlers
 │   ├── mcp/
-│   │   └── server.py            # FastMCP server + 22 tools + ScopeMiddleware
+│   │   └── server.py            # FastMCP server + 23 tools + ScopeMiddleware
 │   ├── core/
+│   │   ├── audit.py             # Audit-log writer (error-swallowing pattern)
 │   │   ├── auth.py              # Clerk JWT validation (V1 + V2), dependencies
 │   │   ├── config.py            # Environment loading (Config class)
 │   │   ├── clerk.py             # Clerk SDK initialization
 │   │   ├── database.py          # SQLAlchemy engine + session factory
-│   │   └── limiter.py           # slowapi Limiter instance
-│   ├── models/models.py         # 14 ORM models (see table above)
+│   │   ├── email.py             # Resend SDK touchpoint (single send entry)
+│   │   ├── email_templates.py   # Jinja2 renderer (per-kind autoescape selection)
+│   │   ├── email_unsubscribe.py # Signed JWT for one-click footer unsubscribe
+│   │   ├── email_worker.py      # EmailOutbox drain loop + retry logic
+│   │   ├── errors.py            # ApiError class — structured 4xx/5xx envelope
+│   │   ├── limiter.py           # slowapi Limiter (tenant-aware key)
+│   │   ├── migrations.py        # sync_schema column adder (stand-in for Alembic)
+│   │   ├── plans.py             # PLAN_LIMITS, effective_plan_for_caps, grace
+│   │   ├── recipients.py        # Clerk org member lookup + 5-min TTL cache
+│   │   ├── release_cache.py     # GitHub /releases/latest cache for CloudNode update_available
+│   │   └── sentry.py            # Sentry SDK init (no-op when SENTRY_DSN unset)
+│   ├── models/models.py         # 18 ORM models (see table above)
 │   └── schemas/schemas.py       # Pydantic request/response schemas
 ├── scripts/
 │   ├── install.sh               # CloudNode installer for Linux/macOS (Windows = MSI)
 │   └── mcp-setup.sh / .ps1      # MCP client config helpers (Claude / Cursor / etc.)
-├── tests/                       # pytest (security + MCP scoping + motion + notifications)
+├── tests/                       # pytest — 450+ tests across security, MCP scoping,
+│                                # motion, notifications, email transport, email
+│                                # worker, motion email cooldown, motion digest loop,
+│                                # offline sweep, billing/grace, Resend webhook
 ├── .env.example
 ├── pyproject.toml
 └── start.py                     # Uvicorn entry point
@@ -398,7 +458,7 @@ npm run build                    # Production build → backend/static/
 
 ### Database
 
-SQLite for development (`opensentry.db` in backend directory). Tables auto-create on startup. For production, set `DATABASE_URL` to a PostgreSQL connection string.
+SQLite for both development and production. Local dev defaults to `opensentry.db` in the backend directory; production uses `sqlite:////data/opensentry.db` on a Fly volume mounted at `/data`. Tables auto-create on startup via `Base.metadata.create_all()`; column drift is handled by the in-process `sync_schema` migration in `app/core/migrations.py` (see `docs/adr/0001-sync-schema-vs-alembic.md` for why we don't use Alembic).
 
 ---
 
@@ -411,7 +471,9 @@ Deployed on [Fly.io](https://fly.io) via GitHub Actions:
 3. Live video segments are cached in the backend's process memory — no external storage
 4. Clerk handles authentication (no user database needed)
 
-Memory sizing: each camera uses ~3.75 MB of cache (`SEGMENT_CACHE_MAX_PER_CAMERA × ~250 KB per segment`). The default 1 GB Fly instance comfortably handles ~150 cameras with headroom. Bump `[[vm]] memory_mb` if you need more.
+**CI flow** (since 2026-05-04): the deploy workflow builds the Docker image locally on the GitHub runner via `docker/build-push-action` and pushes directly to `registry.fly.io` — no Fly remote builder, no depot.dev. `fly machine update --image <tag>` then rolls the live machine to the new image. See `.github/workflows/deploy.yml` for the long comment block tracing the three builder regressions that led here.
+
+Memory sizing: each camera uses ~15 MB of cache (`SEGMENT_CACHE_MAX_PER_CAMERA=60 × ~250 KB per segment`), capped globally at `SEGMENT_CACHE_MAX_TOTAL_BYTES` (2 GiB default). A 4 GiB Fly instance comfortably handles ~150 active cameras. Bump `[[vm]] memory_mb` in `fly.toml` if you need more.
 
 Production URL: [opensentry-command.fly.dev](https://opensentry-command.fly.dev)
 
@@ -428,7 +490,7 @@ Check, in order:
 1. **CloudNode heartbeat is arriving.** Visit `/settings`, find the node, confirm "Last seen" updates every ~30s. If it doesn't, the node never registered — check CloudNode logs for a `register` failure.
 2. **Segments are being pushed.** In the browser devtools Network tab, look for `GET /api/cameras/{id}/segment/...` returning `200`. If they 404, the CloudNode isn't pushing — check `POST /api/cameras/{id}/push-segment` on the CloudNode side.
 3. **The playlist is fresh.** `GET /api/cameras/{id}/stream.m3u8` — if the `#EXTINF` segment list is empty or the `segment/...` URLs are stale, the CloudNode's playlist upload stalled.
-4. **The browser can decode the codec.** Admin-only `/test-hls` (the `TestHlsPage`) shows the raw SPS-derived codec string. If it's missing, the CloudNode's libx264 / hardware encoder wrote a non-conforming SPS — update the CloudNode to ≥ v0.1.15 and restart it.
+4. **The browser can decode the codec.** Admin-only `/test-hls` (the `TestHlsPage`) shows the raw SPS-derived codec string. If it's missing, the CloudNode's libx264 / hardware encoder wrote a non-conforming SPS — update the CloudNode to the latest release (see [CloudNode releases](https://github.com/SourceBox-LLC/opensentry-cloud-node/releases)) and restart it.
 
 The companion runbook in the CloudNode repo (`docs/runbooks/video-not-showing.md`) walks through this from the node's side.
 

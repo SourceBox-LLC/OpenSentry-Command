@@ -19,11 +19,12 @@ Step-by-step responses to incidents that recur often enough to be
 worth writing down. Optimised for being read under pressure — short
 sections, command-oriented, not narrative.
 
-- [ON_CALL.md](runbooks/ON_CALL.md) — eight scenarios covering Sentry
-  alerts, customer-reported camera/stream outages, DB issues,
-  multi-customer incidents, suspected breaches, deletion requests,
-  and pre-deploy sanity checks. Has an append-only incident log
-  section to populate as we respond to real ones.
+- [ON_CALL.md](runbooks/ON_CALL.md) — ten scenarios (A–J) covering
+  Sentry alerts, customer-reported camera/stream outages,
+  SQLite-on-Fly-volume DB issues, multi-customer incidents, suspected
+  breaches, deletion requests, Resend email transport failures, CI
+  deploy failures, and pre-deploy sanity checks. Has an append-only
+  incident log section to populate as we respond to real ones.
 
 ## Legal templates (`docs/legal/`)
 

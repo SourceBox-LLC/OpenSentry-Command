@@ -10,6 +10,14 @@ This list is sequenced by *order-of-operations*, not by importance.
 Tackle the dependencies first (auth, transports) so the later items
 (legal, support process) have something to point at.
 
+> **Last refreshed: 2026-05-04.** Items marked ✅ have shipped since
+> the original draft. Items marked 🟡 are partially done (code-side
+> ready, operator action remaining). Items still wide open are
+> unmarked. The original "closed by Claude on 2026-04-25" stamp at
+> the bottom no longer captures reality — significant code shipped
+> in the SaaS-readiness sweep, the email v1+v1.1 work, the multi-
+> tenant disk fix, the CI rewrite, and the branch protection.
+
 ---
 
 ## 1. Clerk production keys
@@ -47,30 +55,55 @@ The dev-mode badge in the corner should disappear.
 
 ---
 
-## 2. Notification transport signup (optional, for an alerts feature)
+## 2. Notification transport — Resend email 🟡 (code shipped, operator action remaining)
 
-**State now.** The product explicitly does NOT ship email/SMS/push.
-The recent docs/security/pricing copy makes this gap loud (per the
-"Honest gaps" section on `/security` and the FAQ entries on
-`/pricing` and `/docs`). MCP-driven external alerting works on every
-plan today.
+**State now.** Email v1 + v1.1 are fully built and deployed. **12
+notification kinds gated by 7 per-org per-kind toggles.** Six default
+ON for new orgs (camera offline/recovered, CloudNode offline/recovered,
+AI-agent incidents, MCP key audit, CloudNode disk, member audit);
+**motion defaults OFF** with a per-camera 15-min cooldown + digest
+mechanism for volume control. Transport is Resend; integration lives
+in `app/core/email.py`, `app/core/email_worker.py`, `app/core/recipients.py`,
+`app/core/email_templates.py`, `app/core/email_unsubscribe.py`. 22
+Jinja2 templates in `app/templates/emails/`. Webhook-driven bounce/
+complaint handling at `/api/webhooks/resend` writes to `EmailSuppression`.
+Sub-processor disclosure already in `SUB_PROCESSORS.md` + `DPA.md`.
+Marketing copy already swept across SecurityPage / PricingPage / FAQ /
+docs Notifications.
 
-**What to do later, if you decide to build it.**
-1. Pick a transport. For email, Resend is cheapest for low volume
-   ($0 up to 3K/month), Postmark is more reliable for transactional.
-   For SMS, Twilio is the obvious choice. **SMS is explicitly out of
-   scope per the `project_notification_channels` memory note** — be
-   deliberate about reversing that decision; it's a support burden.
-2. Wire a transport adapter into `backend/app/api/notifications.py`
-   alongside the existing `notification_broadcaster` SSE path.
-3. Update the disclaimer copy on `/pricing`, `/security`, and `/docs`
-   to remove the "we don't ship this" caveat. Search for the string
-   `built into Command Center` to find every spot.
+**SMS and mobile push are still explicitly out of scope** per the
+`project_notification_channels` memory note. MCP-driven external
+alerting (wire to Twilio / PagerDuty via your own MCP agent) is
+the answer for those.
 
-**Status before you ship this.** Email and SMS introduce new
-sub-processors. Update `docs/legal/SUB_PROCESSORS.md` *before*
-turning the transport on, and notify customers per the 14-day notice
-policy in the DPA.
+**Operator action to activate email:**
+1. Sign up at resend.com (free tier covers 3K emails/month — comfortably
+   above realistic volume for the operator-critical kinds).
+2. Verify a sending domain — Resend gives you 4 DNS records (SPF TXT,
+   DKIM CNAMEs ×3, optional DMARC). 15-60 min for DNS to propagate.
+   Recommended subdomain: `notifications.sourceboxsentry.com` (keeps
+   marketing-email reputation isolated from transactional).
+3. Configure a webhook in Resend → endpoint
+   `https://opensentry-command.fly.dev/api/webhooks/resend`. Copy the
+   signing secret (starts with `whsec_`).
+4. Set the four Fly secrets:
+   ```
+   fly secrets set \
+     RESEND_API_KEY=re_... \
+     RESEND_WEBHOOK_SECRET=whsec_... \
+     EMAIL_FROM_ADDRESS=notifications@sourceboxsentry.com \
+     EMAIL_ENABLED=true \
+     -a opensentry-command
+   ```
+5. Smoke test: kill a CloudNode for >90s, watch the test admin's inbox
+   for the offline email, click the unsubscribe link, verify the
+   toggle flipped off in `/settings`. See plan file
+   `~/.claude/plans/gentle-coalescing-teacup.md` for the full motion
+   smoke test sequence.
+
+**Code is safe to keep deployed indefinitely** with `EMAIL_ENABLED=false`
+(the default). The worker still runs but the transport short-circuits
+with a logged "would have sent" line.
 
 ---
 
@@ -117,22 +150,25 @@ hard-coded for that origin (`backend/app/main.py::cors_origins`).
 
 ---
 
-## 5. Sentry production setup
+## 5. Sentry production setup ✅ DONE
 
-**State now.** Sentry initialisation lives in
-`backend/app/main.py::init_sentry`, only fires when `SENTRY_DSN` is
-set. The on-call runbook references Sentry for triage; you have an
-existing alert (`OPENSENTRY-COMMAND-1`) so it's already partially
-wired.
+**State now.** Sentry is fully wired and verified in production.
+`SENTRY_DSN` is set in Fly secrets via the Sentry extension
+(`fly ext sentry create -a opensentry-command` provisioned a sponsored
+Team plan and auto-injected the DSN). `SENTRY_TRACES_SAMPLE_RATE=0.1`
+keeps us inside the free-tier event budget. `app/core/sentry.py::init_sentry()`
+no-ops gracefully when DSN is absent (local dev), so no extra config
+needed there. Email alerting confirmed firing — you've received at
+least one Sentry alert email (`OPENSENTRY-COMMAND-1`).
 
-**Verify.**
-1. `fly secrets list -a opensentry-command` — `SENTRY_DSN` should
-   be set.
-2. Check `SENTRY_TRACES_SAMPLE_RATE` — currently defaults to a low
-   number; for production you may want `0.1` (10%).
-3. Enable email alerting in Sentry for new issues (it's how you got
-   the `OPENSENTRY-COMMAND-1` email, so probably already on — but
-   verify the rule fires for *all* environments, not just dev).
+The disk-check loop that was added in the SaaS-readiness sweep
+(`_check_and_emit_disk_critical` at 95% threshold) routes its alert
+via `logger.error()` with structured `extra` fields, which Sentry
+captures as a server-side event. This replaced an earlier (incorrect)
+attempt to email customer admins about the platform disk — see ADR
+in commit `594b86c` for the multi-tenant violation rationale.
+
+Dashboard: `fly ext sentry dashboard -a opensentry-command`.
 
 ---
 
@@ -165,22 +201,48 @@ accidentally.
 
 ## 7. Backups and disaster recovery
 
-**State now.** Fly's managed Postgres has automated daily snapshots
-retained per their default schedule.
+**State now.** **We use SQLite on a Fly volume**, not Fly's managed
+Postgres. `DATABASE_URL=sqlite:////data/opensentry.db` per `fly.toml`.
+The volume is `opensentry_data` mounted at `/data`. Fly snapshots
+the volume daily on their default schedule (5-day retention on the
+Free plan, longer on paid).
 
 **What you need to do.**
-1. Verify the snapshot schedule in the Fly dashboard.
+1. Verify the volume snapshot schedule:
+   ```
+   fly volumes snapshots list <volume_id> -a opensentry-command
+   ```
+   You should see daily snapshots going back 5+ days.
 2. **Test a restore.** This is the only thing that turns "we have
    backups" from a claim into a fact. Do this at least once before
    you onboard the first paying customer:
-   - Spin up a fresh Fly Postgres app.
-   - Restore the latest snapshot of production into it.
-   - Run `python -m pytest backend/tests/test_*.py` against the
-     restored DB to confirm schema integrity.
+   - Pick a recent snapshot and create a new volume from it:
+     ```
+     fly volumes create opensentry_data_restore_test \
+       --snapshot-id <snap_id> -a opensentry-command
+     ```
+   - Spin up a temporary machine pointing at the restored volume
+     (or detach prod, attach the restore, verify, swap back —
+     riskier but cleaner).
+   - Confirm SQLite opens cleanly + tables are intact:
+     ```
+     fly ssh console -a opensentry-command \
+       -C "sqlite3 /data/opensentry.db '.tables'"
+     ```
+   - Sanity-check key tables have rows: `Camera`, `CameraNode`,
+     `Setting`, `Notification`.
 3. Document the restore procedure in
-   `docs/runbooks/DISASTER_RECOVERY.md` (I haven't written this
-   one — wait until you've done a real restore so you can capture
-   what actually broke).
+   `docs/runbooks/DISASTER_RECOVERY.md` (still unwritten — wait
+   until you've done a real restore so you can capture what
+   actually broke vs. what worked).
+
+**Single-machine deploy caveat:** because we run a single Fly machine
+with a single volume, "restore" means downtime. The deploy strategy
+is `immediate` (also documented in `fly.toml`), so a deploy already
+involves ~30-60s of unavailability. A restore would be similar but
+with the additional manual swap step. Acceptable for current scale;
+worth re-evaluating when usage warrants HA (LiteFS or migrating to
+Postgres for clusterability).
 
 ---
 
@@ -210,18 +272,28 @@ cameras" than to lose a customer who tried it on a Pi 3.
 
 ---
 
-## 9. GitHub repo settings
+## 9. GitHub repo settings 🟡 (branch protection done; status-check + review enforcement deferred)
 
-**State now.** Master branch with no protection rules.
+**State now (2026-05-04).** Branch protection on `master` is enabled
+with three rules:
 
-**Recommended.**
-- Branch protection on `master`: require status checks (CI), require
-  linear history (no merge commits), require pull request reviews
-  (1 approver) once you have a co-maintainer.
-- Required status checks: `pytest backend/tests`, `npm run build`,
-  `npm run lint`.
-- Dependabot security updates: already on (closed PR #8 was
-  Dependabot's). Worth verifying the schedule.
+- `allow_force_pushes: false` — defends against `git push --force` muscle memory at 2am
+- `allow_deletions: false` — defends against `git push --delete origin master`
+- `required_linear_history: true` — no merge commits, keeps `git log` readable
+
+`enforce_admins: false` — you (the only admin) can override via the
+GitHub UI if you genuinely need to fix something that requires
+force-push. Defense against fat-finger, not against deliberate action.
+
+**Deferred until you have a co-maintainer:**
+- Required PR reviews (1 approver). No PR flow exists today; we push
+  direct to `master` with CI as the safety net.
+- Required status checks for merge. These only kick in during merges,
+  so they're decorative in direct-push mode. Add when PR flow lands.
+
+**Dependabot security updates:** already on (PR #8 was a Dependabot
+PR for Clerk CVE GHSA-w24r-5266-9c3c, handled 2026-04-30). Worth
+verifying the schedule annually.
 
 ---
 
@@ -265,20 +337,50 @@ a page.
 [ ] Backup restore tested at least once (item 7)
 [ ] DPA + sub-processors PDF on file with lawyer signoff (item 6)
 [ ] Status page live and pointed at /api/health/detailed (item 3)
-[ ] Sentry alerts confirmed firing in production env (item 5)
+[X] Sentry alerts confirmed firing in production env (item 5)        — done 2026-05-03
 [ ] Custom domain (if applicable) live + Clerk allows it (item 4)
-[ ] Branch protection enabled on master (item 9)
+[X] Branch protection enabled on master (item 9)                      — done 2026-05-04
 [ ] Support inbox configured and monitored (item 10)
-[ ] Run `python -m pytest` in backend/ — all green
-[ ] Run `npm run build && npm run lint` in frontend/ — all green
+[ ] Resend signup + EMAIL_ENABLED=true + smoke test (item 2)
+[ ] Run `cd backend && uv run pytest` — all green (450+ tests)
+[ ] Run `cd frontend && npm run build && npm audit --omit=dev` — both clean
 [ ] Browse the live site at 375px, 1024px, 1440px — nothing broken
-[ ] Hit /api/health/detailed — status is "healthy", DB latency < 50ms
+[ ] Hit /api/health/detailed — overall "healthy", DB latency < 50ms,
+    disk.percent_used < 80%, resend.status either "ok" or
+    "unconfigured" (intentional pre-launch)
 ```
 
 When all twelve check, ship the launch announcement.
 
 ---
 
-> *Closed by Claude on 2026-04-25. Every code-side blocker the
-> assistant could close is committed on master. Everything in this
-> file requires you.*
+## What's shipped since the original draft (audit trail)
+
+- **2026-04-26 → 2026-05-01:** SaaS-readiness sweep — composite
+  indexes on McpActivityLog + MotionEvent, disk-full alarm in
+  `/api/health/detailed`, motion-ingestion per-org kill switch,
+  HLS global byte-cap eviction. Tigris/AWS dead-secret cleanup.
+  Marketing pass 1+2 (SEO meta + benefit-first hero copy + Clerk
+  dark theme). Docs drift fixes (Postgres→SQLite, `~15s`→`~60s`
+  cache buffer, MCP tool count corrections, SLA wording).
+- **2026-05-02:** Verified Sentry production setup (item 5 done).
+- **2026-05-03:** Email v1 — Resend transport + worker + recipient
+  lookup + 3 new tables, `create_notification` email side-channel,
+  `/api/webhooks/resend`, disk-check loop, templates + UI + copy
+  sweep + DPA + sub-processor disclosure. Three review-fix commits
+  (idempotency-key routing, rate-limit on unsubscribe, EmailLog +
+  EmailOutbox retention).
+- **2026-05-04:** Multi-tenant violation removed (`disk_critical`
+  no longer routes to customers — operator-only Sentry path).
+  Four new email kinds added (camera/node recovery, MCP key audit,
+  CloudNode disk warning, member audit via Clerk webhook). Motion
+  email v1.1 with per-camera cooldown + digest. CI workflow
+  rewritten three times (Fly remote builder → depot.dev → local
+  Buildkit on the runner) after WireGuard auth regression on Fly's
+  side. Branch protection on master.
+
+> *Originally closed by Claude on 2026-04-25. Refreshed
+> 2026-05-04 after the email v1+v1.1 work, the SaaS-readiness
+> sweep, the multi-tenant disk fix, the CI builder rewrite, and
+> branch protection. The remaining items still all require you —
+> credit cards, signatures, hardware, human decisions.*
