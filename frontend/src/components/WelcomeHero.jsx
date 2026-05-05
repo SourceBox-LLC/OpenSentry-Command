@@ -1,5 +1,8 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
+import { useAuth } from "@clerk/clerk-react"
 import InstallCloudNodeCard from "./InstallCloudNodeCard.jsx"
+import { requestAdminPromotion } from "../services/api"
 
 // Dashboard empty-state heroes, differentiated by role. Admins get the
 // "set up your first camera" checklist; members get a capability-focused
@@ -132,9 +135,70 @@ export function MemberWelcomeHero({ orgName }) {
         </li>
       </ol>
 
-      <div className="welcome-hero-footnote">
-        Need admin access? Ask a workspace admin to promote you from the Settings page.
+      <RequestAdminAccessFootnote />
+    </div>
+  )
+}
+
+
+// In-app "Request admin access" CTA for members.  Replaces the
+// previous static "Ask a workspace admin to promote you" text —
+// gives the member a single click that fires inbox + email
+// notifications to every admin in the org with the requester's
+// identity attached.  Backend rate-limits to 3/hour per org so
+// a member can't blast admins.
+//
+// State machine: idle → submitting → sent (sticky for the rest
+// of the session — no point letting them re-spam admins after a
+// successful request).  Errors render inline so the member can
+// see what went wrong (e.g. they're already an admin via JWT
+// they didn't realise had refreshed, or the rate limit kicked in
+// from a hot-reload double-fire during dev).
+function RequestAdminAccessFootnote() {
+  const { getToken } = useAuth()
+  const [status, setStatus] = useState("idle")  // idle | submitting | sent
+  const [error, setError] = useState(null)
+
+  const handleClick = async () => {
+    setStatus("submitting")
+    setError(null)
+    try {
+      await requestAdminPromotion(getToken)
+      setStatus("sent")
+    } catch (e) {
+      setError(e.message || "Failed to send request — please try again later.")
+      setStatus("idle")
+    }
+  }
+
+  if (status === "sent") {
+    return (
+      <div className="welcome-hero-footnote welcome-hero-footnote-sent">
+        ✓ Your request has been sent to your organization&rsquo;s admins.
+        They&rsquo;ll see it in their inbox and by email.
       </div>
+    )
+  }
+
+  return (
+    <div className="welcome-hero-footnote">
+      Need admin access?
+      {" "}
+      <button
+        type="button"
+        className="link-button"
+        onClick={handleClick}
+        disabled={status === "submitting"}
+      >
+        {status === "submitting" ? "Sending request…" : "Request it"}
+      </button>
+      {" "}
+      and your org&rsquo;s admins will be notified.
+      {error && (
+        <div className="welcome-hero-footnote-error" role="alert">
+          {error}
+        </div>
+      )}
     </div>
   )
 }

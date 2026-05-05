@@ -211,6 +211,17 @@ export async function createNode(getToken, name) {
   })
 }
 
+// Member-initiated request to be promoted to admin role.
+// Fires inbox + email notifications to every admin in the org.
+// Backend returns 400 if the caller is already an admin (no useless
+// self-notification) and 429 after 3 requests/hour from the same
+// org bucket (prevents spam).
+export async function requestAdminPromotion(getToken) {
+  return fetchWithAuth("/api/notifications/request-admin-promotion", getToken, {
+    method: "POST",
+  })
+}
+
 export async function rotateNodeKey(getToken, nodeId) {
   return fetchWithAuth(`/api/nodes/${nodeId}/rotate-key`, getToken, {
     method: "POST"

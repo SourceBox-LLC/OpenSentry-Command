@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.audit import write_audit
+from app.core.audit import audit_label, write_audit
 from app.core.auth import AuthUser, require_admin, require_view
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
@@ -79,6 +79,13 @@ _NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     "member_added":        ("member_audit_notifications", True),
     "member_role_changed": ("member_audit_notifications", True),
     "member_removed":      ("member_audit_notifications", True),
+    # Member-initiated promotion request — fired by a non-admin
+    # member clicking "Request admin access" from the dashboard.
+    # Shares the member-audit toggle because it's the same audience
+    # decision: admins want the whole member-lifecycle audit trail
+    # or none of it.  Defaults True so admins never miss a request
+    # to grant programmatic / write access to their org.
+    "member_promotion_requested": ("member_audit_notifications", True),
     # First-touch onboarding — fired once when an org is created.
     # Has its own setting key (no UI toggle today) so a future
     # "marketing email opt-out" change has somewhere to land
@@ -141,6 +148,12 @@ _EMAIL_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     "member_added":        ("email_member_audit", True),
     "member_role_changed": ("email_member_audit", True),
     "member_removed":      ("email_member_audit", True),
+    # Member-initiated promotion request — same setting key as the
+    # other member-lifecycle events.  Defaults True because granting
+    # admin access is exactly the kind of decision an admin should
+    # see proactively, not have to discover by checking the bell
+    # icon at random intervals.
+    "member_promotion_requested": ("email_member_audit", True),
     # Motion detection — high volume, deferred to v1.1 cooldown design.
     # Both kinds (immediate first-event "motion" + cooldown summary
     # "motion_digest") share email_motion.  DEFAULT FALSE on purpose:
@@ -854,6 +867,82 @@ async def clear_all(
         "success": True,
         "cleared_at": state.cleared_at.isoformat(),
         "last_viewed_at": state.last_viewed_at.isoformat(),
+    }
+
+
+@router.post("/request-admin-promotion")
+@limiter.limit("3/hour")
+async def request_admin_promotion(
+    request: Request,
+    user: AuthUser = Depends(require_view),
+    db: Session = Depends(get_db),
+):
+    """Member-initiated request to be promoted to admin role.
+
+    Fires a notification (inbox + email) to every admin in the org.
+    Admins see who asked, with a deep-link to the Settings page where
+    they can grant or deny via Clerk's standard role management.
+
+    No-op for users who are ALREADY admins — returns a friendly 400
+    rather than emitting a confusing "X requested admin access" notif
+    to themselves.
+
+    Rate-limited to 3 requests per hour per org bucket.  A member
+    spamming admins doesn't get through; a member who clicked twice
+    by accident doesn't either.  3/hour is generous enough that an
+    admin requesting promotion (already admin → 400) plus a couple
+    of legit member retries after Clerk role propagation lag won't
+    trip the cap.
+    """
+    if user.is_admin:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "You're already an admin in this organization — no "
+                "need to request promotion."
+            ),
+        )
+
+    requester = audit_label(user) or user.email or user.user_id or "a member"
+
+    create_notification(
+        org_id=user.org_id,
+        kind="member_promotion_requested",
+        title=f"{requester} requested admin access",
+        body=(
+            f"{requester} has requested to be promoted to admin in "
+            f"your organization.  Review their access needs and, if "
+            f"appropriate, promote them via Settings → Members.  This "
+            f"is an in-app request — Clerk's role management is the "
+            f"source of truth for who actually gets admin."
+        ),
+        severity="info",
+        audience="admin",
+        link="/settings",
+        meta={
+            "requester_user_id": user.user_id,
+            "requester_email": user.email,
+            "requester_label": requester,
+        },
+        db=db,
+    )
+
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="member_promotion_requested",
+        user_id=user.user_id,
+        username=audit_label(user),
+        details={"requester_label": requester},
+        request=request,
+    )
+
+    return {
+        "success": True,
+        "message": (
+            "Your request has been sent to your organization's admins. "
+            "They'll be notified by email and in their dashboard."
+        ),
     }
 
 

@@ -1136,6 +1136,50 @@ body {
     text-align: center;
 }
 
+/* Sticky "request sent" success state for the member promotion CTA.
+   Slightly accented so the user gets a clear visual confirmation
+   that their click actually did something — disabled buttons in
+   their normal grey are easy to mistake for "didn't work". */
+.welcome-hero-footnote-sent {
+    color: var(--accent-color, #22c55e);
+    font-weight: 500;
+}
+
+.welcome-hero-footnote-error {
+    margin-top: 8px;
+    font-size: 0.78rem;
+    color: #fca5a5;
+}
+
+/* Inline link-styled button — looks like a text link, behaves like
+   a button (keyboard accessible, type=button so it doesn't submit
+   forms accidentally).  Used in the member promotion footnote so
+   the "Request it" CTA reads naturally inside the surrounding
+   paragraph instead of as a chunky button. */
+.link-button {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: var(--accent-color, #22c55e);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: inherit;
+    font-family: inherit;
+}
+
+.link-button:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.link-button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+    text-decoration: none;
+}
+
 @media (max-width: 600px) {
     .welcome-hero {
         padding: 28px 20px 24px;
