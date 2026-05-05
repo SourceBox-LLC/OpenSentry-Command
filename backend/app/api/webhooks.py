@@ -323,6 +323,48 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
                     org_id,
                 )
 
+    # ── Organization created ──────────────────────────────────────
+    # First-touch welcome — fires once when a user creates an org via
+    # Clerk's CreateOrganization modal (on signup or later).  The
+    # creator is automatically the org's first admin, so the
+    # ``audience="admin"`` recipient resolution lands the email on
+    # them.  Wrapped in try/except — a recipient-lookup race or a
+    # template-render bug must NOT cause Svix to retry the webhook
+    # forever (the org IS created either way; we'd just keep
+    # double-emailing on each retry).
+    elif event_type == "organization.created":
+        org_id = data.get("id")
+        org_name = data.get("name") or "your organization"
+        if org_id:
+            try:
+                from app.api.notifications import create_notification
+                create_notification(
+                    org_id=org_id,
+                    kind="welcome",
+                    title=f"Welcome to SourceBox Sentry, {org_name}",
+                    body=(
+                        "Your SourceBox Sentry workspace is ready.  "
+                        "Three steps to your first live feed: install "
+                        "CloudNode on the host where your cameras live, "
+                        "wait ~30 seconds for it to register, then add "
+                        "your first camera from Settings → Cameras.  "
+                        "Full docs at /docs."
+                    ),
+                    severity="info",
+                    audience="admin",
+                    link="/dashboard",
+                    meta={
+                        "org_name": org_name,
+                        "created_by": data.get("created_by"),
+                    },
+                    db=db,
+                )
+            except Exception:
+                logger.exception(
+                    "[ClerkWebhook] welcome notification failed for org=%s",
+                    org_id,
+                )
+
     # ── Organization deleted ───────────────────────────────────────
     elif event_type == "organization.deleted":
         org_id = data.get("id")

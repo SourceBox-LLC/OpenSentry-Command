@@ -79,6 +79,12 @@ _NOTIFICATION_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     "member_added":        ("member_audit_notifications", True),
     "member_role_changed": ("member_audit_notifications", True),
     "member_removed":      ("member_audit_notifications", True),
+    # First-touch onboarding — fired once when an org is created.
+    # Has its own setting key (no UI toggle today) so a future
+    # "marketing email opt-out" change has somewhere to land
+    # without conflating with the operational kinds above.  Default
+    # True because welcome is a one-time event, not a stream.
+    "welcome": ("welcome_notifications", True),
 }
 
 
@@ -150,6 +156,12 @@ _EMAIL_KIND_TO_SETTING: dict[str, tuple[str, bool]] = {
     # event volume.
     "motion":        ("email_motion", False),
     "motion_digest": ("email_motion", False),
+    # First-touch welcome on org creation.  Own setting key with no UI
+    # toggle today — operators can flip via direct DB write if they
+    # need to suppress (e.g. an internal test org).  Default True
+    # because the whole point of the kind is to introduce the product;
+    # an opt-in default would make the gap we're closing reappear.
+    "welcome": ("email_welcome", True),
 }
 # Note: ``disk_critical`` is intentionally NOT in this map.  Disk-full
 # is platform infrastructure state (our Fly volume) — irrelevant to

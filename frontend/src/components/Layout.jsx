@@ -79,6 +79,21 @@ function Layout() {
                       Sentinel
                       <span className="nav-soon-badge">SOON</span>
                     </Link>
+                    {/*
+                      Help → /docs.  Sits between the product nav and the
+                      "supporting" cluster (Pricing) intentionally — users
+                      hunting for "where do I find...?" scan the right side
+                      of the nav, and Help next to Pricing matches every
+                      SaaS convention they've already internalised.
+
+                      Support email is intentionally NOT here yet —
+                      support.sourceboxsentry.com is unprovisioned and a
+                      mailto: link to a non-existent address would
+                      bounce silently.  Add when the domain lands.
+                    */}
+                    <Link to="/docs" className={isActive("/docs")}>
+                      Help
+                    </Link>
                     <Link to="/pricing" className={isActive("/pricing")}>
                       Pricing
                     </Link>
