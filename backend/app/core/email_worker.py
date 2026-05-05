@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
@@ -47,6 +48,48 @@ logger = logging.getLogger(__name__)
 _SENDING_RECLAIM_AGE_SECONDS = 60
 
 
+# ── Health-probe surface ────────────────────────────────────────────
+# In-process timestamp updated on every successful tick.  The
+# health-readiness endpoint reads ``seconds_since_last_tick()`` to
+# detect a wedged worker — outbox emails sit forever waiting for
+# a tick that's never coming.
+#
+# We use monotonic time (not wall clock) so a system clock jump
+# doesn't make a healthy worker look stale.  ``None`` until the
+# first tick completes, which is what lets the health endpoint
+# distinguish "never ticked, give it a grace window" from "stopped
+# ticking, page someone."
+#
+# Module-level not Setting-table because: (a) avoids hot DB write
+# every 5s, (b) a wedged worker is a per-process question — if the
+# worker died, the in-process value goes stale and the health
+# endpoint sees it.  Persisting across restarts would actively
+# hide a crash-loop ("oh look, it ticked 4 seconds ago — but that
+# was the previous incarnation").
+_last_tick_monotonic: Optional[float] = None
+
+
+def seconds_since_last_tick() -> Optional[float]:
+    """Return seconds since the worker last completed a tick, or
+    ``None`` if it has never ticked in this process.
+
+    Health-readiness consumer: pair the result with process uptime
+    to apply a grace window — a brand-new process hasn't had time
+    to tick yet, that's normal, not a wedged worker.
+    """
+    if _last_tick_monotonic is None:
+        return None
+    return time.monotonic() - _last_tick_monotonic
+
+
+def _reset_tick_for_tests() -> None:
+    """Clear the in-process tick timestamp.  Used by health-endpoint
+    tests that need the "never ticked" code path; production code
+    never calls this."""
+    global _last_tick_monotonic
+    _last_tick_monotonic = None
+
+
 # ── Public API ───────────────────────────────────────────────────────
 
 def run_one_tick(db: Session) -> dict:
@@ -60,6 +103,16 @@ def run_one_tick(db: Session) -> dict:
 
         {"sent": int, "failed": int, "suppressed": int, "reclaimed": int}
     """
+    # Stamp the tick at the START so every entry counts as "loop is
+    # alive," not just successful drain cycles.  An empty outbox
+    # returns early below — without stamping here, a healthy worker
+    # processing zero emails would look wedged to the health probe.
+    # Crashes inside the function show up as DB / Resend probe
+    # failures elsewhere; the worker probe is specifically about
+    # "is the loop body still being scheduled."
+    global _last_tick_monotonic
+    _last_tick_monotonic = time.monotonic()
+
     summary = {"sent": 0, "failed": 0, "suppressed": 0, "reclaimed": 0}
 
     # ── Reclaim stuck 'sending' rows ──────────────────────────────

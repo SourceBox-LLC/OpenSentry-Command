@@ -1203,7 +1203,85 @@ if static_dir.exists():
 
 @app.get("/api/health")
 async def health_check():
+    """Liveness check — process is up.  No dependency probes.
+
+    Designed for Fly's per-machine HTTP health check: needs to be
+    fast and never time out, otherwise Fly removes the machine from
+    rotation when DB / Clerk / etc. are slow — which is the OPPOSITE
+    of what we want (no other instance to fail over to; better to
+    keep serving from this one + page someone for the dependency).
+
+    Use ``/api/health/ready`` for readiness with dep probes (HTTP
+    503 on critical failures, suitable for external uptime monitors).
+    Use ``/api/health/detailed`` for the fully-verbose admin/status
+    page snapshot.
+    """
     return {"status": "healthy", "version": "2.1.0"}
+
+
+# ── /api/health/ready cache ──────────────────────────────────────
+# 30s TTL: long enough that a swarm of external pollers
+# (BetterStack + UptimeRobot + a status page + the admin panel)
+# don't hammer Clerk, short enough that a real outage surfaces
+# within ~30s.  Race-condition note: two parallel cache misses
+# both run probes; we accept the duplicate work in exchange for
+# avoiding lock contention on the hot path.
+_HEALTH_READY_CACHE_TTL_SECONDS = 30.0
+# Tuple of (cached_at_monotonic, body_dict, http_status_code) — None
+# until the first miss populates it.
+_health_ready_cache: Optional[tuple[float, dict, int]] = None
+
+
+def _reset_health_ready_cache_for_tests() -> None:
+    """Tests that need per-test cache freshness call this in setup.
+    Production code never calls this — the TTL handles real-world
+    invalidation."""
+    global _health_ready_cache
+    _health_ready_cache = None
+
+
+@app.get("/api/health/ready")
+async def health_check_ready(nocache: bool = False):
+    """Readiness check with dependency probes.
+
+    Returns HTTP 200 if the app is ready to serve traffic; HTTP 503
+    with details in the body if any critical dependency is unhealthy.
+
+    Designed for external uptime monitors (BetterStack, UptimeRobot,
+    Better Uptime, etc.) — they expect HTTP status semantics, not
+    JSON-body parsing.  ``/api/health/detailed`` always returns 200
+    with status nested in the body for the dashboard polling case.
+
+    Probes:
+      - database     : SELECT 1 — critical
+      - clerk        : reachability — critical (auth-blocking)
+      - disk         : >= 95% used — critical
+      - email_worker : tick within 60s when email enabled — critical
+
+    Cached for 30s so a swarm of pollers doesn't hammer Clerk's API
+    on every request.  Pass ``?nocache=1`` to bypass (diagnostics
+    only — don't wire this into automated polling).
+    """
+    from app.core.health_probes import run_readiness_probes
+
+    global _health_ready_cache
+    now_mono = time.monotonic()
+    if not nocache and _health_ready_cache is not None:
+        cached_at, cached_body, cached_status = _health_ready_cache
+        if now_mono - cached_at < _HEALTH_READY_CACHE_TTL_SECONDS:
+            return JSONResponse(content=cached_body, status_code=cached_status)
+
+    uptime_s = now_mono - _STARTED_AT_MONO
+    report = await run_readiness_probes(uptime_s)
+    body = {
+        **report.to_dict(),
+        "version": "2.1.0",
+        "uptime_seconds": round(uptime_s, 3),
+    }
+    status_code = 200 if report.ready else 503
+
+    _health_ready_cache = (now_mono, body, status_code)
+    return JSONResponse(content=body, status_code=status_code)
 
 
 @app.get("/api/health/detailed")
@@ -1219,17 +1297,20 @@ async def health_check_detailed():
     user emails, or anything that would leak business intelligence to
     a competitor scraping the endpoint.
 
+    Always returns 200; the rolled-up status is in the body.  For an
+    HTTP-status-driven check (uptime monitors, k8s-style readiness),
+    use ``/api/health/ready`` instead.
+
     Status semantics:
       - "healthy"    — every check passed.
       - "degraded"   — non-critical subsystem reporting a warning (e.g.
                        a viewer-usage flush queue that's growing faster
                        than it drains). The app still serves traffic
                        correctly; just keep an eye on it.
-      - "unhealthy"  — DB ping failed. The app is up but cannot serve
-                       most reads/writes. Pages should fire.
+      - "unhealthy"  — DB / Clerk / disk-95% / wedged email worker.
+                       The app is up but cannot serve most
+                       reads/writes correctly. Pages should fire.
     """
-    from sqlalchemy import text
-
     # Defer import: hls.py pulls in storage helpers that are heavier
     # than this endpoint should pay for on cold start.
     from app.api.hls import (
@@ -1238,28 +1319,31 @@ async def health_check_detailed():
         _segment_cache,
     )
     from app.api.notifications import notification_broadcaster
+    from app.core.health_probes import (
+        probe_clerk,
+        probe_database,
+        probe_disk,
+        probe_email_worker,
+    )
 
     now_wall = datetime.now(tz=UTC)
     uptime_s = round(time.monotonic() - _STARTED_AT_MONO, 3)
 
-    # ── Database ping ────────────────────────────────────────
-    # ``SELECT 1`` is the cheapest round-trip that proves the connection
-    # is live + the DB is responding. Time it so a slow DB shows up as a
-    # latency spike before it tips over into errors.
-    db_check: dict = {"status": "ok"}
-    try:
-        db = SessionLocal()
-        try:
-            t0 = time.perf_counter()
-            db.execute(text("SELECT 1"))
-            db_check["latency_ms"] = round((time.perf_counter() - t0) * 1000, 2)
-        finally:
-            db.close()
-    except Exception as exc:
-        # Don't surface the exception text — it can include connection
-        # strings or hostnames. Generic class name is enough for triage.
-        db_check = {"status": "error", "error_class": type(exc).__name__}
-        logger.warning("[Health] DB ping failed", exc_info=True)
+    # ── Probes shared with /api/health/ready ─────────────────
+    # Use the same probe functions so the two endpoints can't
+    # disagree ("ready says we're up, detailed says we're down").
+    # Run concurrently so the Clerk timeout doesn't serialise
+    # behind the DB ping.
+    db_probe, clerk_probe, disk_probe, worker_probe = await asyncio.gather(
+        asyncio.to_thread(probe_database),
+        probe_clerk(),
+        asyncio.to_thread(probe_disk),
+        asyncio.to_thread(probe_email_worker, uptime_s),
+    )
+    db_check = db_probe.to_dict()
+    clerk = clerk_probe.to_dict()
+    disk = disk_probe.to_dict()
+    email_worker_check = worker_probe.to_dict()
 
     # ── In-memory subsystem snapshots ────────────────────────
     # All read without locks: a momentary inconsistency in a count is
@@ -1289,51 +1373,6 @@ async def health_check_detailed():
             len(s) for s in notification_broadcaster._subscribers.values()
         ),
     }
-
-    # ── Disk usage on the SQLite volume ──────────────────────
-    # Fly mounts the persistent volume at /data per fly.toml; the
-    # SQLite file lives there.  When this fills, writes start failing
-    # with SQLITE_IOERR — recordings, audit logs, motion events stop
-    # persisting silently.  Surface percent_used so an external uptime
-    # monitor (UptimeRobot, BetterStack, etc.) can alert before the
-    # disk hits 100%.  Local dev falls back to the current directory
-    # so the endpoint stays informative without /data existing.
-    #
-    # Thresholds chosen for SaaS-ops common practice:
-    #   - 95%+ → critical (write failures imminent; alert pages)
-    #   - 80%+ → warn (plan a volume resize; not yet failing)
-    #   - else → ok
-    disk_path = "/data" if os.path.isdir("/data") else "."
-    try:
-        disk_usage = shutil.disk_usage(disk_path)
-        disk_pct = round(
-            (disk_usage.used / disk_usage.total) * 100, 1
-        ) if disk_usage.total else 0.0
-        if disk_pct >= 95.0:
-            disk_status = "critical"
-        elif disk_pct >= 80.0:
-            disk_status = "warn"
-        else:
-            disk_status = "ok"
-        disk = {
-            "status": disk_status,
-            "path": disk_path,
-            "bytes_used": disk_usage.used,
-            "bytes_free": disk_usage.free,
-            "bytes_total": disk_usage.total,
-            "percent_used": disk_pct,
-        }
-    except OSError as exc:
-        # Stat failures should never bring the endpoint down.  Return
-        # the error class so monitoring catches the disappearance of
-        # the metric (which would itself be a signal worth alerting
-        # on once we have alerting wired up).
-        disk = {
-            "status": "error",
-            "path": disk_path,
-            "error_class": type(exc).__name__,
-        }
-        logger.warning("[Health] disk_usage(%s) failed", disk_path, exc_info=True)
 
     # ── Email transport (Resend) ─────────────────────────────
     # Three states surface separately so an operator can tell
@@ -1367,15 +1406,21 @@ async def health_check_detailed():
     resend = {"status": resend_status, "queue_depth": queue_depth}
 
     # ── Roll up overall status ───────────────────────────────
-    # DB ping failure or critical disk both warrant pager-grade
-    # alerting; either is "the app is up but cannot serve correctly."
-    # Warn-level signals roll up to "degraded" so a status page
-    # renders yellow without paging anyone.
+    # Critical-tier probes (any from health_probes.py reporting
+    # ``critical``) flip overall to "unhealthy" — pager-grade.  The
+    # readiness endpoint also returns 503 in this state, so external
+    # uptime monitors page the same set of failures the dashboard
+    # renders red.
     #
-    # Email status is informational only — even an unconfigured
-    # transport doesn't degrade the overall app; it just means the
-    # operator hasn't finished setting up their alerts.
-    if db_check["status"] != "ok" or disk["status"] == "critical":
+    # Warn-tier signals (viewer-usage queue building, disk in 80-94%
+    # range) flip overall to "degraded" — yellow on the dashboard,
+    # nothing pages.
+    #
+    # Resend "unconfigured" / "disabled" intentionally do NOT degrade
+    # the rollup — an org running without email is a deliberate
+    # configuration choice, not a failure mode.
+    critical_probes = [db_check, clerk, disk, email_worker_check]
+    if any(p.get("status") == "critical" for p in critical_probes):
         overall = "unhealthy"
     elif viewer_usage["status"] == "warn" or disk["status"] == "warn":
         overall = "degraded"
@@ -1390,7 +1435,9 @@ async def health_check_detailed():
         "time": now_wall.isoformat(),
         "checks": {
             "database": db_check,
+            "clerk": clerk,
             "disk": disk,
+            "email_worker": email_worker_check,
             "hls_cache": hls_cache,
             "viewer_usage": viewer_usage,
             "sse": sse,
