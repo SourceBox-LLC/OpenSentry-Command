@@ -8,6 +8,7 @@ import UpgradeModal from "../components/UpgradeModal.jsx"
 import OrgAuditLogPanel from "../components/OrgAuditLogPanel.jsx"
 import AdminKpiStrip from "../components/AdminKpiStrip.jsx"
 import AdminTabs from "../components/AdminTabs.jsx"
+import { BarList, DailyActivityChart } from "../components/AdminCharts.jsx"
 
 function AdminPage() {
   const { getToken } = useAuth()
@@ -449,47 +450,31 @@ function AdminPage() {
 
             <div className="stat-card">
               <h3>Top Cameras</h3>
-              <ul className="stat-list">
-                {stats?.by_camera?.slice(0, 5).map(item => (
-                  <li key={item.camera_id}>
-                    <span className="stat-name">{item.camera_id}</span>
-                    <span className="stat-count">{item.count}</span>
-                  </li>
-                ))}
-                {(!stats?.by_camera || stats.by_camera.length === 0) && (
-                  <li><span className="stat-name">No data</span></li>
-                )}
-              </ul>
+              <BarList
+                accent="green"
+                items={(stats?.by_camera || []).slice(0, 5).map((c) => ({
+                  key: c.camera_id,
+                  label: c.camera_id,
+                  count: c.count,
+                }))}
+              />
             </div>
 
             <div className="stat-card">
               <h3>Top Viewers</h3>
-              <ul className="stat-list">
-                {stats?.by_user?.slice(0, 5).map(item => (
-                  <li key={item.user_id}>
-                    <span className="stat-name">{item.user_email || item.user_id.substring(0, 12) + "..."}</span>
-                    <span className="stat-count">{item.count}</span>
-                  </li>
-                ))}
-                {(!stats?.by_user || stats.by_user.length === 0) && (
-                  <li><span className="stat-name">No data</span></li>
-                )}
-              </ul>
+              <BarList
+                accent="green"
+                items={(stats?.by_user || []).slice(0, 5).map((u) => ({
+                  key: u.user_id,
+                  label: u.user_email || (u.user_id ? u.user_id.substring(0, 12) + "..." : "—"),
+                  count: u.count,
+                }))}
+              />
             </div>
 
             <div className="stat-card">
               <h3>Daily Activity</h3>
-              <ul className="stat-list">
-                {stats?.by_day?.slice(0, 7).map(item => (
-                  <li key={item.date}>
-                    <span className="stat-name">{item.date}</span>
-                    <span className="stat-count">{item.count}</span>
-                  </li>
-                ))}
-                {(!stats?.by_day || stats.by_day.length === 0) && (
-                  <li><span className="stat-name">No data</span></li>
-                )}
-              </ul>
+              <DailyActivityChart accent="green" data={stats?.by_day} />
             </div>
           </div>
         )}
@@ -722,47 +707,32 @@ function AdminPage() {
 
             <div className="stat-card">
               <h3>Top Tools</h3>
-              <ul className="stat-list">
-                {mcpStats?.by_tool?.slice(0, 5).map(item => (
-                  <li key={item.tool_name}>
-                    <span className="stat-name"><code>{item.tool_name}</code></span>
-                    <span className="stat-count">{item.count}</span>
-                  </li>
-                ))}
-                {(!mcpStats?.by_tool || mcpStats.by_tool.length === 0) && (
-                  <li><span className="stat-name">No data</span></li>
-                )}
-              </ul>
+              <BarList
+                accent="purple"
+                monoLabel
+                items={(mcpStats?.by_tool || []).slice(0, 5).map((t) => ({
+                  key: t.tool_name,
+                  label: t.tool_name,
+                  count: t.count,
+                }))}
+              />
             </div>
 
             <div className="stat-card">
               <h3>By API Key</h3>
-              <ul className="stat-list">
-                {mcpStats?.by_key?.slice(0, 5).map(item => (
-                  <li key={item.key_name}>
-                    <span className="stat-name">{item.key_name}</span>
-                    <span className="stat-count">{item.count}</span>
-                  </li>
-                ))}
-                {(!mcpStats?.by_key || mcpStats.by_key.length === 0) && (
-                  <li><span className="stat-name">No data</span></li>
-                )}
-              </ul>
+              <BarList
+                accent="purple"
+                items={(mcpStats?.by_key || []).slice(0, 5).map((k) => ({
+                  key: k.key_name,
+                  label: k.key_name,
+                  count: k.count,
+                }))}
+              />
             </div>
 
             <div className="stat-card">
               <h3>MCP Daily Activity</h3>
-              <ul className="stat-list">
-                {mcpStats?.by_day?.slice(0, 7).map(item => (
-                  <li key={item.date}>
-                    <span className="stat-name">{item.date}</span>
-                    <span className="stat-count">{item.count}</span>
-                  </li>
-                ))}
-                {(!mcpStats?.by_day || mcpStats.by_day.length === 0) && (
-                  <li><span className="stat-name">No data</span></li>
-                )}
-              </ul>
+              <DailyActivityChart accent="purple" data={mcpStats?.by_day} />
             </div>
           </div>
         )}

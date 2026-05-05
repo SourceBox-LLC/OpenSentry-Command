@@ -6171,6 +6171,116 @@ body {
     }
 }
 
+/* ── Admin charts: BarList + DailyActivityChart ──────────────────
+   Hand-rolled visualisations that replace the "label: count" text
+   rows in the stat cards.  No charting library; SVG inherits accent
+   via currentColor + the data-accent attribute. */
+
+.bar-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.bar-list-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.bar-list-row-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+}
+
+.bar-list-label {
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.bar-list-label-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.74rem;
+    color: var(--text-primary);
+}
+
+.bar-list-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+.bar-list-track {
+    height: 5px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bar-list-fill {
+    height: 100%;
+    background: var(--accent-green);
+    border-radius: 3px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bar-list[data-accent="green"] .bar-list-fill { background: var(--accent-green); }
+.bar-list[data-accent="purple"] .bar-list-fill { background: var(--accent-purple); }
+.bar-list[data-accent="blue"] .bar-list-fill { background: var(--accent-blue); }
+.bar-list[data-accent="amber"] .bar-list-fill { background: var(--accent-amber); }
+
+.bar-list-empty,
+.daily-chart-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 1.2rem 0;
+    text-align: center;
+    font-style: italic;
+}
+
+/* Daily activity chart */
+.daily-chart {
+    display: block;
+    width: 100%;
+    color: var(--accent-green); /* default; overridden by accent variants */
+}
+
+.daily-chart[data-accent="green"]  { color: var(--accent-green); }
+.daily-chart[data-accent="purple"] { color: var(--accent-purple); }
+.daily-chart[data-accent="blue"]   { color: var(--accent-blue); }
+.daily-chart[data-accent="amber"]  { color: var(--accent-amber); }
+
+.daily-chart rect {
+    transition: opacity 0.15s ease;
+}
+
+.daily-chart g:hover rect {
+    opacity: 0.75;
+}
+
+.daily-chart-baseline {
+    stroke: rgba(255, 255, 255, 0.06);
+    stroke-width: 1;
+}
+
+.daily-chart-label {
+    fill: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+}
+
 /* Audit Logs Section */
 .audit-section {
     background: var(--bg-secondary);
