@@ -1,20 +1,27 @@
-"""Lightweight schema sync for SQLite.
+"""Lightweight schema sync for SQLite + one-shot migration helpers.
 
-We use `Base.metadata.create_all()` to create new tables on startup. That's
-enough for fresh installs, but it never *alters* existing tables — so whenever
-a column is added to an existing model (e.g. `McpApiKey.scope_mode`), an
-existing database gets stuck with the old schema and every INSERT breaks.
+Two kinds of function live here:
 
-Rather than pulling in Alembic for what are almost always single-column
-additions, this module does one thing: on startup it walks every SQLAlchemy
-model, compares the model's columns to the live table, and `ALTER TABLE ADD
-COLUMN` for anything missing. Idempotent, safe to run on every boot.
+1. ``sync_schema`` — runs on every boot from ``app/main.py``.  Walks
+   ``Base.metadata`` and ``ALTER TABLE ADD COLUMN`` for any model
+   field missing from the live SQLite table.  Idempotent.  Our
+   stand-in for Alembic; the most common schema change on this
+   project is a single nullable column being added to a model.
 
-It also hosts targeted one-time **data** migrations — specifically, the codec
-sanitization sweep that rescues existing rows from the h264_v4l2m2m
-malformed-SPS bug.  See `sanitize_existing_codecs()`.
+2. ``drop_orphan_tables`` + ``sanitize_existing_codecs`` — one-shot
+   helpers for specific past data problems.  USED to run on every
+   boot but were pulled out of the startup path on 2026-05-05 once
+   prod had churned through them — now both are no-ops on every
+   tracked database.  Kept here as documented patterns + as
+   manual-recovery tools for someone restoring an old DB snapshot.
+   Run them by hand if you need to:
 
-Caveats:
+       from app.core.database import engine
+       from app.core.migrations import drop_orphan_tables, sanitize_existing_codecs
+       drop_orphan_tables(engine)
+       sanitize_existing_codecs(engine)
+
+Caveats for ``sync_schema``:
 - SQLite can't add a NOT NULL column without a DEFAULT. If you add such a
   column and have existing rows, the ALTER will fail loudly — write a real
   migration in that case. Make new columns nullable or give them a default.
@@ -125,38 +132,37 @@ def sync_schema(engine: Engine, metadata) -> list[str]:
 
 
 # ─────────────────────────────────────────────────────────────────
-# Orphan-table sweep
+# Orphan-table sweep (one-shot helper, NOT in the boot path)
 # ─────────────────────────────────────────────────────────────────
 #
-# `sync_schema` only adds missing columns; it never drops things.  When a model
-# is removed entirely (e.g. the outbound-webhooks revert in commit d4dd2db
-# deleted `WebhookEndpoint` and its table mapping), the underlying SQLite
-# table sticks around as zero-row dead weight.  This sweep enumerates known
-# orphan tables and drops them once.  Idempotent — `DROP TABLE IF EXISTS`
-# noops on subsequent boots.
+# ``sync_schema`` only adds missing columns; it never drops things.  When a
+# model is removed entirely, the underlying SQLite table sticks around as
+# zero-row dead weight.  This helper enumerates known orphan tables and
+# drops them.  Idempotent — ``DROP TABLE IF EXISTS`` noops if absent.
 #
-# Adding a new orphan: append the table name to `_ORPHAN_TABLES` together with
-# a comment that records (a) which commit retired the model and (b) confirmation
-# that the table holds no data we want to keep.  Don't add anything you haven't
-# verified is empty.
+# Pulled out of the boot path on 2026-05-05 because the only entry
+# (``webhook_endpoints``, retired by commit d4dd2db in Apr 2026) had been
+# dropped from every prod machine for weeks and the function was paying
+# a metadata round-trip per boot to do nothing.
+#
+# To drop a newly-orphaned table:
+# 1. Append a ``(name, why)`` entry to ``_ORPHAN_TABLES`` below.
+# 2. Run ``drop_orphan_tables(engine)`` once against prod (manually,
+#    or by re-adding the call to ``main.py`` for one deploy then
+#    removing it again).
+# 3. After the deploy, blank ``_ORPHAN_TABLES`` back out and remove
+#    the boot-path call so future boots don't pay the inspect cost.
 
-_ORPHAN_TABLES: tuple[tuple[str, str], ...] = (
-    # (table_name, why)
-    (
-        "webhook_endpoints",
-        "Removed by commit d4dd2db (Apr 2026) which reverted the outbound-webhook "
-        "feature shipped in a94ef35.  Zero rows in production — feature was never "
-        "exercised against a real receiver before being pulled.",
-    ),
-)
+_ORPHAN_TABLES: tuple[tuple[str, str], ...] = ()
 
 
 def drop_orphan_tables(engine: Engine) -> list[str]:
     """Drop SQLite tables for models that have been removed from the codebase.
 
-    Runs `DROP TABLE IF EXISTS` for each entry in `_ORPHAN_TABLES`.  Returns
-    the list of tables that were actually present (and therefore dropped) so
-    the caller can log activity; subsequent runs return an empty list.
+    NOT in the boot path — invoke manually after appending a new entry to
+    ``_ORPHAN_TABLES`` (see module docstring).  Runs ``DROP TABLE IF EXISTS``
+    for each entry; returns the list of tables that were actually present
+    (and therefore dropped).
     """
     dropped: list[str] = []
     existing = _existing_tables(engine)
@@ -185,14 +191,16 @@ def drop_orphan_tables(engine: Engine) -> list[str]:
 
 
 def sanitize_existing_codecs(engine: Engine) -> int:
-    """One-time sweep: rewrite any H.264 codec string below level 2.0.
+    """One-shot sweep: rewrite any H.264 codec string below level 2.0.
 
-    Matches the same threshold as `app.core.codec.sanitize_video_codec`.
-    Existing rows with `avc1.*e00*`, `avc1.*e010`, …, `avc1.*e013` (level
-    1.0 through 1.3) get upgraded in-place to `*e01e` (level 3.0) so the
-    next HLS playlist fetch has a valid codec declaration.  Without this
-    sweep, the fix only takes effect after each camera's first fresh
-    codec report — which for an offline node could be never.
+    NOT in the boot path — pulled out 2026-05-05 once prod had finished
+    rewriting affected rows (post-fix boots match zero rows).  Kept
+    here for snapshot-restore scenarios; invoke manually if needed.
+
+    Matches the same threshold as ``app.core.codec.sanitize_video_codec``.
+    Existing rows with ``avc1.*e00*``, ``avc1.*e010``, …, ``avc1.*e013``
+    (level 1.0 through 1.3) get upgraded in-place to ``*e01e`` (level 3.0)
+    so the next HLS playlist fetch has a valid codec declaration.
 
     Idempotent: subsequent runs match zero rows and are cheap.
     """

@@ -44,7 +44,7 @@ from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.limiter import limiter, tenant_aware_key
 from app.core.logging_setup import configure_logging
-from app.core.migrations import drop_orphan_tables, sanitize_existing_codecs, sync_schema
+from app.core.migrations import sync_schema
 from app.core.request_context import (
     new_request_id,
     reset_request_id,
@@ -74,13 +74,23 @@ Base.metadata.create_all(bind=engine)
 # Patch in any columns that were added to existing models after the table was first
 # created. See app/core/migrations.py for the "why" — this is our stand-in for Alembic.
 sync_schema(engine, Base.metadata)
-# Drop tables for models we've retired (sync_schema doesn't touch these).
-# Currently sweeps `webhook_endpoints` left behind by the d4dd2db revert.
-drop_orphan_tables(engine)
-# One-time data sweep — rescue any rows still holding the garbage
-# `avc1.*e00a`-class codec string from the pre-v0.1.6 CloudNode bug.
-# Idempotent; post-fix boots match zero rows.
-sanitize_existing_codecs(engine)
+
+# NOTE: ``drop_orphan_tables`` and ``sanitize_existing_codecs`` USED to
+# run here on every boot.  Both are one-shot fixes for problems that
+# have long since washed through prod (the webhook_endpoints orphan
+# from the d4dd2db revert was dropped weeks ago; the avc1.*e0[a-3]
+# codec sanitisation rewrote every affected row in May 2026 and stays
+# at zero rows on subsequent runs).
+#
+# They're still importable from ``app.core.migrations`` for the
+# next time we need them — the pattern is documented at the top of
+# that module — but pulling them out of the hot startup path means
+# we no longer pay a metadata round-trip per boot for fixes that
+# completed months ago.  If you're restoring an old DB snapshot
+# from before either fix landed, run them once by hand:
+#
+#     >>> from app.core.migrations import drop_orphan_tables, sanitize_existing_codecs
+#     >>> drop_orphan_tables(engine); sanitize_existing_codecs(engine)
 
 # Build the MCP ASGI app — path="/" because the mount prefix handles /mcp
 mcp_app = mcp.http_app(path="/", stateless_http=True, json_response=True)
