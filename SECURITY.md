@@ -10,9 +10,9 @@ This file is the GitHub-standard summary; the deployed page above is canonical w
 
 ## Reporting a vulnerability
 
-**Preferred:** file a private [Security Advisory on this repository](https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories/new). This gives us a private channel for triage and the standard CVE workflow if one is warranted.
+File a private [Security Advisory on this repository](https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories/new). This gives us a private channel for triage and the standard CVE workflow if one is warranted. A free GitHub account is enough — you don't need to be a contributor to file one.
 
-**Without a GitHub account:** email `legal@sourcebox.dev` with subject line starting `[SECURITY]`.
+We don't yet operate a `security@` mailbox — the `sourceboxsentry.com` domain isn't provisioned for incoming mail. A bounced report is worse than no email channel at all, so we publish only the GitHub path until MX records are live.
 
 **Please do NOT:**
 

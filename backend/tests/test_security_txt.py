@@ -9,10 +9,13 @@ Pinned invariants:
      "site has no security contact" findings.
   2. Response is ``text/plain; charset=utf-8`` so a browser renders
      it as text rather than offering to download.
-  3. ``Contact:`` field is present (RFC requires ≥ 1).  We pin both
-     the GitHub Security Advisory URL (primary, modern best practice)
-     and the ``mailto:legal@`` fallback so a researcher without a
-     GitHub account isn't blocked.
+  3. ``Contact:`` field is present (RFC requires ≥ 1).  Pinned to
+     the GitHub Security Advisory URL — modern best practice for OSS
+     and works today without us needing to operate a security@
+     mailbox.  An email fallback was published briefly but pulled
+     because the sourceboxsentry.com domain isn't provisioned for
+     incoming mail yet — a bounced report is worse than no email
+     channel at all.  Add an email Contact: back when MX is live.
   4. ``Expires:`` is in the future and within RFC 9116's 1-year
      window.  Generated dynamically per request so the file never
      goes stale at rest — a regression to a static expiry date
@@ -87,10 +90,24 @@ def test_security_txt_primary_contact_is_github_security_advisories(
     )
 
 
-def test_security_txt_has_email_fallback(unauthenticated_client):
-    """Backup contact for reporters without a GitHub account."""
+def test_security_txt_does_not_publish_dead_email_addresses(
+    unauthenticated_client,
+):
+    """Negative pin: we do NOT publish an email contact today because
+    sourceboxsentry.com has no MX records and bounces would burn
+    reporters.  Catches a regression that re-adds an email Contact
+    line referring to an unprovisioned address.
+
+    Once MX is live, replace this test with a positive
+    ``test_security_txt_has_email_fallback`` that asserts the
+    real working address is present."""
     body = unauthenticated_client.get("/.well-known/security.txt").text
-    assert "mailto:legal@sourcebox.dev" in body
+    # No mailto: contact lines until the domain can actually receive mail.
+    contact_lines = [line for line in body.splitlines() if line.startswith("Contact:")]
+    assert not any("mailto:" in line for line in contact_lines), (
+        "security.txt published an email contact, but no MX records are "
+        "configured for sourceboxsentry.com -- reports would bounce"
+    )
 
 
 def test_security_txt_expires_in_future_and_within_one_year(

@@ -507,7 +507,7 @@ function SecurityPage() {
 
           <h3>How to report</h3>
           <p>
-            <strong>Preferred:</strong> file a private{" "}
+            File a private{" "}
             <a
               href="https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories/new"
               target="_blank"
@@ -516,13 +516,16 @@ function SecurityPage() {
               GitHub Security Advisory
             </a>{" "}
             on the Command Center repository.  This gives us a private
-            channel for triage + the standard CVE workflow if one is warranted.
+            channel for triage and the standard CVE workflow if one is
+            warranted.  A free GitHub account is enough &mdash; you don't
+            need to be a contributor to file one.
           </p>
           <p>
-            <strong>Without a GitHub account:</strong> email{" "}
-            <a href="mailto:legal@sourcebox.dev">legal@sourcebox.dev</a>{" "}
-            with subject line starting <code>[SECURITY]</code>.  Slower
-            channel — we still reply within the response timeline below.
+            We don't yet operate a security@ mailbox &mdash; the
+            sourceboxsentry.com domain isn't provisioned for incoming
+            mail.  A bounced report is worse than no email channel at
+            all, so we publish only the GitHub path until MX records
+            are live.
           </p>
           <p>
             Machine-readable contact info also lives at{" "}

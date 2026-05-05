@@ -33,15 +33,17 @@ router = APIRouter()
 
 # ── Configuration ──────────────────────────────────────────────────
 #
-# Primary contact is the GitHub Security Advisories form — modern
-# best practice for OSS projects, gives reporters a structured
-# private channel without us needing to set up DNS/MX for a
-# `security@` mailbox.  Falls back to the legal@ inbox we already
-# operate (it's published in LegalPage.jsx + DPA.md) so a reporter
-# without a GitHub account isn't blocked.
+# Single contact channel: GitHub Security Advisories.  Standard for
+# OSS projects, structured private triage workflow, supports the
+# CVE process if one is warranted, and works today without us
+# needing to set up DNS/MX for a security@ mailbox.
+#
+# An email fallback was published here briefly but pulled because
+# the domain isn't provisioned yet — a bounced reporter is worse
+# than no email channel at all.  Add one back when MX is live for
+# sourceboxsentry.com (likely security@ or notifications@).
 
 _PRIMARY_CONTACT = "https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories/new"
-_SECONDARY_CONTACT = "mailto:legal@sourcebox.dev"
 
 # Expiry window — RFC 9116 §2.5.5 says ≤ 1 year from generation.
 # We use ~11 months to give ourselves a comfortable buffer; the
@@ -74,13 +76,12 @@ def _build_security_txt() -> str:
     # Order follows RFC 9116 §2.5 examples for readability.  Comments
     # at the top help human readers; scanners ignore them.
     lines = [
-        "# SourceBox Sentry — security contact information (RFC 9116).",
+        "# SourceBox Sentry -- security contact information (RFC 9116).",
         "# Public report channel + acknowledgement window for security",
         "# researchers.  See the policy URL for in-scope/out-of-scope",
         "# and our coordinated-disclosure expectations.",
         "",
         f"Contact: {_PRIMARY_CONTACT}",
-        f"Contact: {_SECONDARY_CONTACT}",
         f"Expires: {expires}",
         f"Canonical: {_build_canonical_url()}",
         f"Policy: {policy_url}",
