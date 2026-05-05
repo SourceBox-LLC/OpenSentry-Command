@@ -32,6 +32,19 @@ jobs:
         working-directory: backend
         run: uv run ruff check
 
+      # Scan our Python dep tree against the PyPA Advisory DB.
+      # ``--strict`` makes any vulnerability a non-zero exit so a
+      # known-bad transitive dep blocks the deploy.  Mirrors the
+      # frontend's npm-audit gate (--audit-level=high --omit=dev)
+      # in policy: this also blocks at high+ tiers — pip-audit
+      # doesn't currently expose a severity gate, so anything in
+      # the advisory DB counts.  When a CVE shows up with no fix
+      # yet, add ``--ignore-vuln <PYSEC-ID>`` here with a comment
+      # citing the upstream issue and the date we plan to revisit.
+      - name: Dependency scan (pip-audit)
+        working-directory: backend
+        run: uv run pip-audit --strict
+
       - name: Run tests
         working-directory: backend
         run: uv run pytest -v
