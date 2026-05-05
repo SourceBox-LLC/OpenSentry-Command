@@ -78,6 +78,21 @@ jobs:
         working-directory: frontend
         run: npm audit --audit-level=high --omit=dev
 
+      # Vitest component tests — run BEFORE the build so a regression
+      # caught by tests doesn't get the chance to ship via a successful
+      # build.  We have ~50 tests today (HelpTooltip, InstallCloudNodeCard,
+      # UpgradeModal, EmptyState, the API service helpers, the docs
+      # page, and a sanity smoke test); the suite runs in <10s on CI
+      # so the speed cost is negligible.
+      #
+      # ``npm test`` is the package.json alias for ``vitest run``
+      # (one-shot, exits with status, no watch).  Vitest auto-discovers
+      # files matching the ``include: ["tests/**/*.test.{js,jsx}"]``
+      # pattern in vite.config.js.
+      - name: Run frontend tests (vitest)
+        working-directory: frontend
+        run: npm test
+
       # Build now so a syntax or type error fails CI here rather than
       # mid-deploy.  Catches the same class of bug as backend pytest.
       - name: Build production bundle

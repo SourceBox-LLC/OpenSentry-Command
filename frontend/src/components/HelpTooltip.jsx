@@ -63,12 +63,14 @@ export default function HelpTooltip({ children, docHref, label = "Help" }) {
       <button
         type="button"
         className="help-tooltip-trigger"
+        // Click-toggle only.  Avoids a subtle interaction bug where
+        // hover-to-open + click-to-toggle would race on touch devices
+        // (the synthesized mouseenter fires immediately before the
+        // click, opening then immediately re-closing the popover on
+        // a single tap).  Keyboard users activate via Enter/Space
+        // which fires click, so they get the same toggle behaviour
+        // — accessibility preserved.
         onClick={() => setOpen((v) => !v)}
-        onMouseEnter={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
-        // Don't blur-close — losing focus to the popover content
-        // (e.g. clicking the "Learn more" link) shouldn't dismiss
-        // the popover before the click registers.
         aria-label={label}
         aria-expanded={open}
         aria-controls={popoverId}
@@ -80,10 +82,6 @@ export default function HelpTooltip({ children, docHref, label = "Help" }) {
           id={popoverId}
           className="help-tooltip-popover"
           role="tooltip"
-          // Mouse-leave on the popover wrapper closes — the trigger
-          // also gets re-rendered with onMouseEnter so a tight back-
-          // and-forth between trigger and popover stays open.
-          onMouseLeave={() => setOpen(false)}
         >
           <div className="help-tooltip-body">{children}</div>
           {docHref && (
