@@ -5714,6 +5714,31 @@ body {
     margin-bottom: 1rem;
 }
 
+/* Header row that puts the section title on the left and the
+   "Export CSV" action on the right.  When the section's h2 lives
+   inside this wrapper, drop its bottom margin since the wrapper
+   handles the spacing — keeps the row visually balanced. */
+.audit-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.audit-section-header h2 {
+    margin-bottom: 0.25rem;
+}
+
+.audit-section-header .section-description {
+    margin: 0;
+}
+
+.audit-section-header .btn {
+    flex: 0 0 auto;
+}
+
 .audit-filters {
     display: flex;
     gap: 1rem;

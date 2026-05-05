@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
+from app.core.csv_export import filename_for, stream_csv_response
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.models import StreamAccessLog
@@ -32,6 +33,11 @@ async def get_stream_logs(
     # request (OFFSET is O(n) even with an index). 1M is well past any
     # realistic history a UI would page through.
     offset: int = Query(default=0, ge=0, le=1_000_000),
+    # ``format=csv`` switches to a streaming CSV download.  Same auth,
+    # same per-org rate-limit bucket; the JSON ``limit``/``offset``
+    # caps are bypassed so an export can pull a meaningful window —
+    # see the CSV branch below.
+    format: str = Query(default="json", pattern="^(json|csv)$"),
     admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -39,6 +45,9 @@ async def get_stream_logs(
     Get stream access logs for the admin's organization.
     Only org admins can access this endpoint.
     Logs are automatically cleaned up after the retention period.
+
+    Returns JSON by default; pass ``?format=csv`` for a streaming
+    download suitable for compliance archiving.
 
     Rate-limited to 120 req/min per org — same as ``/api/audit-logs``.
     Each call is a multi-clause SQL query against StreamAccessLog;
@@ -55,6 +64,30 @@ async def get_stream_logs(
         query = query.filter(
             StreamAccessLog.user_email.ilike(f"%{user_id}%")
             | StreamAccessLog.user_id.ilike(f"%{user_id}%")
+        )
+
+    if format == "csv":
+        # Lift the row cap for CSV — auditor wants a window, not a page.
+        # 50k rows × ~250 bytes/row ≈ 12 MB; constant memory via yield_per.
+        csv_query = (
+            query.order_by(StreamAccessLog.accessed_at.desc()).limit(50_000)
+        )
+
+        def _rows():
+            for log in csv_query.yield_per(500):
+                yield [
+                    log.accessed_at.isoformat() if log.accessed_at else "",
+                    log.camera_id or "",
+                    log.node_id or "",
+                    log.user_email or "",
+                    log.user_id or "",
+                    log.ip_address or "",
+                ]
+
+        return stream_csv_response(
+            filename=filename_for("stream-access-log", admin.org_id),
+            header=["accessed_at", "camera_id", "node_id", "user_email", "user_id", "ip_address"],
+            rows=_rows(),
         )
 
     total = query.count()

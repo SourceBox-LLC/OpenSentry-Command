@@ -257,6 +257,19 @@ export async function getStreamLogs(getToken, params = {}) {
   return fetchWithAuth(`/api/audit/stream-logs?${queryString}`, getToken)
 }
 
+// CSV export for stream access logs.  Triggers a browser download via
+// blob → object URL → hidden anchor click.  We can't just point the
+// browser at the endpoint with window.open() because that wouldn't
+// send the Clerk JWT — auth has to ride on a fetch().  Filename
+// comes from the backend's Content-Disposition header so the date
+// stamping stays server-controlled.
+export async function downloadStreamLogsCsv(getToken, params = {}) {
+  const cleanParams = Object.entries(params).filter(([_, v]) => v != null && v !== "")
+  cleanParams.push(["format", "csv"])
+  const qs = new URLSearchParams(cleanParams).toString()
+  return _downloadCsv(`/api/audit/stream-logs?${qs}`, getToken, "stream-access-log.csv")
+}
+
 export async function getStreamStats(getToken, days = 7) {
   return fetchWithAuth(`/api/audit/stream-logs/stats?days=${days}`, getToken)
 }
@@ -324,6 +337,15 @@ export async function getMcpLogs(getToken, params = {}) {
     Object.entries(params).filter(([_, v]) => v != null && v !== "")
   ).toString()
   return fetchWithAuth(`/api/mcp/activity/logs?${queryString}`, getToken)
+}
+
+// CSV export for MCP activity logs.  Same blob-download flow as the
+// stream-logs CSV — see downloadStreamLogsCsv for the rationale.
+export async function downloadMcpLogsCsv(getToken, params = {}) {
+  const cleanParams = Object.entries(params).filter(([_, v]) => v != null && v !== "")
+  cleanParams.push(["format", "csv"])
+  const qs = new URLSearchParams(cleanParams).toString()
+  return _downloadCsv(`/api/mcp/activity/logs?${qs}`, getToken, "mcp-activity-log.csv")
 }
 
 export async function getMcpLogStats(getToken, days = 7) {
@@ -408,4 +430,59 @@ export async function clearAllNotifications(getToken) {
   return fetchWithAuth("/api/notifications/clear-all", getToken, {
     method: "POST",
   })
+}
+
+// ── CSV download helper ─────────────────────────────────────────────
+//
+// Streams a CSV response from a backend endpoint and triggers a
+// browser download.  Used by downloadStreamLogsCsv + downloadMcpLogsCsv.
+//
+// Why not just window.open(url)?  Because the browser navigation
+// wouldn't carry the Clerk JWT — we'd get a 401.  Auth has to ride
+// on a fetch().  We collect the response as a Blob (which streams
+// internally), wrap it in an object URL, and click a hidden anchor
+// to fire the browser's standard download UI.
+//
+// Filename precedence:
+//   1. The backend's Content-Disposition `filename=`  (preferred —
+//      includes the org id + date stamped server-side)
+//   2. The fallback name passed by the caller — only used if the
+//      header is missing or unparseable.
+async function _downloadCsv(endpoint, getToken, fallbackFilename) {
+  const token = getToken ? await getToken() : null
+  const headers = {}
+  if (token) headers["Authorization"] = `Bearer ${token}`
+
+  const response = await fetch(`${API_URL}${endpoint}`, { headers })
+  if (!response.ok) {
+    // Try to surface the API's error envelope so the toast in the
+    // caller can show something useful (rate-limit detail, 403, etc.)
+    let detail = `HTTP ${response.status}`
+    try {
+      const body = await response.json()
+      detail = body?.detail || body?.message || detail
+    } catch { /* not JSON — keep status code */ }
+    throw new Error(detail)
+  }
+
+  // Pull filename from Content-Disposition; fall back to caller default.
+  // Header looks like: attachment; filename="audit-log-org_xxx-20260505.csv"
+  let filename = fallbackFilename
+  const cd = response.headers.get("Content-Disposition") || ""
+  const match = cd.match(/filename="?([^";]+)"?/i)
+  if (match && match[1]) filename = match[1]
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  // Some browsers (Safari historically) require the anchor in the DOM.
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  // Free the object URL — the browser holds onto it until revoked.
+  // setTimeout gives the click a tick to actually fire before we yank
+  // the URL out from under it.
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }

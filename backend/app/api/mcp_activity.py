@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
+from app.core.csv_export import filename_for, stream_csv_response
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.mcp.activity import MAX_SSE_SUBSCRIBERS_PER_ORG, tracker
@@ -126,10 +127,18 @@ async def get_mcp_logs(
     limit: int = Query(default=100, le=500),
     # OFFSET is O(n) — cap so no one can force SQLite to skip billions.
     offset: int = Query(default=0, ge=0, le=1_000_000),
+    # ``format=csv`` switches to a streaming CSV download with the
+    # same filters applied.  Same auth, same per-org rate-limit; the
+    # JSON ``limit``/``offset`` caps are bypassed for CSV so an export
+    # can pull a meaningful audit window.
+    format: str = Query(default="json", pattern="^(json|csv)$"),
     admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Get persisted MCP activity logs with filtering and pagination.
+
+    Returns JSON by default; pass ``?format=csv`` for a streaming
+    download suitable for compliance archiving / external analysis.
 
     Rate-limited to 120 req/min per org — same as the audit-stream-logs
     sibling.  Each call runs filters + count + ordered fetch against
@@ -157,6 +166,35 @@ async def get_mcp_logs(
         )
     if status:
         query = query.filter(McpActivityLog.status == status)
+
+    if format == "csv":
+        # Lift the row cap for CSV — auditor wants a window, not a page.
+        # 50k MCP rows × ~300 bytes/row (incl. args_summary) ≈ 15 MB;
+        # constant-memory streaming via yield_per.
+        csv_query = (
+            query.order_by(McpActivityLog.timestamp.desc()).limit(50_000)
+        )
+
+        def _rows():
+            for log in csv_query.yield_per(500):
+                yield [
+                    log.timestamp.isoformat() if log.timestamp else "",
+                    log.tool_name or "",
+                    log.key_name or "",
+                    log.status or "",
+                    log.duration_ms if log.duration_ms is not None else "",
+                    log.args_summary or "",
+                    log.error or "",
+                ]
+
+        return stream_csv_response(
+            filename=filename_for("mcp-activity-log", admin.org_id),
+            header=[
+                "timestamp", "tool_name", "key_name", "status",
+                "duration_ms", "args_summary", "error",
+            ],
+            rows=_rows(),
+        )
 
     total = query.count()
     logs = (

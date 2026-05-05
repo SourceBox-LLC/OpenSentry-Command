@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getStreamLogs, getStreamStats, getNodes, getMcpLogs, getMcpLogStats } from "../services/api"
+import { getStreamLogs, getStreamStats, getNodes, getMcpLogs, getMcpLogStats, downloadStreamLogsCsv, downloadMcpLogsCsv } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
@@ -177,6 +177,50 @@ function AdminPage() {
     setMcpFilters(prev => ({ ...prev, offset: newOffset }))
   }
 
+  // ── CSV export handlers ────────────────────────────────────────
+  // Pass the active filters into the export so what the admin sees
+  // on screen matches what they download.  Per-page (`limit`/`offset`)
+  // is intentionally NOT forwarded — the CSV branch on the backend
+  // ignores those and pulls a 50k-row window so an export is always
+  // a meaningful audit slice, not just one screen-page worth.
+  const [streamExporting, setStreamExporting] = useState(false)
+  const [mcpExporting, setMcpExporting] = useState(false)
+
+  const handleExportStreamCsv = async () => {
+    setStreamExporting(true)
+    try {
+      const token = await getToken()
+      const params = {}
+      if (filters.camera_id) params.camera_id = filters.camera_id
+      if (filters.user_id) params.user_id = filters.user_id
+      await downloadStreamLogsCsv(() => Promise.resolve(token), params)
+      showToast("Stream access log CSV downloaded.", "success")
+    } catch (err) {
+      console.error("Stream CSV export failed:", err)
+      showToast(`Export failed: ${err.message || "unknown error"}`, "error")
+    } finally {
+      setStreamExporting(false)
+    }
+  }
+
+  const handleExportMcpCsv = async () => {
+    setMcpExporting(true)
+    try {
+      const token = await getToken()
+      const params = {}
+      if (mcpFilters.tool_name) params.tool_name = mcpFilters.tool_name
+      if (mcpFilters.key_name) params.key_name = mcpFilters.key_name
+      if (mcpFilters.status) params.status = mcpFilters.status
+      await downloadMcpLogsCsv(() => Promise.resolve(token), params)
+      showToast("MCP activity log CSV downloaded.", "success")
+    } catch (err) {
+      console.error("MCP CSV export failed:", err)
+      showToast(`Export failed: ${err.message || "unknown error"}`, "error")
+    } finally {
+      setMcpExporting(false)
+    }
+  }
+
   if (!organization) {
     return (
       <div className="admin-container">
@@ -229,10 +273,30 @@ function AdminPage() {
       </div>
 
       <div className="audit-section">
-        <h2>Stream Access Logs</h2>
-        <p className="section-description">
-          View who has accessed your camera streams.
-        </p>
+        <div className="audit-section-header">
+          <div>
+            <h2>Stream Access Logs</h2>
+            <p className="section-description">
+              View who has accessed your camera streams.
+            </p>
+          </div>
+          {/*
+            Export honours the active filters but ignores the
+            per-page limit — backend pulls a 50k-row window so an
+            audit export is always a meaningful slice, not just
+            one screen-page.  See the docstring in the CSV
+            branch of /api/audit/stream-logs for details.
+          */}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportStreamCsv}
+            disabled={streamExporting}
+            title="Download the current view (with filters applied) as a CSV file"
+          >
+            {streamExporting ? "Exporting…" : "Export CSV"}
+          </button>
+        </div>
 
         <div className="audit-filters">
           <div className="filter-group">
@@ -409,10 +473,27 @@ function AdminPage() {
 
       {/* MCP Activity Logs */}
       <div className="audit-section">
-        <h2>MCP Tool Activity</h2>
-        <p className="section-description">
-          AI tool call history — see what MCP clients have done with your cameras and data.
-        </p>
+        <div className="audit-section-header">
+          <div>
+            <h2>MCP Tool Activity</h2>
+            <p className="section-description">
+              AI tool call history — see what MCP clients have done with your cameras and data.
+            </p>
+          </div>
+          {/* Same filter-aware CSV export as Stream Access Logs above.
+              Useful for compliance ("show me every MCP call from
+              ci_robot in March") and for diagnosing AI-agent
+              regressions in a spreadsheet. */}
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportMcpCsv}
+            disabled={mcpExporting}
+            title="Download the current view (with filters applied) as a CSV file"
+          >
+            {mcpExporting ? "Exporting…" : "Export CSV"}
+          </button>
+        </div>
 
         <div className="audit-filters">
           <div className="filter-group">

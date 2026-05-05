@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import audit_label, write_audit
 from app.core.auth import AuthUser, require_admin, require_view
 from app.core.codec import sanitize_video_codec
+from app.core.csv_export import filename_for, stream_csv_response
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.models.models import AuditLog, Camera, CameraGroup, Setting
@@ -544,8 +545,48 @@ async def list_audit_logs(
     # Capped at 500 to bound the response payload — without `le` an
     # attacker or runaway script could force a table-scan-size return.
     limit: int = Query(default=100, ge=1, le=500),
+    # ``format=csv`` switches the response from JSON to a streaming
+    # CSV download.  Honoured for the same admin auth as the JSON
+    # path; same per-org bucket counts against the 120/min limit.
+    # When CSV is requested the ``limit`` cap is raised to give an
+    # auditor a meaningful export window — see the CSV branch below.
+    format: str = Query(default="json", pattern="^(json|csv)$"),
 ):
-    """List audit logs for the user's organization."""
+    """List audit logs for the user's organization.
+
+    Returns JSON by default; pass ``?format=csv`` for a download
+    suitable for spreadsheet review or compliance archiving.
+    """
+    if format == "csv":
+        # CSV exports are bound by row count, not by JSON payload size.
+        # Lift the limit substantially so an org admin can grab a
+        # meaningful chunk of history in one call.  At 50k rows × ~200
+        # bytes/row = ~10 MB CSV — within reasonable download size and
+        # still constant-memory thanks to the streaming generator.
+        csv_query = (
+            db.query(AuditLog)
+            .filter_by(org_id=user.org_id)
+            .order_by(AuditLog.timestamp.desc())
+            .limit(50_000)
+        )
+
+        def _rows():
+            for log in csv_query.yield_per(500):
+                yield [
+                    log.timestamp.isoformat() if log.timestamp else "",
+                    log.event or "",
+                    log.username or "",
+                    log.user_id or "",
+                    log.ip_address or "",
+                    log.details or "",
+                ]
+
+        return stream_csv_response(
+            filename=filename_for("audit-log", user.org_id),
+            header=["timestamp", "event", "username", "user_id", "ip_address", "details"],
+            rows=_rows(),
+        )
+
     logs = (
         db.query(AuditLog)
         .filter_by(org_id=user.org_id)
