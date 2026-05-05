@@ -10,13 +10,15 @@ This list is sequenced by *order-of-operations*, not by importance.
 Tackle the dependencies first (auth, transports) so the later items
 (legal, support process) have something to point at.
 
-> **Last refreshed: 2026-05-04.** Items marked ✅ have shipped since
+> **Last refreshed: 2026-05-05.** Items marked ✅ have shipped since
 > the original draft. Items marked 🟡 are partially done (code-side
 > ready, operator action remaining). Items still wide open are
 > unmarked. The original "closed by Claude on 2026-04-25" stamp at
 > the bottom no longer captures reality — significant code shipped
 > in the SaaS-readiness sweep, the email v1+v1.1 work, the multi-
-> tenant disk fix, the CI rewrite, and the branch protection.
+> tenant disk fix, the CI rewrite, branch protection, and the
+> 2026-05-04→2026-05-05 SaaS launch-checklist closeout (see audit
+> trail at the bottom).
 
 ---
 
@@ -109,20 +111,35 @@ with a logged "would have sent" line.
 
 ## 3. Status page vendor (recommended)
 
-**State now.** I added `/api/health/detailed` (commit `9cd7a5b`)
-which any status page can poll. There's no public status page yet.
+**State now.** Two health endpoints live and ready for an external
+monitor to poll:
+
+- `/api/health/ready` (commit `6265b32`, 2026-05-04) — readiness
+  check with DB + Clerk + disk + email-worker probes. Returns
+  HTTP 200 when ready, **503 with detail body when any critical
+  dependency is unhealthy**. 30s cached so a swarm of pollers
+  doesn't hammer Clerk. **This is the better target for external
+  status pages and uptime monitors** because it speaks HTTP status
+  codes rather than nesting status in the body.
+- `/api/health/detailed` — verbose status snapshot, always 200.
+  Useful for dashboards that parse JSON; bad for vendors that
+  only check status codes.
+
+There's no public status page yet.
 
 **Options.**
+- **BetterStack** / **Better Uptime** — modern, generous free tier.
 - **Instatus** ($20/mo for the smallest paid plan, free tier works
   for solo operations).
 - **Statuspage.io** by Atlassian (more features, pricier).
-- **Hosted-bytes** / **BetterStack** — modern alternatives.
+- **UptimeRobot** — free tier, good for the "page me when it's
+  actually down" minimum.
 
 **What to do.**
-1. Create a status page on the chosen vendor.
-2. Configure a "synthetic monitor" to GET
-   `/api/health/detailed` every minute. Treat `status: unhealthy` or
-   any 5xx as down.
+1. Create a status page / synthetic monitor on the chosen vendor.
+2. Point the synthetic monitor at `/api/health/ready` (NOT
+   `/detailed`) every minute. The monitor only needs to look at
+   HTTP status: 200 = up, 5xx = down. Body is for humans.
 3. Link the status page from `/security` (replace the placeholder
    "No public status page yet" line in the "Honest gaps" section).
 4. Subscribe customers to status updates via the vendor's
@@ -378,9 +395,55 @@ When all twelve check, ship the launch announcement.
   rewritten three times (Fly remote builder → depot.dev → local
   Buildkit on the runner) after WireGuard auth regression on Fly's
   side. Branch protection on master.
+- **2026-05-04 → 2026-05-05 (SaaS launch-checklist closeout, 14
+  commits):** Operator-debugging hygiene — per-request IDs in a
+  contextvar, ContextFilter that injects `request_id`+`org_id`
+  into every log line, Sentry tag, `X-Request-Id` response
+  header, ruff in CI with conservative ruleset.  Multi-tenant
+  rate-limit audit caught + closed 7 missing-decorator endpoints
+  including 3 SSE streams, 4 admin DB endpoints, the incident-
+  evidence proxy, and a custom in-memory connect-throttle for
+  the WebSocket (slowapi only does HTTP).  Full first-touch UX
+  pass — welcome email on `organization.created`, Help link in
+  authenticated nav, in-app CloudNode install widget that
+  auto-creates a node + bakes credentials into the displayed
+  one-liner, contextual `?` tooltips on the three highest-
+  confusion settings, member promotion-request button.  Audit-
+  log CSV export across all three audit endpoints with shared
+  streaming helper.  RFC 9116 `/.well-known/security.txt` with
+  rolling 11-month Expires + full Vulnerability Disclosure
+  Policy section on `/security` with CFAA safe-harbour
+  language.  GDPR Article 17 cascade gap-fix (both
+  `danger/full-reset` and the `organization.deleted` Clerk
+  webhook were only clearing 5–7 of 14 org-scoped tables —
+  fixed via `app/core/gdpr.py` as single source of truth) +
+  Article 20 export endpoint streaming a ZIP per table.
+  `/api/health/ready` with DB + Clerk + disk + email-worker
+  probes returning 503 on critical failure (the existing
+  `/api/health` and `/detailed` always returned 200, useless
+  for external uptime monitors).  `pip-audit` in CI for backend
+  deps; `vitest` wired into the frontend CI step (suite existed
+  but wasn't running, gated nothing); 23 new frontend tests
+  including one that caught a real interaction bug in
+  HelpTooltip on touch devices.  Closer: built
+  `OrgAuditLogPanel` admin component on top of the now-
+  paginated `/api/audit-logs`, completing the admin
+  dashboard's audit surface.  Backend tests 464 → 549.
+- **2026-05-05 cleanup pass:** Pulled `drop_orphan_tables`
+  and `sanitize_existing_codecs` out of the boot path (one-shot
+  fixes that had been no-op'ing for weeks); kept as documented
+  helpers for snapshot-restore.  Deleted dead `EmptyState`
+  component + tests (superseded by `WelcomeHero`).  Renamed
+  misleading "Recording toggled (legacy)" audit label.
+  Replaced dead `legal@sourcebox.dev` contact in `LegalPage.jsx`
+  with in-app self-serve (Settings → Privacy & Data) for
+  Article 17 / 20 / CCPA + GitHub Issues for everything else
+  until the `legal@` mailbox lands.
 
 > *Originally closed by Claude on 2026-04-25. Refreshed
-> 2026-05-04 after the email v1+v1.1 work, the SaaS-readiness
-> sweep, the multi-tenant disk fix, the CI builder rewrite, and
-> branch protection. The remaining items still all require you —
-> credit cards, signatures, hardware, human decisions.*
+> 2026-05-05 after the SaaS launch-checklist closeout sweep
+> (req-IDs, rate-limit audit, first-touch UX, audit CSV,
+> security.txt, GDPR delete + export, /healthz/ready,
+> pip-audit + vitest in CI, AuditLog UI, cleanup pass). The
+> remaining items still all require you — credit cards,
+> signatures, hardware, human decisions.*
