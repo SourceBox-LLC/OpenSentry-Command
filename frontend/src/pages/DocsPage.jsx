@@ -93,7 +93,7 @@ function DocsPage() {
           <div className="docs-content-inner">
             <div className="docs-header">
               <h1>Documentation</h1>
-              <p>Complete guides for deploying, using, and integrating with SourceBox Sentry.</p>
+              <p>How to use SourceBox Sentry — installing CloudNode on your camera machine, working with the cloud dashboard, and connecting AI tools over MCP.</p>
             </div>
 
             <GettingStarted />

@@ -52,18 +52,18 @@ sudo pacman -S ffmpeg          # Arch`}</code>
       <p>Command Center marks a node offline if no heartbeat arrives for 90 seconds. Things to check:</p>
       <ul>
         <li>Is the node process actually running? <code>ps aux | grep cloudnode</code> or check the terminal dashboard</li>
-        <li>Does outbound HTTPS to <code>opensentry-command.fly.dev</code> work? <code>curl -I https://opensentry-command.fly.dev/api/health</code></li>
+        <li>Does outbound HTTPS to Command Center work? <code>curl -I https://opensentry-command.fly.dev/api/health</code> should return 200</li>
         <li>Is the API URL correct in the node config? Open settings via the dashboard <code>/settings</code> command</li>
         <li>Clock skew: if the machine's clock is wildly off, JWT auth may fail. Enable NTP.</li>
-        <li>Firewall / egress filter dropping long-lived TLS connections? Test by allowlisting the Fly.io IP and re-running.</li>
+        <li>Firewall / egress filter dropping long-lived TLS connections? Confirm by tailing CloudNode logs for repeated connect-then-drop cycles, then ask your network admin to allow outbound 443 to Command Center.</li>
       </ul>
 
       <h3>Segments not appearing in the browser (but node says it's pushing)</h3>
       <ul>
         <li>Refresh the live view — hls.js will retry playlist fetch on reload</li>
         <li>Open browser devtools &gt; Network, filter by <code>.ts</code>, and check for 401/403 errors — that means the viewer's JWT expired. Signing out and back in refreshes it.</li>
-        <li>Check the backend logs via Fly: <code>fly logs -a opensentry-command</code></li>
         <li>Confirm the camera is online in <code>list_cameras</code>; if it flipped to offline between the push and the fetch, the cache may have been evicted</li>
+        <li>If those don't surface anything, open a GitHub issue with the <code>request_id</code> from the failing response (visible in any error body) — we can correlate that to backend logs.</li>
       </ul>
 
       <h3>MCP tool calls return 401</h3>
@@ -110,9 +110,11 @@ sudo pacman -S ffmpeg          # Arch`}</code>
       <h3>Dashboard logs</h3>
       <p>
         The terminal dashboard has an <code>/export-logs</code> command that writes a
-        timestamped file with the full buffer — attach this to any bug report. The
-        Command Center side logs to Fly; use <code>fly logs -a opensentry-command</code>
-        (requires Fly account access) or ask support.
+        timestamped file with the full buffer — attach this to any bug report. For
+        Command Center–side issues, include the <code>request_id</code> from the
+        failing response (in the JSON error body) and any <code>X-Request-Id</code>
+        response header — we use those to find the backend log line for your
+        request.
       </p>
     </section>
   )

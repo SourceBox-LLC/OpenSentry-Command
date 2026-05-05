@@ -494,7 +494,7 @@ function SecurityPage() {
           </ul>
         </section>
 
-        {/* ── Offline / self-host ────────────────────────────────── */}
+        {/* ── Resilience / data ownership ────────────────────────── */}
         <section className="security-section">
           <h2>What happens if SourceBox goes down</h2>
           <p>
@@ -505,10 +505,12 @@ function SecurityPage() {
             returns, uploads resume automatically.
           </p>
           <p>
-            Because both projects are open source and can be self-hosted, a
-            motivated operator can also run the entire stack on their own
-            infrastructure. We don't lock you in at the data layer — your
-            recordings are yours, in a SQLite file on hardware you own.
+            Your recordings are yours either way — they live in a SQLite file
+            on the hardware you own, encrypted at rest. We never ingest your
+            footage to the cloud, so there's no data layer we can lock you
+            into. The Command Center source being public (AGPL-3.0) is
+            transparency, not a self-host product — verify what we run, audit
+            what we touch, then sign up and let us operate it.
           </p>
         </section>
 

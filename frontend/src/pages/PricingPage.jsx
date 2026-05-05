@@ -98,7 +98,7 @@ function PricingPage() {
           </div>
           <div className="pricing-faq-item">
             <h3>Is the CloudNode software free?</h3>
-            <p>Yes, always. CloudNode is open source (GPL-3) and runs on your own hardware. You only pay for the Command Center cloud service — and you can self-host that too (AGPL-3) if you want to skip us entirely.</p>
+            <p>Yes, always. CloudNode is open source (GPL-3) and runs on your own hardware — the only thing you pay for is the Command Center cloud service we operate. The Command Center source is also public (AGPL-3) so you can read and audit exactly what runs on the cloud side; you don't need to run it yourself.</p>
           </div>
           <div className="pricing-faq-item">
             <h3>Do you send email or SMS alerts?</h3>

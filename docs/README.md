@@ -1,6 +1,6 @@
 # Command Center docs
 
-Supplementary documentation for SourceBox Sentry Command Center. The top-level `README.md` is the user-facing install + operation guide; `AGENTS.md` is the developer / LLM-facing architecture reference. The docs in this tree cover the things that don't fit cleanly in either.
+Supplementary documentation for SourceBox Sentry Command Center — the SaaS we operate at https://sourceboxsentry.com. The top-level `README.md` is the engineer-facing setup + reference for anyone reading or running the source locally (for audit or fixes); `AGENTS.md` is the developer / LLM-facing architecture reference. End users sign up at the live app; they don't deploy Command Center themselves. The docs in this tree cover the things that don't fit cleanly in either of those two files — operator launch checklist, ADRs, runbooks, and legal templates.
 
 ## [LAUNCH_HANDOFF.md](LAUNCH_HANDOFF.md) — what you need to do before paying customers
 

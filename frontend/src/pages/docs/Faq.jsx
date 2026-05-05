@@ -89,13 +89,16 @@ function Faq() {
         <li>Every authenticated request is logged for audit</li>
       </ul>
 
-      <h3>Can I self-host Command Center?</h3>
+      <h3>Why is the Command Center source public?</h3>
       <p>
-        Yes — the Command Center source is available at <a href="https://github.com/SourceBox-LLC/OpenSentry-Command" target="_blank" rel="noopener noreferrer">github.com/SourceBox-LLC/OpenSentry-Command</a>
-        under the AGPL-3.0. The project ships a <code>fly.toml</code> for Fly.io deployment
-        and a <code>Dockerfile</code> for anywhere else. You'll need your own Clerk
-        organization for auth; the database is SQLite by default (<code>DATABASE_URL</code>{" "}
-        env var if you want to point it elsewhere).
+        Command Center is a SaaS we host and operate — you sign up, we run it.
+        We publish the source at <a href="https://github.com/SourceBox-LLC/OpenSentry-Command" target="_blank" rel="noopener noreferrer">github.com/SourceBox-LLC/OpenSentry-Command</a>{" "}
+        under AGPL-3.0 for transparency: every claim on the security and
+        privacy pages points at the file that implements it, and a customer
+        or auditor can verify what we actually do — no analytics, no cloud ML
+        on your video, recordings encrypted at rest on hardware you own.
+        The piece designed to run on your premises is the CloudNode (GPL-3.0);
+        the Command Center is operated by us.
       </p>
 
       <h3>Which MCP clients does SourceBox Sentry work with?</h3>
@@ -131,9 +134,11 @@ function Faq() {
 
       <h3>What license is SourceBox Sentry under?</h3>
       <p>
-        Command Center is AGPL-3.0. CloudNode is GPL-3.0. Both are open source — you
-        can read, modify, and self-host the code. For commercial licensing that avoids
-        the copyleft obligations, contact <a href="https://github.com/SourceBox-LLC" target="_blank" rel="noopener noreferrer">SourceBox LLC</a>.
+        Command Center is AGPL-3.0 and CloudNode is GPL-3.0 — both public so
+        you can audit what we do with your data. CloudNode is the piece that
+        runs on your hardware; Command Center is the cloud service we operate.
+        For commercial licensing that avoids the copyleft obligations,
+        contact <a href="https://github.com/SourceBox-LLC" target="_blank" rel="noopener noreferrer">SourceBox LLC</a>.
       </p>
     </section>
   )

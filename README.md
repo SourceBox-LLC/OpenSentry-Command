@@ -35,6 +35,12 @@ SourceBox Sentry Command Center is the cloud hub for the SourceBox Sentry ecosys
 
 ---
 
+> **Looking for the product?** Sign up at the [live app](https://opensentry-command.fly.dev) — we host SourceBox Sentry as a SaaS, you don't run any servers. The repo is public for trust + transparency: every claim on `/security` and `/docs` points at the file that implements it.
+>
+> The Quick Start below is for **engineers who want to clone the repo and run it locally** — for code review, contributing fixes, or auditing what we run. It is **not** the install path for end users; users sign up at the link above. The CloudNode camera daemon (the piece that genuinely runs on customer hardware) is in a [separate repo](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) — its own README walks through installation.
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -514,7 +520,7 @@ You're at the plan's node limit. `GET /api/nodes/plan` returns `{ nodes_used, no
 
 ## License
 
-[AGPL-3.0](LICENSE) — source-available. You may self-host and modify the code, but if you offer a modified version to users over a network, AGPL §13 requires you to make your changes available to those users.
+[AGPL-3.0](LICENSE) — source-available. The code is public for trust + transparency: customers can audit the implementation behind the security and privacy claims on the live site, and the file-level pointers from `/security` make every claim verifiable. Command Center is operated by SourceBox LLC as a SaaS — running it yourself is allowed under AGPL but isn't the intended use case, and AGPL §13 obligates anyone who modifies it and offers a network-accessible version to publish their changes.
 
 This project is **not currently accepting external code contributions**. Bug reports and feature requests via [Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues) and [Discussions](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions) are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 

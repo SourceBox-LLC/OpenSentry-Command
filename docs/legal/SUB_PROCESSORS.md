@@ -115,14 +115,16 @@ terminate the affected Service per Section 4.4 of the
 
 ---
 
-## Sub-processors used by self-hosting deployments
+## If you fork and run your own copy
 
-If you self-host Command Center under the AGPL-3.0 license, the
-sub-processor relationships above do not apply to your deployment —
-you are then responsible for the relationships you create with your
-own hosting provider, auth provider, and any error-monitoring
-service. SourceBox LLC has no visibility into and no responsibility
-for self-hosted deployments.
+Command Center is a SaaS operated by SourceBox LLC; the sub-processor
+relationships above describe *our* deployment. If you exercise your
+AGPL-3.0 right to run a fork on your own infrastructure, those
+relationships do not apply to your deployment — you become responsible
+for the relationships you create with your own hosting provider, auth
+provider, and any error-monitoring service. SourceBox LLC has no
+visibility into and no responsibility for forks running outside our
+infrastructure.
 
 ---
 

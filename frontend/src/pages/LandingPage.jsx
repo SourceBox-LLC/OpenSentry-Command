@@ -100,10 +100,10 @@ function LandingPage() {
           <div className="landing-features-grid">
             <div className="landing-feature-card">
               <div className="landing-feature-icon">☁️</div>
-              <h3>Cloud-Hosted</h3>
+              <h3>Hosted by Us</h3>
               <p>
-                Deploy on Fly.io with zero infrastructure management. No port forwarding, 
-                no static IPs, no VPN required.
+                Sign up and connect cameras — no servers to run on your end. No
+                port forwarding, no static IPs, no VPN required.
               </p>
             </div>
             <div className="landing-feature-card">
@@ -296,8 +296,8 @@ function LandingPage() {
               </div>
               <h3>Command Center</h3>
               <p className="landing-arch-desc">
-                Web dashboard for viewing all cameras, managing organizations, and 
-                controlling access. Deployed on Fly.io with global CDN delivery.
+                Web dashboard for viewing all cameras, managing organizations, and
+                controlling access. Operated by SourceBox — you sign up, we run it.
               </p>
               <ul className="landing-arch-features">
                 <li>
@@ -504,7 +504,7 @@ function LandingPage() {
                 </div>
                 <div className="landing-diagram-node cloud">
                   <span>Command Center</span>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Fly.io + In-memory cache</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Hosted by SourceBox · in-memory cache</div>
                 </div>
                 <div className="landing-diagram-arrow">
                   <span>HTTPS</span>
@@ -581,7 +581,7 @@ function LandingPage() {
           <div className="landing-cta-content">
             <h2>Ready to Get Started?</h2>
             <p>
-              Deploy SourceBox Sentry today. Cloud-hosted, globally accessible, and free to start.
+              Sign up for SourceBox Sentry today. Cloud-hosted, globally accessible, and free to start.
             </p>
             <div className="landing-cta-actions">
               <Link to="/sign-up" className="landing-btn landing-btn-primary landing-btn-lg">
