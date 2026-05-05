@@ -57,8 +57,9 @@ terminate the affected Service per Section 4.4 of the
   separately so customers know where card data physically lives.
 
 ### Fly.io
-- **Service provided:** Application hosting, Postgres database,
-  global edge network, TLS termination.
+- **Service provided:** Application hosting, persistent volume
+  storage (holds the SourceBox SQLite database file), global edge
+  network, TLS termination.
 - **Personal Data processed:** All metadata SourceBox stores about
   Customer (account identity, audit logs, stream access logs, motion
   event metadata, settings rows). Fly.io does not see or process
