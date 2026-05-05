@@ -257,6 +257,25 @@ export async function getStreamLogs(getToken, params = {}) {
   return fetchWithAuth(`/api/audit/stream-logs?${queryString}`, getToken)
 }
 
+// Organization audit log — write_audit() rows for member changes,
+// MCP key gen, settings changes, danger-zone actions, etc.
+// Returns {total, limit, offset, logs}.
+export async function getOrgAuditLogs(getToken, params = {}) {
+  const queryString = new URLSearchParams(
+    Object.entries(params).filter(([_, v]) => v != null && v !== "")
+  ).toString()
+  return fetchWithAuth(`/api/audit-logs?${queryString}`, getToken)
+}
+
+// CSV export for the org audit log.  Same blob-download flow as the
+// other CSV exports.
+export async function downloadOrgAuditLogsCsv(getToken, params = {}) {
+  const cleanParams = Object.entries(params).filter(([_, v]) => v != null && v !== "")
+  cleanParams.push(["format", "csv"])
+  const qs = new URLSearchParams(cleanParams).toString()
+  return _downloadCsv(`/api/audit-logs?${qs}`, getToken, "audit-log.csv")
+}
+
 // GDPR Article 20 — full org data export as a ZIP.
 // Same blob-download flow as the CSV exports below; the backend
 // streams a ZIP containing one JSON file per org-scoped table

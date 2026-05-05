@@ -5750,6 +5750,37 @@ body {
     flex: 0 0 auto;
 }
 
+/* Pagination indicator used in OrgAuditLogPanel — sits between
+   Previous/Next buttons rather than rendering every page number
+   (which gets unwieldy past ~20 pages of audit log). */
+.audit-page-indicator {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    padding: 0 12px;
+    align-self: center;
+}
+
+/* Empty-cell placeholder in audit tables — used when username / IP /
+   details columns have no value for a row.  Keeps the table from
+   visually skipping cells while making "no data" obvious. */
+.audit-na {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+/* Details column in OrgAuditLogPanel — long JSON strings would push
+   the table off-screen.  Truncate with ellipsis; full value
+   accessible via the title attribute (browser tooltip on hover). */
+.audit-details {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
 .audit-filters {
     display: flex;
     gap: 1rem;

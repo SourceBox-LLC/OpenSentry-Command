@@ -5,6 +5,7 @@ import { getStreamLogs, getStreamStats, getNodes, getMcpLogs, getMcpLogStats, do
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
+import OrgAuditLogPanel from "../components/OrgAuditLogPanel.jsx"
 
 function AdminPage() {
   const { getToken } = useAuth()
@@ -470,6 +471,16 @@ function AdminPage() {
           </div>
         )}
       </div>
+
+      {/*
+        Organization Audit Log — write_audit() rows for member changes,
+        MCP key gen, settings changes, danger-zone actions, etc.
+        Self-contained component owns its state; mounted between the
+        camera-stream audit (above) and the MCP-tool audit (below)
+        so the three audit surfaces flow naturally as the operator
+        scrolls.
+      */}
+      <OrgAuditLogPanel />
 
       {/* MCP Activity Logs */}
       <div className="audit-section">

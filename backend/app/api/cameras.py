@@ -1,5 +1,6 @@
 import logging
 from datetime import UTC, datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -542,9 +543,19 @@ async def list_audit_logs(
     request: Request,
     user: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
-    # Capped at 500 to bound the response payload — without `le` an
-    # attacker or runaway script could force a table-scan-size return.
+    # Filters — all optional; the dashboard's filter UI sends them
+    # only when the operator narrows the view.  The same filters
+    # apply to the CSV branch so an exported audit window matches
+    # what the operator was looking at on screen.
+    event: Optional[str] = Query(default=None),
+    username: Optional[str] = Query(default=None),
+    # Pagination matches the sibling /api/audit/stream-logs +
+    # /api/mcp/activity/logs response shape so the frontend can
+    # share the pagination component logic across all three.
+    # OFFSET cap defends against a "skip a billion rows" attack
+    # — SQLite's OFFSET is O(n) even with an index.
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=1_000_000),
     # ``format=csv`` switches the response from JSON to a streaming
     # CSV download.  Honoured for the same admin auth as the JSON
     # path; same per-org bucket counts against the 120/min limit.
@@ -554,21 +565,43 @@ async def list_audit_logs(
 ):
     """List audit logs for the user's organization.
 
-    Returns JSON by default; pass ``?format=csv`` for a download
-    suitable for spreadsheet review or compliance archiving.
+    Returns ``{total, limit, offset, logs}`` JSON by default — same
+    shape as ``/api/audit/stream-logs`` and ``/api/mcp/activity/logs``
+    so the dashboard's pagination/filter logic is shared across the
+    three audit surfaces.
+
+    Pass ``?format=csv`` for a streaming download suitable for
+    spreadsheet review or compliance archiving.  Filters apply to
+    both JSON and CSV.
     """
+    query = db.query(AuditLog).filter(AuditLog.org_id == user.org_id)
+
+    if event:
+        query = query.filter(AuditLog.event == event)
+
+    if username:
+        # Case-insensitive substring match on the human-readable
+        # username field.  Admin-only endpoint so this is filter
+        # precision, not a security boundary; underscores in usernames
+        # are common (clerk_user_xyz) so escape SQL-LIKE wildcards
+        # the user doesn't actually want.
+        escaped = (
+            username
+            .replace("\\", "\\\\")
+            .replace("%", "\\%")
+            .replace("_", "\\_")
+        )
+        query = query.filter(
+            AuditLog.username.ilike(f"%{escaped}%", escape="\\")
+        )
+
     if format == "csv":
         # CSV exports are bound by row count, not by JSON payload size.
         # Lift the limit substantially so an org admin can grab a
         # meaningful chunk of history in one call.  At 50k rows × ~200
         # bytes/row = ~10 MB CSV — within reasonable download size and
         # still constant-memory thanks to the streaming generator.
-        csv_query = (
-            db.query(AuditLog)
-            .filter_by(org_id=user.org_id)
-            .order_by(AuditLog.timestamp.desc())
-            .limit(50_000)
-        )
+        csv_query = query.order_by(AuditLog.timestamp.desc()).limit(50_000)
 
         def _rows():
             for log in csv_query.yield_per(500):
@@ -587,14 +620,19 @@ async def list_audit_logs(
             rows=_rows(),
         )
 
+    total = query.count()
     logs = (
-        db.query(AuditLog)
-        .filter_by(org_id=user.org_id)
-        .order_by(AuditLog.timestamp.desc())
+        query.order_by(AuditLog.timestamp.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )
-    return [l.to_dict() for l in logs]
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "logs": [l.to_dict() for l in logs],
+    }
 
 
 # Health Check (for API endpoint health)
