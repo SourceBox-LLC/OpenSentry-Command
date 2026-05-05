@@ -1,10 +1,11 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.auth import AuthUser, require_admin
 from app.core.database import get_db
-from app.core.auth import require_admin, AuthUser
 from app.models import StreamAccessLog
 
 router = APIRouter(prefix="/api", tags=["audit"])
@@ -78,7 +79,7 @@ async def get_stream_stats(
     _require_admin_feature(admin)
     from sqlalchemy import func
 
-    since = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    since = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(days=days)
 
     base_query = db.query(StreamAccessLog).filter(
         StreamAccessLog.org_id == admin.org_id,

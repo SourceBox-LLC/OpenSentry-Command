@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -68,7 +68,7 @@ def run_one_tick(db: Session) -> dict:
     # picks it up.  Idempotency-key on the Resend send protects
     # against duplicate delivery if the original send actually
     # succeeded before the crash.
-    reclaim_cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(
+    reclaim_cutoff = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(
         seconds=_SENDING_RECLAIM_AGE_SECONDS
     )
     reclaimed = (
@@ -95,7 +95,7 @@ def run_one_tick(db: Session) -> dict:
     if not pending:
         return summary
 
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     for row in pending:
         row.status = "sending"
         row.last_attempt_at = now
@@ -240,7 +240,7 @@ def _finalize_row(
 
     if status == "sent":
         row.status = "sent"
-        row.sent_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        row.sent_at = datetime.now(tz=UTC).replace(tzinfo=None)
         row.resend_message_id = message_id
         row.error = None
     elif status == "suppressed":

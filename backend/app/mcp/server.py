@@ -17,32 +17,31 @@ import logging
 import threading
 import time
 import uuid as uuid_mod
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware.middleware import Middleware
-from fastmcp.exceptions import ToolError
 from fastmcp.utilities.types import Image
 from pydantic import Field
 from sqlalchemy.orm import Session
 
+from app.api.hls import _segment_cache
 from app.core.database import SessionLocal
+from app.mcp.activity import McpEvent, tracker
 from app.models.models import (
+    INCIDENT_SEVERITIES,
+    INCIDENT_STATUSES,
     Camera,
     CameraGroup,
     CameraNode,
-    INCIDENT_SEVERITIES,
-    INCIDENT_STATUSES,
     Incident,
     IncidentEvidence,
     McpApiKey,
-    Setting,
     StreamAccessLog,
 )
-from app.api.hls import _segment_cache
-from app.mcp.activity import tracker, McpEvent
 
 logger = logging.getLogger(__name__)
 
@@ -340,7 +339,7 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
                 )
 
         # Touch last_used_at
-        mcp_key.last_used_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        mcp_key.last_used_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
 
         # Set context vars for the activity tracker
@@ -352,7 +351,7 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         raise
     except Exception:
         db.close()
-        raise ToolError("Authentication error")
+        raise ToolError("Authentication error") from None
 
 
 def _auth():
@@ -591,9 +590,9 @@ async def view_camera(
             node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
         )
     except TimeoutError:
-        raise ToolError("Snapshot timed out — camera node did not respond in time")
+        raise ToolError("Snapshot timed out — camera node did not respond in time") from None
     except ValueError as e:
-        raise ToolError(str(e))
+        raise ToolError(str(e)) from e
 
     image_b64 = _extract_snapshot_image_b64(result, camera_id)
     return Image(data=base64.b64decode(image_b64), format="jpeg")
@@ -920,7 +919,7 @@ def get_stream_stats(
     try:
         from sqlalchemy import func
 
-        cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+        cutoff = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(days=days)
         base = db.query(StreamAccessLog).filter(
             StreamAccessLog.org_id == org_id,
             StreamAccessLog.accessed_at >= cutoff,
@@ -1112,9 +1111,9 @@ async def _capture_snapshot_bytes(
             node_id, "take_snapshot", {"camera_id": camera_id}, timeout=15.0,
         )
     except TimeoutError:
-        raise ToolError("Snapshot timed out — camera node did not respond in time")
+        raise ToolError("Snapshot timed out — camera node did not respond in time") from None
     except ValueError as e:
-        raise ToolError(str(e))
+        raise ToolError(str(e)) from e
 
     image_b64 = _extract_snapshot_image_b64(result, camera_id)
     return base64.b64decode(image_b64), node_id
@@ -1269,7 +1268,7 @@ def add_observation(
         )
         db.add(evidence)
         # Touch the incident so updated_at refreshes
-        incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        incident.updated_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
         db.refresh(evidence)
         return evidence.to_dict()
@@ -1323,7 +1322,7 @@ async def attach_snapshot(
         # Touch parent
         incident = db.query(Incident).filter_by(id=incident_id).first()
         if incident:
-            incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+            incident.updated_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
         db.refresh(evidence)
         return evidence.to_dict()
@@ -1437,7 +1436,7 @@ def attach_clip(
         db.add(evidence)
         incident = db.query(Incident).filter_by(id=incident_id).first()
         if incident:
-            incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+            incident.updated_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
         db.refresh(evidence)
         result = evidence.to_dict()
@@ -1512,7 +1511,7 @@ def update_incident(
                 "resolved",
                 "dismissed",
             ):
-                incident.resolved_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+                incident.resolved_at = datetime.now(tz=UTC).replace(tzinfo=None)
                 incident.resolved_by = _agent_label()
             elif status == "open":
                 incident.resolved_at = None
@@ -1566,7 +1565,7 @@ def finalize_incident(
             raise ToolError(f"Incident {incident_id} not found")
 
         incident.report = report.strip()
-        incident.updated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        incident.updated_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
         db.refresh(incident)
         return incident.to_dict()

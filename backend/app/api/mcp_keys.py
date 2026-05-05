@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_label, write_audit
-from app.core.auth import AuthUser, require_admin, require_active_billing
+from app.core.auth import AuthUser, require_active_billing, require_admin
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.mcp.server import MCP_ALL_TOOLS, MCP_READ_TOOLS, MCP_WRITE_TOOLS, mcp
@@ -91,7 +91,7 @@ async def create_mcp_key(
         from app.api.notifications import create_notification
         actor = audit_label(user) or user.user_id or "unknown user"
         scope_summary = (
-            f"all tools" if scope_mode != "custom"
+            "all tools" if scope_mode != "custom"
             else f"{len(scope_tools or [])} scoped tool(s)"
         )
         create_notification(

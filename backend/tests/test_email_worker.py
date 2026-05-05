@@ -14,14 +14,13 @@ failed | back-to-pending} → log row.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from app.core import email_worker
 from app.core.email import EmailSendResult
 from app.models.models import EmailLog, EmailOutbox, EmailSuppression
-
 
 # ── Test fixtures ────────────────────────────────────────────────────
 
@@ -131,9 +130,10 @@ def test_worker_orders_by_created_at(db, stub_send):
     older = _make_outbox_row(db, recipient="old@example.com")
     # Force an explicit older timestamp — SQLite default-resolution
     # can collide on rapid inserts.
-    older.created_at = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(seconds=30)
+    older.created_at = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(seconds=30)
     db.commit()
-    newer = _make_outbox_row(db, recipient="new@example.com")
+    # Side-effect insert; the row is identified by recipient below.
+    _make_outbox_row(db, recipient="new@example.com")
 
     email_worker.run_one_tick(db)
 
@@ -327,7 +327,7 @@ def test_worker_reclaims_stuck_sending_rows(db, stub_send):
     gets flipped back to 'pending' and re-processed on the next tick.
     Resend's idempotency-key header (set in core/email.py) ensures we
     don't double-send if the original attempt actually succeeded."""
-    old = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(seconds=120)
+    old = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(seconds=120)
     row = _make_outbox_row(
         db, recipient="alice@example.com",
         status="sending", last_attempt_at=old,
@@ -345,7 +345,7 @@ def test_worker_does_not_reclaim_recently_claimed_rows(db, stub_send):
     """A row flipped to 'sending' 5 seconds ago must NOT be
     reclaimed — the worker that claimed it could still be in-flight,
     and reclaiming would cause a true duplicate send."""
-    recent = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(seconds=5)
+    recent = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(seconds=5)
     row = _make_outbox_row(
         db, recipient="alice@example.com",
         status="sending", last_attempt_at=recent,

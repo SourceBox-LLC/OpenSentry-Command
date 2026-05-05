@@ -25,7 +25,7 @@ What's pinned here:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -40,7 +40,6 @@ from app.models.models import (
     Setting,
 )
 
-
 # ── Tick runner ────────────────────────────────────────────────────
 
 
@@ -49,13 +48,13 @@ def _run_one_motion_digest_tick(test_session):
     DB.  Mirrors the loop body in app/main.py exactly (modulo the
     asyncio.sleep + outer try/except)."""
     from app.api.notifications import (
+        _motion_cooldown_minutes,
         create_notification,
         email_enabled_for_kind,
-        _motion_cooldown_minutes,
     )
 
     db = test_session  # use the test fixture's session directly
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     anchors = (
         db.query(Setting)
         .filter(Setting.key.like("motion_email_cooldown_start:%"))
@@ -221,7 +220,7 @@ def test_digest_emits_when_extras_present(db, monkeypatch, stub_recipients):
     row, anchor deleted."""
     _enable_motion_email(db, monkeypatch)
     _seed_camera(db)
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=20)
     _seed_anchor(db, camera_id="cam_front_door", when=anchor_ts)
     _seed_motion_events(db, camera_id="cam_front_door", count=5, base_time=anchor_ts)
 
@@ -248,7 +247,7 @@ def test_digest_silent_when_no_extras(db, monkeypatch, stub_recipients):
     anchor lifetime ends regardless of count)."""
     _enable_motion_email(db, monkeypatch)
     _seed_camera(db)
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=20)
     _seed_anchor(db, camera_id="cam_front_door", when=anchor_ts)
     # No MotionEvent rows seeded in the window.
 
@@ -270,7 +269,7 @@ def test_digest_skips_open_window(db, monkeypatch, stub_recipients):
     Loop must NOT emit OR delete the anchor."""
     _enable_motion_email(db, monkeypatch)
     _seed_camera(db)
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=5)
     _seed_anchor(db, camera_id="cam_front_door", when=anchor_ts)
     _seed_motion_events(db, camera_id="cam_front_door", count=3, base_time=anchor_ts)
 
@@ -293,7 +292,7 @@ def test_digest_respects_email_motion_toggle(db, monkeypatch, stub_recipients):
     monkeypatch.setattr(notifications_mod.settings, "EMAIL_ENABLED", True)
     Setting.set(db, "org_test123", "email_motion", "false")
     _seed_camera(db)
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=20)
     _seed_anchor(db, camera_id="cam_front_door", when=anchor_ts)
     _seed_motion_events(db, camera_id="cam_front_door", count=3, base_time=anchor_ts)
 
@@ -320,7 +319,7 @@ def test_digest_silent_when_inbox_motion_muted(db, monkeypatch, stub_recipients)
     _enable_motion_email(db, monkeypatch)
     Setting.set(db, "org_test123", "motion_notifications", "false")
     _seed_camera(db)
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=20)
     _seed_anchor(db, camera_id="cam_front_door", when=anchor_ts)
     _seed_motion_events(db, camera_id="cam_front_door", count=4, base_time=anchor_ts)
 
@@ -347,7 +346,7 @@ def test_digest_orphan_anchor_for_deleted_camera(
     forever in the Settings table."""
     _enable_motion_email(db, monkeypatch)
     # No _seed_camera and no MotionEvents.
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=20)
     _seed_anchor(db, camera_id="cam_ghost", when=anchor_ts)
 
     _run_one_motion_digest_tick(db)
@@ -371,7 +370,7 @@ def test_digest_uses_current_cooldown_minutes(db, monkeypatch, stub_recipients):
     _seed_camera(db)
     # Anchor 5 minutes ago — would NOT be expired with the default 15
     # min cooldown.  But we'll change the setting to 1 minute below.
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=5)
     _seed_anchor(db, camera_id="cam_front_door", when=anchor_ts)
     _seed_motion_events(db, camera_id="cam_front_door", count=2, base_time=anchor_ts)
 
@@ -395,7 +394,7 @@ def test_digest_multiple_orgs_independent(db, monkeypatch, stub_recipients):
     # org_other doesn't need a Camera row — digest will skip it for
     # the email-disabled reason before the camera lookup matters.
 
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=20)
     _seed_anchor(db, camera_id="cam_a", when=anchor_ts, org_id="org_test123")
     _seed_anchor(db, camera_id="cam_b", when=anchor_ts, org_id="org_other_456")
     _seed_motion_events(
@@ -470,7 +469,7 @@ def test_digest_count_excludes_anchor_event_itself(
     fails the test (and produces an off-by-one in user-facing copy)."""
     _enable_motion_email(db, monkeypatch)
     _seed_camera(db)
-    anchor_ts = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=20)
+    anchor_ts = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=20)
     _seed_anchor(db, camera_id="cam_front_door", when=anchor_ts)
 
     # Insert one MotionEvent at exactly anchor_ts (the immediate event)

@@ -1,10 +1,11 @@
 import httpx
+from clerk_backend_api.security import AuthenticateRequestOptions
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+
+from app.core.clerk import clerk
 from app.core.config import settings
 from app.core.database import get_db
-from clerk_backend_api.security import AuthenticateRequestOptions
-from app.core.clerk import clerk
 
 
 class AuthUser:
@@ -185,16 +186,31 @@ async def get_current_user(request: Request) -> AuthUser:
             # Monitoring should never fail auth.
             pass
 
+        # Stamp the org_id into the per-request contextvar so the
+        # logging filter (app/core/logging_setup.py) injects it onto
+        # every log record this request produces.  Auth failures
+        # don't reach this line, so their log lines render as "org=-"
+        # which is the correct signal.
+        try:
+            from app.core.request_context import set_org_id
+
+            set_org_id(org_id)
+        except Exception:
+            # Logging context wiring should never fail auth.
+            pass
+
         return auth_user
     except HTTPException:
         raise
     except Exception:
         import logging
         logging.getLogger(__name__).error("Authentication failed", exc_info=True)
+        # Don't leak the underlying auth-internal error in the chain — the log
+        # line above already captured it for operators; clients only see 401.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication failed",
-        )
+        ) from None
 
 
 async def require_view(user: AuthUser = Depends(get_current_user)) -> AuthUser:

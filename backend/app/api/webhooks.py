@@ -1,18 +1,26 @@
-import json
 import logging
-from datetime import datetime, timezone
-from fastapi import APIRouter, Request, HTTPException, status, Depends
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from svix.webhooks import Webhook, WebhookVerificationError
-from app.core.config import settings
+
 from app.core.clerk import clerk
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.plans import enforce_camera_cap
 from app.models.models import (
-    Setting, CameraNode, McpApiKey, McpActivityLog, StreamAccessLog,
-    AuditLog, CameraGroup, ProcessedWebhook,
-    EmailOutbox, EmailSuppression,
+    AuditLog,
+    CameraGroup,
+    CameraNode,
+    EmailOutbox,
+    EmailSuppression,
+    McpActivityLog,
+    McpApiKey,
+    ProcessedWebhook,
+    Setting,
+    StreamAccessLog,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +78,7 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
         wh = Webhook(settings.CLERK_WEBHOOK_SECRET)
         event = wh.verify(payload, headers)
     except WebhookVerificationError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature") from None
 
     event_type = event.get("type")
     data = event.get("data", {})
@@ -144,7 +152,7 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             # Clerk will retry payment via Stripe dunning. We keep current
             # plan access during the grace period but flag the org.
             Setting.set(db, org_id, "payment_past_due", "true")
-            past_due_at = data.get("pastDueAt") or datetime.now(tz=timezone.utc).isoformat()
+            past_due_at = data.get("pastDueAt") or datetime.now(tz=UTC).isoformat()
             Setting.set(db, org_id, "payment_past_due_at", str(past_due_at))
             logger.warning("Org %s subscription is past due — payment failed", org_id)
 
@@ -422,7 +430,7 @@ async def resend_webhook(request: Request, db: Session = Depends(get_db)):
         wh = Webhook(settings.RESEND_WEBHOOK_SECRET)
         event = wh.verify(payload, headers)
     except WebhookVerificationError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid signature") from None
 
     # Resend's event payload shape:
     #   {"type": "email.bounced", "data": {"email_id": "...", "to": ["..."], ...}, "created_at": "..."}

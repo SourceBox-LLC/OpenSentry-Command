@@ -18,7 +18,7 @@ We don't run the entire ``_log_cleanup_loop`` (async, infinite, sleeps
 same five models, which is where the bug actually was.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from sqlalchemy import select, union
 
@@ -34,7 +34,7 @@ from app.models.models import (
 
 def _utcnow_naive() -> datetime:
     """Match the pattern the cleanup loop uses for log timestamps."""
-    return datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    return datetime.now(tz=UTC).replace(tzinfo=None)
 
 
 def _build_org_id_union():

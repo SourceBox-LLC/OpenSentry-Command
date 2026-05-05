@@ -7,17 +7,16 @@ tools (see app/mcp/server.py). The dashboard reads here through the
 the rest of the MCP audit surface.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-
-from app.core.limiter import limiter
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models.models import (
     INCIDENT_SEVERITIES,
     INCIDENT_STATUSES,
@@ -155,7 +154,7 @@ async def update_incident(
             "resolved",
             "dismissed",
         ):
-            incident.resolved_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+            incident.resolved_at = datetime.now(tz=UTC).replace(tzinfo=None)
             incident.resolved_by = f"user:{user.user_id}"
         elif patch.status == "open":
             # Re-opening clears the resolution

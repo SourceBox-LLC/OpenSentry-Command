@@ -1,6 +1,6 @@
 """Unit tests for ``app.core.plans``."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from app.core.plans import (
     PAYMENT_GRACE_DAYS,
@@ -71,7 +71,7 @@ def _seed_org_and_cameras(db, org_id: str, count: int, plan: str | None = None) 
     db.add(node)
     db.flush()
 
-    base = datetime(2024, 1, 1, tzinfo=timezone.utc).replace(tzinfo=None)
+    base = datetime(2024, 1, 1, tzinfo=UTC).replace(tzinfo=None)
     cameras: list[Camera] = []
     for i in range(count):
         cam = Camera(
@@ -221,7 +221,7 @@ def _set_past_due(db, org_id: str, days_ago: float):
     the past (float for sub-day precision)."""
     Setting.set(db, org_id, "payment_past_due", "true")
     past_due_at = (
-        datetime.now(tz=timezone.utc) - timedelta(days=days_ago)
+        datetime.now(tz=UTC) - timedelta(days=days_ago)
     ).isoformat()
     Setting.set(db, org_id, "payment_past_due_at", past_due_at)
     db.flush()

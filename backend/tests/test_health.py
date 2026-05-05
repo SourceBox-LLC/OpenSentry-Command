@@ -159,9 +159,10 @@ def test_health_detailed_does_not_leak_org_or_camera_ids(
     field. Counts are fine; identifiers are not."""
     # Seed something so the cache + subscriber maps could leak names if
     # we built them wrong.
+    import asyncio as _asyncio
+
     from app.api.hls import _playlist_cache, _segment_cache
     from app.api.notifications import notification_broadcaster
-    import asyncio as _asyncio
 
     _playlist_cache["org_secret_camera_123"] = ("playlist body", 0.0)
     _segment_cache["org_secret_camera_123"] = {}

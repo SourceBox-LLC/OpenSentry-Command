@@ -16,7 +16,6 @@ import pytest
 from app.core import email as email_mod
 from app.core.email import EmailSendResult, send_email
 
-
 # ── Kill-switch ──────────────────────────────────────────────────────
 
 def test_send_email_kill_switch_short_circuits(monkeypatch):

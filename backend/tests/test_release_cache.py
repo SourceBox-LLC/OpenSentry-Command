@@ -9,7 +9,8 @@ here; we don't want unit tests to hit GitHub.  The conftest fixture
 
 import pytest
 
-from app.core import release_cache, versions as versions_mod
+from app.core import release_cache
+from app.core import versions as versions_mod
 from app.core.release_cache import _strip_leading_v, latest_node_version
 
 

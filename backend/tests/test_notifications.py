@@ -12,7 +12,7 @@ Exercises:
 """
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -225,7 +225,7 @@ def test_clear_all_is_per_user_not_per_org(viewer_client, db):
                        audience="all", db=db)
 
     # Simulate a different user in the same org clearing their inbox.
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     other = UserNotificationState(
         clerk_user_id="user_someone_else",
         org_id="org_test123",
@@ -391,7 +391,7 @@ def test_transition_emits_on_fresh_boot_low_monotonic(db, monkeypatch):
 # ── Offline sweep ─────────────────────────────────────────────────
 
 def _make_node(db, *, node_id, org_id, status, last_seen_minutes_ago, name=None):
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     node = CameraNode(
         node_id=node_id,
         org_id=org_id,
@@ -407,7 +407,7 @@ def _make_node(db, *, node_id, org_id, status, last_seen_minutes_ago, name=None)
 
 
 def _make_camera(db, *, camera_id, org_id, status, last_seen_minutes_ago, node=None, name=None):
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     cam = Camera(
         camera_id=camera_id,
         org_id=org_id,
@@ -516,7 +516,7 @@ def test_offline_sweep_debounces_repeat_runs(db):
     # and run again — should NOT emit a second notification.
     cam = db.query(Camera).filter_by(camera_id="cam_flap").one()
     cam.status = "online"
-    cam.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=5)
+    cam.last_seen = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=5)
     db.commit()
 
     run_offline_sweep(db)
@@ -1218,6 +1218,7 @@ def test_unsubscribe_endpoint_html_escapes_kind(unauthenticated_client):
     but the escape protects against future paths that might surface
     less-trusted input here."""
     import jwt
+
     from app.core.email_unsubscribe import _get_secret
 
     # Use an unknown kind so we hit the "not in _EMAIL_KIND_TO_SETTING"

@@ -1,20 +1,20 @@
 import hashlib
+import logging
 import re
 import threading
 import time
-import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.core.database import SessionLocal, get_db
-from app.core.config import settings
 from app.core.auth import get_current_user
+from app.core.config import settings
+from app.core.database import SessionLocal, get_db
 from app.core.limiter import limiter
 from app.models import Camera, CameraNode, StreamAccessLog
-from app.models.models import Setting
-from app.models.models import OrgMonthlyUsage
+from app.models.models import OrgMonthlyUsage, Setting
 
 router = APIRouter(prefix="/api/cameras/{camera_id}", tags=["streaming"])
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ async def _read_capped_body(request: Request, max_bytes: int) -> bytes:
         except ValueError:
             raise HTTPException(
                 status_code=400, detail="Invalid Content-Length header"
-            )
+            ) from None
         if declared_int > max_bytes:
             raise HTTPException(
                 status_code=413,
@@ -141,7 +141,7 @@ _cached_viewer_seconds: dict[tuple[str, str], int] = {}   # (org_id, ym) → DB 
 def _current_year_month() -> str:
     """UTC-month bucket key — ``YYYY-MM``. Caches get reset when a new
     month starts simply by the key changing; nothing to evict explicitly."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m")
+    return datetime.now(tz=UTC).strftime("%Y-%m")
 
 
 def record_viewer_second(org_id: str) -> None:
@@ -320,7 +320,7 @@ def _evict_global_oldest(max_total_bytes: int) -> int:
     candidates.sort()
 
     evicted = 0
-    for ts, cam_id, fname, size in candidates:
+    for _ts, cam_id, fname, size in candidates:
         if total <= max_total_bytes:
             break
         cam_cache = _segment_cache.get(cam_id)
@@ -402,7 +402,7 @@ def _maybe_log_access(
     _last_access_logged[key] = now
 
     try:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         log_entry = StreamAccessLog(
             user_id=user_id,
@@ -412,7 +412,7 @@ def _maybe_log_access(
             node_id=node_id,
             ip_address=ip_address,
             user_agent=user_agent,
-            accessed_at=datetime.now(tz=timezone.utc).replace(tzinfo=None),
+            accessed_at=datetime.now(tz=UTC).replace(tzinfo=None),
         )
         db.add(log_entry)
         db.commit()
@@ -630,8 +630,8 @@ async def push_segment(
     # with non-retryable push failures.
     if camera.disabled_by_plan:
         from app.core.plans import (
-            get_plan_limits_for_org,
             get_plan_display_name,
+            get_plan_limits_for_org,
         )
         limits = get_plan_limits_for_org(db, node.org_id)
         plan_name = get_plan_display_name(limits.get("_plan", "free_org"))
@@ -712,7 +712,7 @@ async def update_hls_playlist(
     except UnicodeDecodeError as e:
         raise HTTPException(
             status_code=400, detail=f"Invalid playlist content: {e}"
-        )
+        ) from e
 
     # Pre-compute the rewritten playlist with proxy segment URLs
     # and cache it. Browser polls will serve this instantly.

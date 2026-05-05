@@ -11,7 +11,7 @@ verification path breaks, these tests break with it.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -30,7 +30,7 @@ def _signed_post(client, event_type: str, data: dict, *, secret: str = TEST_WEBH
     """POST a signed Clerk-style webhook to /api/webhooks/clerk."""
     payload = json.dumps({"type": event_type, "data": data})
     msg_id = f"msg_{event_type.replace('.', '_')}_test"
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
 
     sig = Webhook(secret).sign(msg_id, ts, payload)
 
@@ -191,7 +191,7 @@ def test_duplicate_svix_id_is_no_op(webhook_client, db):
         },
     })
     msg_id = "msg_dedup_test_42"
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
     sig = Webhook(TEST_WEBHOOK_SECRET).sign(msg_id, ts, payload)
     headers = {
         "svix-id": msg_id,

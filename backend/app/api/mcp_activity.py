@@ -10,7 +10,7 @@ The admin dashboard uses the /logs and /logs/stats endpoints for historical data
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,8 +19,8 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
 from app.core.database import get_db
-from app.models.models import McpActivityLog
 from app.mcp.activity import MAX_SSE_SUBSCRIBERS_PER_ORG, tracker
+from app.models.models import McpActivityLog
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ async def stream_activity(user: AuthUser = Depends(require_admin)):
                     payload = event.to_dict()
                     payload["type"] = "tool_call"
                     yield f"data: {json.dumps(payload)}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Send keepalive to prevent connection timeout
                     yield ": keepalive\n\n"
         except asyncio.CancelledError:
@@ -167,7 +167,7 @@ async def get_mcp_log_stats(
     """Get aggregate MCP activity statistics from persisted logs."""
     from sqlalchemy import func
 
-    since = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    since = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(days=days)
 
     base = db.query(McpActivityLog).filter(
         McpActivityLog.org_id == admin.org_id,

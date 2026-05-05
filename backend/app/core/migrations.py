@@ -27,7 +27,7 @@ Caveats:
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine

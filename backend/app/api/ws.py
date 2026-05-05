@@ -23,15 +23,15 @@ import logging
 import time
 import uuid
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.versions import check_node_version
-from app.models import CameraNode, Camera, MotionEvent
+from app.models import Camera, CameraNode, MotionEvent
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +144,10 @@ class ConnectionManager:
                 "payload": payload or {},
             })
             return await asyncio.wait_for(future, timeout=timeout)
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"Command {command} to node {node_id} timed out")
+        except TimeoutError:
+            raise TimeoutError(f"Command {command} to node {node_id} timed out") from None
         except asyncio.CancelledError:
-            raise ValueError(f"Node {node_id} disconnected while awaiting {command}")
+            raise ValueError(f"Node {node_id} disconnected while awaiting {command}") from None
         finally:
             self._pending_commands.pop(correlation_id, None)
 
@@ -227,7 +227,7 @@ async def node_websocket(
                 # omitted when there's nothing to say (no update, supported)
                 # so old nodes that don't parse the new fields stay happy.
                 ack_payload = {
-                    "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
+                    "timestamp": datetime.now(tz=UTC).replace(tzinfo=None).isoformat(),
                 }
                 if hb_result and hb_result.get("update_available"):
                     ack_payload["update_available"] = hb_result["update_available"]
@@ -304,13 +304,13 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
         reported_version = payload.get("node_version")
         version_check = check_node_version(reported_version)
         node.node_version = version_check["parsed"] if reported_version else None
-        node.version_checked_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        node.version_checked_at = datetime.now(tz=UTC).replace(tzinfo=None)
         response["update_available"] = version_check["update_available"]
         response["unsupported"] = not version_check["supported"]
 
         prev_node_status = node.status
         node.status = "online"
-        node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        node.last_seen = datetime.now(tz=UTC).replace(tzinfo=None)
 
         if prev_node_status != "online":
             transitions.append(("node", node.node_id, node.name or node.node_id, "online", None))
@@ -328,7 +328,7 @@ async def _handle_heartbeat(node_id: str, node_db_id: int, org_id: str, payload:
                     Camera.node_id == node_db_id,
                 ).all()
                 cam_map = {c.camera_id: c for c in cams}
-                now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+                now = datetime.now(tz=UTC).replace(tzinfo=None)
                 for cam_data in cameras:
                     cam = cam_map.get(cam_data.get("camera_id"))
                     if cam:
@@ -422,7 +422,7 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
         except (ValueError, TypeError):
             logger.debug("Unparseable timestamp from node %s, using server time", node_id)
     if ts is None:
-        ts = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        ts = datetime.now(tz=UTC).replace(tzinfo=None)
 
     try:
         seq = int(segment_seq) if segment_seq is not None else None
@@ -494,8 +494,8 @@ async def _handle_motion_event(node_id: str, org_id: str, payload: dict):
         # history in the bell panel.  Resolve the camera name for a
         # friendlier title — fall back to the camera_id if not found.
         try:
-            from app.models.models import Camera
             from app.api.notifications import create_notification
+            from app.models.models import Camera
 
             cam = (
                 db.query(Camera)

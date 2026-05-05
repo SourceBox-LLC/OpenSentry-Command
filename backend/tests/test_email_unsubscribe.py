@@ -19,7 +19,6 @@ import pytest
 
 from app.core import email_unsubscribe
 
-
 # ── Round-trip ──────────────────────────────────────────────────────
 
 def test_make_and_verify_token_roundtrip():

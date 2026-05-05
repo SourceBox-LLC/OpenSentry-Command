@@ -1,8 +1,9 @@
 """Tests for motion detection event endpoints."""
 
-from datetime import datetime, timedelta, timezone
-from app.models.models import MotionEvent
+from datetime import UTC, datetime, timedelta, timezone
+
 from app.api.motion import motion_broadcaster
+from app.models.models import MotionEvent
 
 
 def test_list_motion_events_empty(viewer_client):
@@ -16,7 +17,7 @@ def test_list_motion_events_empty(viewer_client):
 
 def test_list_motion_events_with_data(viewer_client, db):
     """Motion events are returned in reverse chronological order."""
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     for i in range(3):
         db.add(MotionEvent(
             org_id="org_test123",
@@ -40,7 +41,7 @@ def test_list_motion_events_with_data(viewer_client, db):
 
 def test_list_motion_events_camera_filter(viewer_client, db):
     """Filtering by camera_id returns only matching events."""
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     db.add(MotionEvent(org_id="org_test123", camera_id="cam_front", node_id="n1", score=80, timestamp=now))
     db.add(MotionEvent(org_id="org_test123", camera_id="cam_back", node_id="n1", score=60, timestamp=now))
     db.commit()
@@ -54,7 +55,7 @@ def test_list_motion_events_camera_filter(viewer_client, db):
 
 def test_motion_events_org_isolation(viewer_client, db):
     """Events from other orgs are not visible."""
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     db.add(MotionEvent(org_id="org_test123", camera_id="cam_1", node_id="n1", score=90, timestamp=now))
     db.add(MotionEvent(org_id="org_other", camera_id="cam_2", node_id="n2", score=85, timestamp=now))
     db.commit()
@@ -67,7 +68,7 @@ def test_motion_events_org_isolation(viewer_client, db):
 
 def test_motion_stats(viewer_client, db):
     """Stats endpoint returns per-camera aggregates."""
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     for score in [40, 60, 80]:
         db.add(MotionEvent(
             org_id="org_test123", camera_id="cam_front", node_id="n1",

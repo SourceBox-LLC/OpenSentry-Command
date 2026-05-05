@@ -17,7 +17,7 @@ The cleanup loop itself stays a thin scheduler around this function (see
 suite in ``test_notifications.py``.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from app.core.database import SessionLocal
 from app.main import run_log_cleanup
@@ -35,7 +35,7 @@ from app.models.models import (
 
 def _utcnow_naive() -> datetime:
     """Match the timestamp pattern the cleanup loop uses."""
-    return datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    return datetime.now(tz=UTC).replace(tzinfo=None)
 
 
 def _seed_logs_at(db, *, org_id: str, when: datetime) -> None:

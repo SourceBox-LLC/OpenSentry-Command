@@ -21,7 +21,6 @@ from app.core.auth import AuthUser
 from app.core.database import Base, engine, get_db
 from app.main import app
 
-
 # Reuse the app's engine (which is now in-memory thanks to DATABASE_URL override)
 TestSession = sessionmaker(bind=engine)
 
@@ -136,7 +135,7 @@ def _make_viewer_user(org_id="org_test123"):
 @pytest.fixture
 def admin_client():
     """Test client authenticated as an admin user."""
-    from app.core.auth import require_admin, get_current_user
+    from app.core.auth import get_current_user, require_admin
 
     admin = _make_admin_user()
     app.dependency_overrides[require_admin] = lambda: admin
@@ -151,7 +150,7 @@ def admin_client():
 @pytest.fixture
 def viewer_client():
     """Test client authenticated as a viewer user."""
-    from app.core.auth import require_view, get_current_user
+    from app.core.auth import get_current_user, require_view
 
     viewer = _make_viewer_user()
     app.dependency_overrides[require_view] = lambda: viewer

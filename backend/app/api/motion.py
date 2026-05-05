@@ -6,7 +6,7 @@ plus SSE streaming for real-time motion alerts in the dashboard.
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -103,7 +103,7 @@ async def list_motion_events(
     db: Session = Depends(get_db),
 ):
     """List recent motion events, optionally filtered by camera."""
-    since = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+    since = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
     query = db.query(MotionEvent).filter(
         MotionEvent.org_id == user.org_id,
@@ -139,7 +139,7 @@ async def motion_stats(
     """Aggregate motion stats per camera over the given time window."""
     from sqlalchemy import func
 
-    since = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+    since = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
     rows = (
         db.query(
@@ -200,7 +200,7 @@ async def stream_motion_events(user: AuthUser = Depends(require_view)):
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=25.0)
                     yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Keepalive to prevent connection drop
                     yield ": keepalive\n\n"
         except asyncio.CancelledError:

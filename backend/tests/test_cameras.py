@@ -3,7 +3,6 @@
 from app.models.models import Setting
 
 
-
 def test_list_cameras_empty(admin_client):
     """Empty org returns empty camera list."""
     from app.core.auth import require_view
@@ -145,7 +144,7 @@ def test_update_notification_settings_requires_admin(viewer_client):
 
 def _seed_camera(db, *, camera_id="cam_rec_test", org_id="org_test123"):
     """Create a node + camera for recording-policy tests."""
-    from app.models.models import CameraNode, Camera
+    from app.models.models import Camera, CameraNode
     node = CameraNode(
         node_id=f"nd_{camera_id}", org_id=org_id,
         api_key_hash="a" * 64, name=f"node-{camera_id}",
@@ -253,11 +252,12 @@ def test_camera_should_record_now_window_logic():
     """Unit-test the wall-clock window logic in isolation.  Heartbeat
     decisions hinge on this; a bug here silently breaks scheduled
     recording for everyone."""
+    from datetime import datetime
+    from unittest.mock import patch
+    from zoneinfo import ZoneInfo
+
     from app.api.nodes import _camera_should_record_now
     from app.models.models import Camera
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    from unittest.mock import patch
 
     utc = ZoneInfo("UTC")
     cam = Camera(
@@ -354,11 +354,12 @@ def test_camera_should_record_now_honours_org_timezone():
     not 8am UTC.  This is the whole point of the per-org timezone —
     operators get to think in their local wall clock.
     """
+    from datetime import datetime
+    from unittest.mock import patch
+    from zoneinfo import ZoneInfo
+
     from app.api.nodes import _camera_should_record_now
     from app.models.models import Camera
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-    from unittest.mock import patch
 
     la = ZoneInfo("America/Los_Angeles")
     cam = Camera(

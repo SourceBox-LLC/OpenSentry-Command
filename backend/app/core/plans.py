@@ -16,7 +16,7 @@ of the Clerk rename landing, since Clerk JWTs refresh on the minute).
 
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +110,8 @@ def resolve_org_plan(db, org_id: str) -> str:
     Live lookups for the same org are throttled to once per 60 seconds
     so a free-tier caller hammering MCP can't drive Clerk API spend.
     """
-    from app.models.models import Setting
     from app.core.clerk import clerk
+    from app.models.models import Setting
 
     cached = Setting.get(db, org_id, "org_plan", "")
     if cached in PAID_PLAN_SLUGS:
@@ -236,9 +236,9 @@ def effective_plan_for_caps(db, org_id: str) -> str:
         return nominal
 
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
 
-    age = datetime.now(tz=timezone.utc) - dt
+    age = datetime.now(tz=UTC) - dt
     if age > timedelta(days=PAYMENT_GRACE_DAYS):
         logger.info(
             "effective_plan_for_caps: org %s past-due for %s (> %d days) — "

@@ -6,7 +6,7 @@ import threading
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import monotonic
 from typing import Optional
@@ -15,24 +15,48 @@ from typing import Optional
 # import (i.e. uvicorn cold-start) so uptime is real wall + monotonic
 # time, not "ms since the request handler ran". Module-level constants
 # are fine — there's only ever one process per Fly machine.
-_STARTED_AT_WALL = datetime.now(tz=timezone.utc)
+_STARTED_AT_WALL = datetime.now(tz=UTC)
 _STARTED_AT_MONO = time.monotonic()
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from fastapi.responses import JSONResponse
+
+from app.api import (
+    audit,
+    cameras,
+    hls,
+    incidents,
+    install,
+    mcp_activity,
+    mcp_keys,
+    motion,
+    nodes,
+    notifications,
+    webhooks,
+    ws,
+)
 from app.core.config import settings
-from app.core.database import Base, engine, SessionLocal
+from app.core.database import Base, SessionLocal, engine
 from app.core.limiter import limiter, tenant_aware_key
-from app.core.migrations import sync_schema, sanitize_existing_codecs, drop_orphan_tables
+from app.core.logging_setup import configure_logging
+from app.core.migrations import drop_orphan_tables, sanitize_existing_codecs, sync_schema
+from app.core.request_context import (
+    new_request_id,
+    reset_request_id,
+    set_request_id,
+)
 from app.core.sentry import init_sentry
-from app.api import cameras, webhooks, nodes, audit, hls, ws, install, mcp_keys, mcp_activity, incidents, motion, notifications
 from app.mcp.server import mcp
+
 # Import models so every table registers on Base.metadata before create_all/sync_schema.
 from app.models import models  # noqa: F401
+
+# Install context-aware logging BEFORE any logger.info() in this module
+# fires.  Idempotent — safe even if main.py is re-imported in tests.
+configure_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +269,7 @@ app.add_middleware(SlowAPIMiddleware)
 # body.detail.errors for the structured per-field breakdown.
 from fastapi.exceptions import RequestValidationError  # noqa: E402
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Rewrite Pydantic 422 envelope to match ApiError's shape."""
@@ -339,8 +364,56 @@ app.add_middleware(
     allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Node-API-Key"],
+    allow_headers=["Authorization", "Content-Type", "X-Node-API-Key", "X-Request-Id"],
+    expose_headers=["X-Request-Id"],
 )
+
+
+# ── Request context middleware ─────────────────────────────────────
+# Stamp every request with a request_id (honoring an inbound
+# X-Request-Id from the client/proxy if it's well-formed; otherwise
+# minting one ourselves).  The id is:
+#   - stored in a contextvar so the logging filter picks it up on
+#     every log record (see app/core/logging_setup.py)
+#   - tagged on the Sentry scope so exception traces are searchable
+#     by request_id in the Sentry dashboard
+#   - returned in the response header so a customer can quote it in
+#     a support ticket and we can find their exact request in seconds
+#
+# Defined as a function-style middleware (the @app.middleware("http")
+# decorator) rather than the BaseHTTPMiddleware class because the
+# decorator form preserves response streaming better — Starlette's
+# BaseHTTPMiddleware has a known issue where it buffers SSE responses
+# (we have several SSE endpoints — motion, notifications, MCP activity)
+# and breaks live streaming.
+@app.middleware("http")
+async def request_context(request: Request, call_next):
+    inbound = request.headers.get("X-Request-Id", "")
+    # Sanity-check the inbound value before trusting it: 8-128 chars,
+    # alphanumerics + hyphens only.  Garbage / overly long strings get
+    # replaced with a fresh id — we don't want a malicious header
+    # injecting weird characters into our log lines or Sentry tags.
+    if 8 <= len(inbound) <= 128 and inbound.replace("-", "").isalnum():
+        req_id = inbound
+    else:
+        req_id = new_request_id()
+
+    token = set_request_id(req_id)
+    # Best-effort Sentry tag.  Safe no-op when SENTRY_DSN is unset
+    # (local dev / tests).
+    try:
+        import sentry_sdk
+        sentry_sdk.get_current_scope().set_tag("request_id", req_id)
+    except Exception:
+        pass
+
+    try:
+        response = await call_next(request)
+    finally:
+        reset_request_id(token)
+
+    response.headers["X-Request-Id"] = req_id
+    return response
 
 
 @app.middleware("http")
@@ -419,14 +492,20 @@ def run_log_cleanup(db, *, default_retention_days: int = LOG_RETENTION_DAYS) -> 
     long-term history per-org with the same tiered retention as
     other logs.
     """
-    from sqlalchemy import union, select
-    from app.models.models import (
-        StreamAccessLog, McpActivityLog, AuditLog, MotionEvent, Notification,
-        EmailLog, EmailOutbox,
-    )
-    from app.core.plans import get_plan_limits, resolve_org_plan
+    from sqlalchemy import select, union
 
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    from app.core.plans import get_plan_limits, resolve_org_plan
+    from app.models.models import (
+        AuditLog,
+        EmailLog,
+        EmailOutbox,
+        McpActivityLog,
+        MotionEvent,
+        Notification,
+        StreamAccessLog,
+    )
+
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
 
     # One query collects every org_id we're holding logs for.
     # UNION across the log tables — small set, runs once a day.
@@ -555,7 +634,7 @@ async def _log_cleanup_loop():
         # have been offline longer than the threshold.
         try:
             from app.api.hls import cleanup_camera_cache
-            inactive_cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(
+            inactive_cutoff = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(
                 hours=INACTIVE_CAMERA_CLEANUP_HOURS
             )
             db = SessionLocal()
@@ -587,10 +666,10 @@ def run_offline_sweep(db, *, heartbeat_timeout_seconds: int = OFFLINE_HEARTBEAT_
     waiting for a background task tick.  Returns a summary dict with
     counts of nodes/cameras flipped — useful for tests and logging.
     """
-    from app.models.models import CameraNode, Camera
     from app.api.notifications import emit_camera_transition, emit_node_transition
+    from app.models.models import Camera, CameraNode
 
-    cutoff = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(
+    cutoff = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(
         seconds=heartbeat_timeout_seconds
     )
 
@@ -847,12 +926,12 @@ async def _motion_digest_loop():
     drops, session reset) so the loop survives transient failures and
     picks up where it left off on the next tick.
     """
-    from app.models.models import Camera, MotionEvent, Setting
     from app.api.notifications import (
+        _motion_cooldown_minutes,
         create_notification,
         email_enabled_for_kind,
-        _motion_cooldown_minutes,
     )
+    from app.models.models import Camera, MotionEvent, Setting
 
     while True:
         await asyncio.sleep(MOTION_DIGEST_INTERVAL_SECONDS)
@@ -860,7 +939,7 @@ async def _motion_digest_loop():
         try:
             db = SessionLocal()
             try:
-                now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+                now = datetime.now(tz=UTC).replace(tzinfo=None)
                 anchors = (
                     db.query(Setting)
                     .filter(Setting.key.like("motion_email_cooldown_start:%"))
@@ -1132,16 +1211,17 @@ async def health_check_detailed():
                        most reads/writes. Pages should fire.
     """
     from sqlalchemy import text
+
     # Defer import: hls.py pulls in storage helpers that are heavier
     # than this endpoint should pay for on cold start.
     from app.api.hls import (
+        _pending_viewer_seconds,
         _playlist_cache,
         _segment_cache,
-        _pending_viewer_seconds,
     )
     from app.api.notifications import notification_broadcaster
 
-    now_wall = datetime.now(tz=timezone.utc)
+    now_wall = datetime.now(tz=UTC)
     uptime_s = round(time.monotonic() - _STARTED_AT_MONO, 3)
 
     # ── Database ping ────────────────────────────────────────

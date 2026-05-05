@@ -11,8 +11,8 @@ import logging
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def _persist_event(event: "McpEvent"):
                 duration_ms=int(event.duration_ms) if event.duration_ms else None,
                 args_summary=event.args_summary,
                 error=event.error,
-                timestamp=datetime.fromtimestamp(event.timestamp, tz=timezone.utc).replace(tzinfo=None),
+                timestamp=datetime.fromtimestamp(event.timestamp, tz=UTC).replace(tzinfo=None),
             )
             db.add(log)
             db.commit()

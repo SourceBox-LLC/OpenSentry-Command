@@ -10,7 +10,6 @@
 import hashlib
 import uuid
 
-
 from app.models.models import AuditLog, Camera, CameraNode
 
 
@@ -95,7 +94,7 @@ def test_audit_log_written_on_camera_recording_policy_update(admin_client, db):
     The org-level `/api/settings/recording` endpoint was retired in
     v0.1.43; this exercises the per-camera replacement.
     """
-    from app.models.models import CameraNode, Camera
+    from app.models.models import Camera, CameraNode
     # Seed a node + camera so the PATCH has something to target.
     node = CameraNode(
         node_id="nd_audit_rec", org_id="org_test123",
@@ -278,6 +277,7 @@ def test_frontend_url_validator_accepts_clean_url():
 def test_tenant_aware_key_buckets_by_node_header():
     """X-Node-API-Key buckets per-node and is stable for a given key."""
     from unittest.mock import MagicMock
+
     from app.core.limiter import tenant_aware_key
 
     req = MagicMock()
@@ -301,6 +301,7 @@ def test_tenant_aware_key_uses_org_from_jwt():
     import base64
     import json
     from unittest.mock import MagicMock
+
     from app.core.limiter import tenant_aware_key
 
     # Build a minimal V1 JWT: header.payload.sig — only the payload matters.
@@ -319,6 +320,7 @@ def test_tenant_aware_key_handles_v2_compact_claim():
     import base64
     import json
     from unittest.mock import MagicMock
+
     from app.core.limiter import tenant_aware_key
 
     payload = base64.urlsafe_b64encode(

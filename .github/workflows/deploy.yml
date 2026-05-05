@@ -22,6 +22,16 @@ jobs:
         working-directory: backend
         run: uv sync --extra dev
 
+      # Lint before tests — ruff is sub-second and catches the kind of
+      # issue (unused imports, import-sort drift, missing `from err` on
+      # re-raises) that masks real bugs and clutters review diffs.  Ruleset
+      # is conservative (F + E9 + W6 + I + B + UP) so the bar is "real
+      # problems only" rather than "every style nit"; tighten in pyproject
+      # when the team agrees on each new rule.
+      - name: Lint with ruff
+        working-directory: backend
+        run: uv run ruff check
+
       - name: Run tests
         working-directory: backend
         run: uv run pytest -v

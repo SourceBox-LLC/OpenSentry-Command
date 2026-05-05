@@ -1,20 +1,20 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_label, write_audit
+from app.core.auth import AuthUser, require_admin, require_view
 from app.core.codec import sanitize_video_codec
 from app.core.database import get_db
-from app.core.auth import AuthUser, require_view, require_admin
 from app.core.limiter import limiter
-from app.models.models import Camera, CameraGroup, Setting, AuditLog
+from app.models.models import AuditLog, Camera, CameraGroup, Setting
 from app.schemas.schemas import (
     CameraGroupCreate,
     CameraRecordingPolicy,
     NotificationSettings,
 )
-
 
 # Shared defaults for notification toggles — used by the GET handler and
 # the /api/settings aggregate.  Pydantic's NotificationSettings holds the
@@ -84,8 +84,8 @@ async def take_snapshot(
     db: Session = Depends(get_db),
 ):
     """Tell the camera node to capture and store a snapshot locally."""
-    from app.models.models import CameraNode
     from app.api.ws import manager
+    from app.models.models import CameraNode
 
     camera = db.query(Camera).filter_by(camera_id=camera_id, org_id=user.org_id).first()
     if not camera:
@@ -108,9 +108,9 @@ async def take_snapshot(
         )
         return result
     except TimeoutError:
-        raise HTTPException(status_code=504, detail="Snapshot request timed out")
+        raise HTTPException(status_code=504, detail="Snapshot request timed out") from None
     except ValueError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
 
 @router.post("/cameras/{camera_id}/recording")
@@ -569,6 +569,7 @@ async def report_camera_codec(
     Called by CloudNode after detecting codec from first segment.
     """
     import hashlib
+
     from app.models.models import CameraNode
 
     # Verify node API key
@@ -602,7 +603,7 @@ async def report_camera_codec(
         video_codec = codec_data.get("video_codec")
         audio_codec = codec_data.get("audio_codec")
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid request body")
+        raise HTTPException(status_code=400, detail="Invalid request body") from None
 
     if not video_codec:
         raise HTTPException(status_code=400, detail="video_codec is required")
@@ -625,13 +626,13 @@ async def report_camera_codec(
     # Update camera codec fields
     camera.video_codec = video_codec
     camera.audio_codec = audio_codec or "mp4a.40.2"  # Default to AAC-LC
-    camera.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    camera.codec_detected_at = datetime.now(tz=UTC).replace(tzinfo=None)
 
     # Also update node codec if this is the first camera to detect
     if node and not node.video_codec:
         node.video_codec = video_codec
         node.audio_codec = camera.audio_codec
-        node.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        node.codec_detected_at = datetime.now(tz=UTC).replace(tzinfo=None)
         logger.info(
             "Updated node %s codec: video=%s, audio=%s",
             node.node_id,
@@ -677,7 +678,7 @@ def _require_active_paid_plan(user: AuthUser, db: Session) -> None:
     check is the cheap pre-filter, the DB check is the
     point-of-truth.
     """
-    from app.core.plans import effective_plan_for_caps, PAID_PLAN_SLUGS
+    from app.core.plans import PAID_PLAN_SLUGS, effective_plan_for_caps
 
     if "admin" not in user.features:
         raise HTTPException(
@@ -741,8 +742,8 @@ async def full_reset(
     clear stream logs, clear settings.
     """
     _require_active_paid_plan(user, db)
-    from app.models import StreamAccessLog, CameraNode
     from app.api.hls import cleanup_camera_cache
+    from app.models import CameraNode, StreamAccessLog
 
     results = {
         "nodes_deleted": 0,

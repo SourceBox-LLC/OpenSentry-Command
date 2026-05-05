@@ -1,26 +1,28 @@
 import hashlib
 import logging
 import uuid as uuid_mod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.audit import audit_label, write_audit
+from app.core.auth import AuthUser, get_current_user, require_active_billing, require_admin
 from app.core.codec import sanitize_video_codec
 from app.core.database import get_db
-from app.core.auth import AuthUser, require_admin, require_active_billing, get_current_user
 from app.core.limiter import limiter
 from app.core.plans import (
     PAYMENT_GRACE_DAYS,
     enforce_camera_cap,
+    get_plan_display_name,
     get_plan_limits,
     get_plan_limits_for_org,
-    get_plan_display_name,
     wire_plan_slug,
 )
 from app.core.versions import check_node_version
-from app.models.models import CameraNode, Camera, Setting
-from app.schemas.schemas import NodeRegister, NodeHeartbeat, NodeCreate
+from app.models.models import Camera, CameraNode, Setting
+from app.schemas.schemas import NodeCreate, NodeHeartbeat, NodeRegister
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/nodes", tags=["nodes"])
@@ -75,7 +77,7 @@ def _check_and_emit_cloudnode_disk_low(
     if last_emit_iso:
         try:
             last_emit = datetime.fromisoformat(last_emit_iso)
-            now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+            now = datetime.now(tz=UTC).replace(tzinfo=None)
             if (now - last_emit).total_seconds() < _CLOUDNODE_DISK_LOW_REEMIT_INTERVAL_SECONDS:
                 return
         except ValueError:
@@ -117,7 +119,7 @@ def _check_and_emit_cloudnode_disk_low(
     Setting.set(
         db, node.org_id,
         f"cloudnode_disk_low_emit_at:{node.node_id}",
-        datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
+        datetime.now(tz=UTC).replace(tzinfo=None).isoformat(),
     )
 
 
@@ -136,7 +138,7 @@ def _emit_plan_limit_notification(
     registration) must not depend on the notification layer.
     """
     try:
-        now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        now = datetime.now(tz=UTC).replace(tzinfo=None)
         last_at_str = Setting.get(db, org_id, "plan_limit_notif_last_at")
         if last_at_str:
             try:
@@ -182,7 +184,7 @@ def _record_node_register_error(db: Session, node: CameraNode, reason: str) -> N
     because the caller is already about to raise a 4xx to the node."""
     try:
         node.last_register_error = reason[:500]
-        node.last_register_error_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        node.last_register_error_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
     except Exception:
         logger.exception("Failed to persist last_register_error for node %s", node.node_id)
@@ -207,7 +209,7 @@ async def validate_node(
     try:
         body = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from None
 
     node_id = body.get("node_id")
     if not node_id:
@@ -272,7 +274,7 @@ async def register_node(
         # the bad version even for nodes that get rejected here.
         version_check = check_node_version(data.node_version)
         existing_node.node_version = version_check["parsed"] if data.node_version else None
-        existing_node.version_checked_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        existing_node.version_checked_at = datetime.now(tz=UTC).replace(tzinfo=None)
         if not version_check["supported"]:
             _record_node_register_error(
                 db, existing_node,
@@ -298,7 +300,7 @@ async def register_node(
         existing_node.local_ip = data.local_ip or existing_node.local_ip
         existing_node.http_port = data.http_port or existing_node.http_port
         existing_node.status = "online"
-        existing_node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        existing_node.last_seen = datetime.now(tz=UTC).replace(tzinfo=None)
         # Successful re-registration: clear any stale error from an
         # earlier bad-key attempt so the UI stops flagging it.
         existing_node.last_register_error = None
@@ -307,7 +309,7 @@ async def register_node(
         if data.video_codec:
             existing_node.video_codec = sanitized_video_codec
             existing_node.audio_codec = data.audio_codec
-            existing_node.codec_detected_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+            existing_node.codec_detected_at = datetime.now(tz=UTC).replace(tzinfo=None)
 
         # Enforce camera cap: count existing org cameras vs plan limit
         org_id = existing_node.org_id
@@ -340,7 +342,7 @@ async def register_node(
             if existing_cam:
                 logger.debug("Updating existing camera %s", camera_id)
                 existing_cam.name = cam_data.name or existing_cam.name
-                existing_cam.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+                existing_cam.last_seen = datetime.now(tz=UTC).replace(tzinfo=None)
                 existing_cam.status = "online"
                 if data.video_codec:
                     existing_cam.video_codec = sanitized_video_codec
@@ -367,10 +369,10 @@ async def register_node(
                     if cam_data.capabilities
                     else "streaming",
                     status="online",
-                    last_seen=datetime.now(tz=timezone.utc).replace(tzinfo=None),
+                    last_seen=datetime.now(tz=UTC).replace(tzinfo=None),
                     video_codec=sanitized_video_codec,
                     audio_codec=data.audio_codec,
-                    codec_detected_at=datetime.now(tz=timezone.utc).replace(tzinfo=None) if data.video_codec else None,
+                    codec_detected_at=datetime.now(tz=UTC).replace(tzinfo=None) if data.video_codec else None,
                 )
                 db.add(new_cam)
                 new_camera_count += 1
@@ -476,7 +478,7 @@ async def node_heartbeat(
     # without requiring a re-register.
     version_check = check_node_version(data.node_version)
     node.node_version = version_check["parsed"] if data.node_version else None
-    node.version_checked_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    node.version_checked_at = datetime.now(tz=UTC).replace(tzinfo=None)
     if not version_check["supported"]:
         raise HTTPException(
             status_code=426,
@@ -493,7 +495,7 @@ async def node_heartbeat(
         )
 
     node.status = "online"
-    node.last_seen = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    node.last_seen = datetime.now(tz=UTC).replace(tzinfo=None)
     node.local_ip = data.local_ip or node.local_ip
 
     # Persist filesystem-aware storage stats from CloudNode v0.1.41+.
@@ -533,7 +535,7 @@ async def node_heartbeat(
             Camera.node_id == node.id,
         ).all()
         cam_map = {c.camera_id: c for c in cams}
-        now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+        now = datetime.now(tz=UTC).replace(tzinfo=None)
         for cam_status in camera_updates:
             cam = cam_map.get(cam_status.camera_id)
             if cam:
@@ -608,7 +610,7 @@ async def node_heartbeat(
 
     response = {
         "success": True,
-        "timestamp": datetime.now(tz=timezone.utc).replace(tzinfo=None).isoformat(),
+        "timestamp": datetime.now(tz=UTC).replace(tzinfo=None).isoformat(),
         "plan": wire_plan_slug(cached_plan),
         "disabled_cameras": disabled_cameras,
         "recording_state": recording_state,
@@ -731,8 +733,9 @@ async def get_plan_info(
     "X days until suspension" banner instead of the static "7 days" copy the
     ToS guarantees but operators can't see live.
     """
+    from datetime import datetime, timedelta
+
     from app.models.models import Setting
-    from datetime import datetime, timedelta, timezone
 
     limits = get_plan_limits(user.plan)
     current_nodes = db.query(CameraNode).filter_by(org_id=user.org_id).count()
@@ -751,9 +754,9 @@ async def get_plan_info(
             try:
                 past_due_at = datetime.fromisoformat(past_due_at_str.replace("Z", "+00:00"))
                 if past_due_at.tzinfo is None:
-                    past_due_at = past_due_at.replace(tzinfo=timezone.utc)
+                    past_due_at = past_due_at.replace(tzinfo=UTC)
                 expires_at = past_due_at + timedelta(days=PAYMENT_GRACE_DAYS)
-                remaining = expires_at - datetime.now(tz=timezone.utc)
+                remaining = expires_at - datetime.now(tz=UTC)
                 # Negative remaining means grace already expired — surface as
                 # 0 so the UI shows "suspended" rather than a negative number.
                 grace_days_remaining = max(0, remaining.days)
@@ -1003,7 +1006,7 @@ async def rotate_api_key(
 
     new_api_key = str(uuid_mod.uuid4())
     node.api_key_hash = hashlib.sha256(new_api_key.encode()).hexdigest()
-    node.key_rotated_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    node.key_rotated_at = datetime.now(tz=UTC).replace(tzinfo=None)
     db.commit()
 
     write_audit(

@@ -14,7 +14,6 @@ import pytest
 
 from app.core import recipients
 
-
 # ── Test fixtures ───────────────────────────────────────────────────
 
 def _membership(role: str, identifier: str | None) -> SimpleNamespace:

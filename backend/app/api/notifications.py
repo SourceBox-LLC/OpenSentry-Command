@@ -20,7 +20,7 @@ import asyncio
 import json
 import logging
 import time as _time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -35,8 +35,12 @@ from app.core.database import SessionLocal, get_db
 from app.core.email_unsubscribe import verify_token
 from app.core.limiter import limiter
 from app.core.recipients import get_recipient_emails
-from app.models.models import EmailOutbox, EmailSuppression, Notification, Setting, UserNotificationState
-
+from app.models.models import (
+    EmailOutbox,
+    Notification,
+    Setting,
+    UserNotificationState,
+)
 
 # ── Per-org preference gate ────────────────────────────────────────
 # Which notification kinds the org wants delivered to the inbox.
@@ -275,7 +279,7 @@ def _claim_motion_cooldown_or_silence(
     key = _motion_cooldown_anchor_key(camera_id)
     existing = Setting.get(db, org_id, key, "")
     cooldown_min = _motion_cooldown_minutes(db, org_id)
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
 
     if existing:
         try:
@@ -700,7 +704,7 @@ def _get_or_init_state(
         state = UserNotificationState(
             clerk_user_id=clerk_user_id,
             org_id=org_id,
-            last_viewed_at=datetime.now(tz=timezone.utc).replace(tzinfo=None),
+            last_viewed_at=datetime.now(tz=UTC).replace(tzinfo=None),
         )
         db.add(state)
         db.commit()
@@ -732,7 +736,7 @@ async def list_notifications(
     reported per-item (based on last_viewed_at) so the UI can render
     the unread ones differently without another round trip.
     """
-    since = datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
+    since = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(hours=hours)
 
     # Initialise read-state first so we know the user's cleared_at
     # threshold before building the query.  Cleared notifications are
@@ -807,7 +811,7 @@ async def mark_viewed(
 ):
     """Bump the user's last_viewed_at to now, clearing the unread badge."""
     state = _get_or_init_state(db, user.user_id, user.org_id)
-    state.last_viewed_at = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    state.last_viewed_at = datetime.now(tz=UTC).replace(tzinfo=None)
     db.commit()
     return {
         "success": True,
@@ -830,7 +834,7 @@ async def clear_all(
     created after this call reappears normally.
     """
     state = _get_or_init_state(db, user.user_id, user.org_id)
-    now = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
     state.cleared_at = now
     state.last_viewed_at = now
     db.commit()
@@ -871,7 +875,7 @@ async def stream_notifications(user: AuthUser = Depends(require_view)):
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=25.0)
                     yield f"data: {json.dumps(event)}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ": keepalive\n\n"
         except asyncio.CancelledError:
             pass
@@ -931,7 +935,7 @@ def _current_email_prefs(db: Session, org_id: str) -> dict:
     blank "unset" state.
     """
     out = {}
-    for kind, (key, default) in _EMAIL_KIND_TO_SETTING.items():
+    for _kind, (key, default) in _EMAIL_KIND_TO_SETTING.items():
         val = Setting.get(db, org_id, key, None)
         if val is None:
             out[key] = default

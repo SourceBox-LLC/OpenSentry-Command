@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 from app.core.errors import ApiError
 
-
 # ── ApiError unit tests ────────────────────────────────────────────
 
 

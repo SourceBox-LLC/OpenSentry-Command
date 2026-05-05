@@ -48,12 +48,58 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "httpx>=0.27.0",
+    "ruff>=0.6.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
+
+# ── Ruff — Python linter + formatter ────────────────────────────────
+# Conservative starting ruleset.  The codebase has years of un-linted
+# code; turning on the full default ruleset would surface thousands of
+# warnings at once and obscure real bugs in the noise.  Start with
+# the high-signal rules + import sorting, expand later as the muscle
+# memory takes hold:
+#
+#   F   = pyflakes — undefined names, unused imports, real bugs
+#   E9  = syntax errors only (the rest of E is style)
+#   W6  = whitespace + tab errors that break diffs
+#   I   = isort — import ordering (auto-fixable via `ruff check --fix`)
+#   B   = flake8-bugbear — likely-bug patterns (mutable default arg,
+#         except: pass, etc.)
+#   UP  = pyupgrade — modernize syntax for py3.12 (Optional[X] →
+#         X | None, etc.)
+#
+# Format enforcement (ruff format --check) is intentionally NOT in
+# CI yet.  Adding it would require a one-shot mass-format commit
+# touching every Python file, which makes git blame harder to read.
+# Run `cd backend && uv run ruff format` locally if you want
+# consistent formatting; CI doesn't enforce it.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["F", "E9", "W6", "I", "B", "UP"]
+# Ignore in any file:
+#   B008  = function calls in default argument — FastAPI's
+#           `Depends(...)` pattern triggers this on every endpoint.
+#   UP045 = `Optional[X]` → `X | None` — current codebase mixes both
+#           styles; flip in a separate cleanup pass when ready.
+ignore = ["B008", "UP045"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are allowed:
+#   F401: unused imports (fixtures pulled in for side effect)
+#   F811: redefinition (mark.parametrize patterns)
+#   B017: pytest.raises(Exception) — broad-except is the point in
+#         "this should fail somehow" tests
+"tests/**" = ["F401", "F811", "B017"]
+# __init__.py: re-export pattern relies on "unused" imports.
+"**/__init__.py" = ["F401"]
 
 [tool.uv]
 # Transitive constraints — pin versions forced up from what the

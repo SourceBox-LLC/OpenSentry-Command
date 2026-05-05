@@ -1,7 +1,8 @@
 """Tests for the _handle_motion_event defensive branches in ws.py."""
 
+from datetime import UTC, datetime, timezone
+
 import pytest
-from datetime import datetime, timezone
 
 from app.api.ws import _handle_motion_event
 from app.models.models import Camera, CameraNode, MotionEvent
@@ -77,11 +78,11 @@ async def test_score_clamped_to_range(db):
 async def test_unparseable_timestamp_uses_server_time(db):
     """Invalid timestamps fall back to server time rather than failing."""
     _seed_node_and_cameras(db)
-    before = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    before = datetime.now(tz=UTC).replace(tzinfo=None)
     await _handle_motion_event("node1", "org_test123", {
         "camera_id": "cam1", "score": 75, "timestamp": "not-a-date",
     })
-    after = datetime.now(tz=timezone.utc).replace(tzinfo=None)
+    after = datetime.now(tz=UTC).replace(tzinfo=None)
     event = db.query(MotionEvent).first()
     assert event is not None
     assert before <= event.timestamp <= after

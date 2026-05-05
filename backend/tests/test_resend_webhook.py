@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 from svix.webhooks import Webhook
@@ -22,7 +22,6 @@ from app.models.models import (
     EmailSuppression,
     ProcessedWebhook,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -39,7 +38,7 @@ def _signed_request(client, secret, payload):
     integer Unix timestamp."""
     body = json.dumps(payload).encode("utf-8")
     msg_id = f"msg_{uuid.uuid4().hex}"
-    timestamp_dt = datetime.now(tz=timezone.utc)
+    timestamp_dt = datetime.now(tz=UTC)
     timestamp_int = int(timestamp_dt.timestamp())
     wh = Webhook(secret)
     signature = wh.sign(msg_id, timestamp_dt, body.decode("utf-8"))
@@ -255,7 +254,7 @@ def test_resend_webhook_idempotent_replay(
 
     body = json.dumps(payload).encode()
     msg_id = f"msg_{uuid.uuid4().hex}"
-    timestamp_dt = datetime.now(tz=timezone.utc)
+    timestamp_dt = datetime.now(tz=UTC)
     sig = Webhook(_TEST_SECRET).sign(msg_id, timestamp_dt, body.decode("utf-8"))
 
     headers = {

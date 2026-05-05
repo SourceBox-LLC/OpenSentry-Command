@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, event
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
-from sqlalchemy.orm import sessionmaker, declarative_base
+
 from app.core.config import settings
 
 # NullPool: each request gets a fresh connection and releases it immediately.

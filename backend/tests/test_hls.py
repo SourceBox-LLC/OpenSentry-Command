@@ -22,9 +22,7 @@ Covers:
 import hashlib
 import uuid
 
-
 from app.models.models import Camera, CameraNode
-
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -322,7 +320,8 @@ def test_global_cache_cap_evicts_across_cameras(db, monkeypatch):
     cap exists for.
     """
     import time
-    from app.api.hls import _segment_cache, _evict_global_oldest
+
+    from app.api.hls import _evict_global_oldest, _segment_cache
 
     # Reset the module-level cache so the test is hermetic.  Other
     # tests in this file may have left entries behind via the push
@@ -373,7 +372,8 @@ def test_global_cache_cap_no_op_when_under_budget(db):
     """When total bytes are already under cap, eviction must not
     touch anything.  Cheap-path correctness."""
     import time
-    from app.api.hls import _segment_cache, _evict_global_oldest
+
+    from app.api.hls import _evict_global_oldest, _segment_cache
 
     _segment_cache.clear()
     _segment_cache["cam_a"] = {"segment_00001.ts": (b"x" * 100, time.monotonic())}
@@ -819,7 +819,7 @@ def test_cleanup_camera_cache_drops_segments_and_playlist(
     It must scrub BOTH segment and playlist state for the camera — a
     stale playlist referencing now-deleted segments would break the next
     camera that happens to reuse the same id."""
-    from app.api.hls import _segment_cache, _playlist_cache, cleanup_camera_cache
+    from app.api.hls import _playlist_cache, _segment_cache, cleanup_camera_cache
 
     raw_key, cam_id = _seed_node_with_camera(db)
     headers = {"X-Node-API-Key": raw_key}

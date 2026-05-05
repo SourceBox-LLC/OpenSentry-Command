@@ -25,14 +25,13 @@ Key invariants pinned here:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
 from app.api import notifications as notifications_mod
 from app.api.notifications import create_notification
 from app.models.models import EmailOutbox, Notification, Setting
-
 
 # ── Fixtures ────────────────────────────────────────────────────────
 
@@ -141,7 +140,7 @@ def test_motion_first_event_sends_immediate_and_writes_anchor(
     assert anchor, "expected an anchor timestamp string after first event"
     # Round-trips as ISO format.
     parsed = datetime.fromisoformat(anchor)
-    delta = abs((datetime.now(tz=timezone.utc).replace(tzinfo=None) - parsed).total_seconds())
+    delta = abs((datetime.now(tz=UTC).replace(tzinfo=None) - parsed).total_seconds())
     assert delta < 5, f"anchor timestamp should be ~now, drift={delta:.1f}s"
 
 
@@ -175,7 +174,7 @@ def test_motion_resumes_after_cooldown_expiry(
 
     # Backdate anchor 16 minutes (default cooldown is 15).
     expired = (
-        datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(minutes=16)
+        datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(minutes=16)
     ).isoformat()
     Setting.set(db, "org_test123", _anchor_key("cam_front_door"), expired)
 
@@ -292,7 +291,7 @@ def test_motion_cooldown_minutes_setting_respected(
 
     # Backdate the anchor 90s ago — now past the 1-min cooldown.
     backdated = (
-        datetime.now(tz=timezone.utc).replace(tzinfo=None) - timedelta(seconds=90)
+        datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(seconds=90)
     ).isoformat()
     Setting.set(db, "org_test123", _anchor_key("cam_front_door"), backdated)
 

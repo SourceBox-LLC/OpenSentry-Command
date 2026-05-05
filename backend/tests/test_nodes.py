@@ -101,6 +101,7 @@ def test_decommission_self_writes_audit_row(admin_client):
     tagged ``initiated_by: node`` so the UI can distinguish this from
     the admin-triggered DELETE /{node_id} path."""
     import json
+
     from app.models.models import AuditLog
     from tests.conftest import TestSession
 
