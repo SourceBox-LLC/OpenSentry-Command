@@ -21,6 +21,22 @@ const SentinelPage = lazy(() => import("./pages/SentinelPage.jsx"))
 const LegalPage = lazy(() => import("./pages/LegalPage.jsx"))
 const SecurityPage = lazy(() => import("./pages/SecurityPage.jsx"))
 
+// SignedIn users get the in-app shell (sidebar + header) on /docs, /pricing,
+// and /sentinel; signed-out visitors keep the marketing chrome. Without this,
+// clicking those links from the sidebar would unmount Layout and the sidebar
+// would disappear mid-session.
+function SmartLayout() {
+  const { isSignedIn, isLoaded } = useAuth()
+  if (!isLoaded) {
+    return (
+      <div className="loading-container">
+        <LoadingSpinner />
+      </div>
+    )
+  }
+  return isSignedIn ? <Layout /> : <PublicLayout />
+}
+
 function RequireOrg({ children }) {
   const { organization, isLoaded } = useOrganization()
   const { isSignedIn } = useAuth()
@@ -94,14 +110,20 @@ function App() {
     <ErrorBoundary>
       <Suspense fallback={<div className="loading-container"><LoadingSpinner /></div>}>
         <Routes>
-        {/* Public routes with PublicLayout */}
+        {/* Public-only routes (marketing landing + legal) */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/legal/:page" element={<LegalPage />} />
+          <Route path="/security" element={<SecurityPage />} />
+        </Route>
+
+        {/* Routes that adapt to auth state — public chrome for signed-out
+            visitors, in-app sidebar for signed-in users so nav doesn't
+            disappear when they click these links. */}
+        <Route element={<SmartLayout />}>
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/sentinel" element={<SentinelPage />} />
-          <Route path="/legal/:page" element={<LegalPage />} />
-          <Route path="/security" element={<SecurityPage />} />
         </Route>
 
         {/* Auth routes (public but use Clerk components) */}

@@ -1,22 +1,32 @@
+import { useEffect, useState } from "react"
 import { Outlet, Link, useLocation } from "react-router-dom"
 import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization } from "@clerk/clerk-react"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
+import AppSidebar from "./AppSidebar.jsx"
 import ToastContainer from "./ToastContainer.jsx"
 import NotificationBell from "./NotificationBell.jsx"
 
 function Layout() {
-  const { organization, isLoaded: orgLoaded, membership } = useOrganization()
+  const { organization, isLoaded: orgLoaded } = useOrganization()
   const { planInfo } = usePlanInfo()
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const isAdmin = orgLoaded && membership?.role === "org:admin"
-  const planFeatures = planInfo?.features || []
   const planName = planInfo?.plan || null
-  const hasAdminFeature = planFeatures.includes("admin")
   const isProPlus = planName === "pro_plus"
   const isPro = planName === "pro" || isProPlus
 
-  const isActive = (path) => location.pathname === path ? "nav-link active" : "nav-link"
+  useEffect(() => {
+    setSidebarOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") setSidebarOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   return (
     <div className="layout">
@@ -26,10 +36,24 @@ function Layout() {
 
       <header className="header">
         <div className="header-content">
-          <Link to="/" className="logo">
-            <div className="logo-icon">🛡️</div>
-            <div className="logo-text">SourceBox <span>Sentry</span></div>
-          </Link>
+          <div className="header-left">
+            <SignedIn>
+              <button
+                type="button"
+                className="app-sidebar-toggle"
+                aria-label={sidebarOpen ? "Close navigation" : "Open navigation"}
+                aria-expanded={sidebarOpen}
+                onClick={() => setSidebarOpen((o) => !o)}
+              >
+                <span aria-hidden="true">☰</span>
+              </button>
+            </SignedIn>
+
+            <Link to="/" className="logo">
+              <div className="logo-icon">🛡️</div>
+              <div className="logo-text">SourceBox <span>Sentry</span></div>
+            </Link>
+          </div>
 
           <div className="system-status">
             <SignedIn>
@@ -48,53 +72,6 @@ function Layout() {
                       </span>
                     )}
                   </div>
-                  <nav className="nav-links">
-                    <Link to="/dashboard" className={isActive("/dashboard")}>
-                      Dashboard
-                    </Link>
-                    {isAdmin && (
-                      <>
-                        <Link to="/settings" className={isActive("/settings")}>
-                          Settings
-                        </Link>
-                        {hasAdminFeature ? (
-                          <Link to="/admin" className={isActive("/admin")}>
-                            Admin
-                          </Link>
-                        ) : (
-                          <Link to="/admin" className={`${isActive("/admin")} nav-link-locked`}>
-                            Admin
-                            <span className="nav-pro-badge">PRO</span>
-                          </Link>
-                        )}
-                      </>
-                    )}
-                    <Link to="/mcp" className={isActive("/mcp")}>
-                      MCP
-                    </Link>
-                    <Link to="/sentinel" className={isActive("/sentinel")}>
-                      Sentinel
-                      <span className="nav-soon-badge">SOON</span>
-                    </Link>
-                    {/*
-                      Help → /docs.  Sits between the product nav and the
-                      "supporting" cluster (Pricing) intentionally — users
-                      hunting for "where do I find...?" scan the right side
-                      of the nav, and Help next to Pricing matches every
-                      SaaS convention they've already internalised.
-
-                      Support email is intentionally NOT here yet —
-                      support.sourceboxsentry.com is unprovisioned and a
-                      mailto: link to a non-existent address would
-                      bounce silently.  Add when the domain lands.
-                    */}
-                    <Link to="/docs" className={isActive("/docs")}>
-                      Help
-                    </Link>
-                    <Link to="/pricing" className={isActive("/pricing")}>
-                      Pricing
-                    </Link>
-                  </nav>
                   <NotificationBell />
                 </>
               )}
@@ -113,9 +90,23 @@ function Layout() {
         </div>
       </header>
 
-      <main className="main">
-        <Outlet />
-      </main>
+      <div className="layout-body">
+        <SignedIn>
+          <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        </SignedIn>
+        <main className="main">
+          <Outlet />
+        </main>
+      </div>
+
+      <SignedIn>
+        <div
+          className="app-sidebar-backdrop"
+          data-open={sidebarOpen ? "true" : "false"}
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      </SignedIn>
 
       <ToastContainer />
     </div>
