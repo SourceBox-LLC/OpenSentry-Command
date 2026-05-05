@@ -51,7 +51,7 @@ const EVENT_GROUPS = [
     label: "Camera + recording",
     events: [
       ["camera_recording_policy_updated", "Recording policy updated"],
-      ["recording_toggled", "Recording toggled (legacy)"],
+      ["recording_toggled", "Manual recording toggle"],
     ],
   },
   {

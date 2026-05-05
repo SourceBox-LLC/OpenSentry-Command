@@ -1,7 +1,22 @@
 import { useParams, Link } from "react-router-dom"
 
 const LAST_UPDATED = "April 24, 2026"
-const CONTACT_EMAIL = "legal@sourcebox.dev"
+
+// Contact channel for Terms / Privacy / DSAR / CCPA questions.
+//
+// Until ``sourceboxsentry.com`` is provisioned for incoming mail
+// (no MX records yet), we route every contact path through the
+// public GitHub repo's issue tracker.  The dashboard's in-app
+// Settings → Privacy & Data section already covers the two big
+// GDPR rights self-serve (Article 20 export + Article 17 delete),
+// so the issue tracker is only the path for "questions about
+// what data you hold beyond what the export already shows" —
+// which is uncommon enough that the public-issue concern is
+// acceptable as long as users know not to paste PII into the
+// issue body.  When a real ``legal@`` mailbox lands, swap the
+// helpers below for ``mailto:`` links.
+const CONTACT_GITHUB_ISSUES_URL =
+  "https://github.com/SourceBox-LLC/OpenSentry-Command/issues"
 
 function TermsContent() {
   return (
@@ -327,12 +342,18 @@ function TermsContent() {
 
       <h2>18. Contact</h2>
       <p>
-        For questions about these Terms, contact us at{" "}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> or open an
-        issue on our{" "}
-        <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/issues" target="_blank" rel="noopener noreferrer">
+        For questions about these Terms, open an issue on our{" "}
+        <a
+          href={CONTACT_GITHUB_ISSUES_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           GitHub repository
-        </a>.
+        </a>. A dedicated <code>legal@</code> mailbox will land alongside
+        our custom domain; until then GitHub Issues is the working
+        channel. Please don't include personally identifying details in
+        the public issue body — open the issue first and we'll arrange
+        a private follow-up.
       </p>
     </>
   )
@@ -515,9 +536,23 @@ function PrivacyContent() {
         <li><strong>Withdraw consent:</strong> Stop using the Service at any time</li>
       </ul>
       <p>
-        To exercise any of these rights, contact us at{" "}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
-        We will respond to requests within 30 days.
+        Most of these rights are self-serve from the dashboard&rsquo;s{" "}
+        <strong>Settings &rarr; Privacy &amp; Data</strong> section &mdash;
+        the <strong>Download my data (ZIP)</strong> button covers Article
+        20 portability with one click, and the{" "}
+        <strong>Reset Everything</strong> action under Danger Zone
+        covers Article 17 erasure (every node, camera, log, notification,
+        and config row removed in a single transaction). For anything
+        the in-app actions don&rsquo;t cover, open an issue on our{" "}
+        <a
+          href={CONTACT_GITHUB_ISSUES_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GitHub repository
+        </a>{" "}
+        and we&rsquo;ll arrange a private follow-up. We respond within
+        30 days.
       </p>
 
       <h2>7. International Data Transfers</h2>
@@ -556,9 +591,17 @@ function PrivacyContent() {
         the California Consumer Privacy Act (CCPA), including the right to
         know what personal information we collect, the right to delete your
         information, and the right to opt out of the sale of your
-        information. We do not sell personal information. To exercise your
-        CCPA rights, contact us at{" "}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+        information. We do not sell personal information. CCPA delete
+        and access requests are self-serve from{" "}
+        <strong>Settings &rarr; Privacy &amp; Data</strong> in the
+        dashboard. For anything else, open an issue on our{" "}
+        <a
+          href={CONTACT_GITHUB_ISSUES_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          GitHub repository
+        </a>.
       </p>
 
       <h2>11. Changes to This Policy</h2>
@@ -572,13 +615,19 @@ function PrivacyContent() {
 
       <h2>12. Contact</h2>
       <p>
-        For privacy-related questions or to exercise your data rights,
-        contact us at{" "}
-        <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> or open an
-        issue on our{" "}
-        <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/issues" target="_blank" rel="noopener noreferrer">
+        For privacy-related questions, open an issue on our{" "}
+        <a
+          href={CONTACT_GITHUB_ISSUES_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           GitHub repository
-        </a>.
+        </a>. To exercise your data rights, use the in-app{" "}
+        <strong>Settings &rarr; Privacy &amp; Data</strong> section &mdash;
+        Download my data (Article 20) and the Danger Zone&rsquo;s
+        Reset Everything (Article 17) are both self-serve. A
+        dedicated <code>privacy@</code> mailbox will land alongside our
+        custom domain.
       </p>
     </>
   )
