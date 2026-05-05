@@ -53,17 +53,20 @@ WS_RATE_WINDOW_SECONDS = 60.0
 class NodeRateLimiter:
     """Sliding-window rate limiter keyed by node_id."""
 
-    def __init__(self):
+    def __init__(self, max_per_window: int = WS_MAX_MSGS_PER_MINUTE,
+                 window_seconds: float = WS_RATE_WINDOW_SECONDS):
         self._windows: dict[str, deque[float]] = {}
+        self._max = max_per_window
+        self._window = window_seconds
 
     def allow(self, node_id: str) -> bool:
         now = time.monotonic()
         window = self._windows.setdefault(node_id, deque())
         # Evict entries older than the window.
-        cutoff = now - WS_RATE_WINDOW_SECONDS
+        cutoff = now - self._window
         while window and window[0] < cutoff:
             window.popleft()
-        if len(window) >= WS_MAX_MSGS_PER_MINUTE:
+        if len(window) >= self._max:
             return False
         window.append(now)
         return True
@@ -73,6 +76,34 @@ class NodeRateLimiter:
 
 
 _ws_rate_limiter = NodeRateLimiter()
+
+
+# ── Per-node CONNECT-rate throttle ───────────────────────────────────
+# Separate from the message-rate limiter above because the threat
+# model is different.  An attacker who has stolen (or guessed) a
+# valid node API key can spam-connect to /ws/node — each successful
+# connect calls ``manager.connect()`` which CLOSES the previous
+# connection (intentional, to handle stale-reconnect after a node
+# crash).  Without throttling, the attacker can hold the legitimate
+# node permanently disconnected by reconnecting every few millis.
+#
+# Also catches the unauthenticated-spam case: each connect attempt
+# does a SHA-256 hash + DB lookup before rejecting, so 1000s of
+# attempts/sec from a single IP would burn auth CPU.  We throttle
+# by node_id (always present per FastAPI Query(...)) which doubles
+# as a per-attacker-bucket since the attacker has to pick SOME id
+# to send.
+#
+# 10 connects/minute is well above legitimate traffic — a healthy
+# node connects once at startup and reconnects on the order of
+# seconds-to-minutes when the link drops.  Burst-of-three on a
+# flaky network is fine; ten in 60 seconds is anomalous.
+WS_MAX_CONNECTS_PER_MINUTE = 10
+
+_ws_connect_throttle = NodeRateLimiter(
+    max_per_window=WS_MAX_CONNECTS_PER_MINUTE,
+    window_seconds=WS_RATE_WINDOW_SECONDS,
+)
 
 
 # ── Connection Manager ────────────────────────────────────────────────
@@ -176,6 +207,20 @@ async def node_websocket(
     Persistent WebSocket channel for a CloudNode.
     Authentication happens during handshake via query params.
     """
+    # --- Connect-rate throttle (BEFORE auth) ---
+    # Reject the handshake without burning a DB query if this node_id
+    # has already attempted ``WS_MAX_CONNECTS_PER_MINUTE`` connects in
+    # the last 60s.  See the throttle's docstring above for the threat
+    # model.  Code 1013 (Try Again Later) is the WS-spec equivalent of
+    # HTTP 429.
+    if not _ws_connect_throttle.allow(node_id):
+        logger.warning(
+            "[WS] Connect throttle hit for node_id=%s — rejecting handshake",
+            node_id,
+        )
+        await ws.close(code=1013, reason="Too many connection attempts")
+        return
+
     # --- Authenticate ---
     api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
 

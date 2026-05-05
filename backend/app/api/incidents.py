@@ -198,7 +198,9 @@ async def delete_incident(
 
 
 @router.get("/{incident_id}/evidence/{evidence_id}")
+@limiter.limit("120/minute")
 async def get_incident_evidence(
+    request: Request,
     incident_id: int,
     evidence_id: int,
     user: AuthUser = Depends(require_admin),
@@ -206,7 +208,13 @@ async def get_incident_evidence(
 ):
     """Stream a snapshot or clip blob for an evidence item.
     Returns 404 if the incident doesn't belong to the caller's org or
-    if the evidence row has no binary payload."""
+    if the evidence row has no binary payload.
+
+    Rate-limited to 120 req/min per org.  This endpoint serves
+    arbitrary-size video blobs from the DB and bypasses the
+    viewer-hour cap that gates the live HLS endpoints — a per-org
+    cap here keeps it from becoming a poor man's bandwidth tap.
+    """
     # Org check via the parent incident
     _get_owned_incident(db, user.org_id, incident_id)
 
@@ -234,7 +242,9 @@ async def get_incident_evidence(
 
 
 @router.get("/{incident_id}/evidence/{evidence_id}/playlist.m3u8")
+@limiter.limit("120/minute")
 async def get_incident_evidence_playlist(
+    request: Request,
     incident_id: int,
     evidence_id: int,
     user: AuthUser = Depends(require_admin),
@@ -243,7 +253,13 @@ async def get_incident_evidence_playlist(
     """Synthetic single-segment HLS playlist for a clip evidence blob.
     Lets the dashboard reuse hls.js to play attach_clip captures with the
     same JWT auth as the live player. Returns 404 unless the evidence is a
-    clip with attached video data."""
+    clip with attached video data.
+
+    Rate-limited to 120 req/min per org — same cap as the evidence
+    blob endpoint it points at; both are per-call cheap but together
+    they're a video-bandwidth path that should match the HLS
+    endpoints' protection model.
+    """
     _get_owned_incident(db, user.org_id, incident_id)
 
     evidence = (

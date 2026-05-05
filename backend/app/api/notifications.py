@@ -846,12 +846,24 @@ async def clear_all(
 
 
 @router.get("/stream")
-async def stream_notifications(user: AuthUser = Depends(require_view)):
+@limiter.limit("60/minute")
+async def stream_notifications(
+    request: Request,
+    user: AuthUser = Depends(require_view),
+):
     """SSE — streams new notifications to the bell panel in real time.
 
     The audience filter is applied at broadcast time (see
     NotificationBroadcaster.notify) so non-admins never even receive
     admin-only events on the wire.
+
+    Rate-limited to 60 connect attempts per minute per org.  The
+    per-org subscriber cap (``broadcaster.subscribe``) prevents
+    accumulation, but without a connect-rate cap a hostile client
+    could rapidly churn open→cap-hit→reject and burn JWT-verify CPU
+    on every cycle.  60/min is well above legitimate usage (browser
+    tabs reconnect on the order of seconds-to-minutes, not multiple
+    times per second) and the same cap as the audit-logs endpoint.
     """
     from app.core.plans import get_plan_limits
     org_id = user.org_id

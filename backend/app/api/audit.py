@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models import StreamAccessLog
 
 router = APIRouter(prefix="/api", tags=["audit"])
@@ -21,7 +22,9 @@ def _require_admin_feature(user: AuthUser):
 
 
 @router.get("/audit/stream-logs")
+@limiter.limit("120/minute")
 async def get_stream_logs(
+    request: Request,
     camera_id: Optional[str] = None,
     user_id: Optional[str] = None,
     limit: int = Query(default=100, le=500),
@@ -36,6 +39,11 @@ async def get_stream_logs(
     Get stream access logs for the admin's organization.
     Only org admins can access this endpoint.
     Logs are automatically cleaned up after the retention period.
+
+    Rate-limited to 120 req/min per org — same as ``/api/audit-logs``.
+    Each call is a multi-clause SQL query against StreamAccessLog;
+    the dashboard polls only on user interaction so 2 req/sec is
+    plenty of headroom.
     """
     _require_admin_feature(admin)
     query = db.query(StreamAccessLog).filter(StreamAccessLog.org_id == admin.org_id)
@@ -67,7 +75,9 @@ async def get_stream_logs(
 
 
 @router.get("/audit/stream-logs/stats")
+@limiter.limit("60/minute")
 async def get_stream_stats(
+    request: Request,
     days: int = Query(default=7, le=30),
     admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
@@ -75,6 +85,11 @@ async def get_stream_stats(
     """
     Get stream access statistics for the admin's organization.
     Returns counts by camera, user, and day.
+
+    Rate-limited to 60 req/min per org — this fans out into 4
+    aggregating queries (count + 3 group-bys) and is more expensive
+    per call than the row-list endpoint above.  Halve the budget
+    accordingly.
     """
     _require_admin_feature(admin)
     from sqlalchemy import func

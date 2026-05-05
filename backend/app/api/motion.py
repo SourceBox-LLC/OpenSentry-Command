@@ -9,12 +9,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_view
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.models.models import MotionEvent
 
 logger = logging.getLogger(__name__)
@@ -173,10 +174,19 @@ async def motion_stats(
 # ── SSE Stream ──────────────────────────────────────────────────────
 
 @router.get("/events/stream")
-async def stream_motion_events(user: AuthUser = Depends(require_view)):
+@limiter.limit("60/minute")
+async def stream_motion_events(
+    request: Request,
+    user: AuthUser = Depends(require_view),
+):
     """
     SSE endpoint — streams motion detection events in real-time.
     Used by the dashboard to show instant motion notifications.
+
+    Rate-limited to 60 connect attempts per minute per org.  See the
+    notifications-stream endpoint for the full rationale — same
+    threat model (connect-flood burning JWT-verify CPU even when the
+    per-org subscriber cap rejects the new subscriber).
     """
     from app.core.plans import get_plan_limits
     org_id = user.org_id

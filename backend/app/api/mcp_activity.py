@@ -13,12 +13,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthUser, require_admin
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.mcp.activity import MAX_SSE_SUBSCRIBERS_PER_ORG, tracker
 from app.models.models import McpActivityLog
 
@@ -28,10 +29,18 @@ router = APIRouter(prefix="/api/mcp/activity", tags=["mcp-activity"])
 
 
 @router.get("/stream")
-async def stream_activity(user: AuthUser = Depends(require_admin)):
+@limiter.limit("60/minute")
+async def stream_activity(
+    request: Request,
+    user: AuthUser = Depends(require_admin),
+):
     """
     SSE endpoint — streams MCP tool call events in real-time.
     Each event is a JSON-encoded McpEvent.
+
+    Rate-limited to 60 connect attempts per minute per org.  See the
+    notifications-stream endpoint for the full rationale — same
+    threat model.
     """
     from app.core.plans import get_plan_limits
     org_id = user.org_id
@@ -108,7 +117,9 @@ async def get_activity_stats(user: AuthUser = Depends(require_admin)):
 
 
 @router.get("/logs")
+@limiter.limit("120/minute")
 async def get_mcp_logs(
+    request: Request,
     tool_name: Optional[str] = None,
     key_name: Optional[str] = None,
     status: Optional[str] = None,
@@ -118,7 +129,12 @@ async def get_mcp_logs(
     admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Get persisted MCP activity logs with filtering and pagination."""
+    """Get persisted MCP activity logs with filtering and pagination.
+
+    Rate-limited to 120 req/min per org — same as the audit-stream-logs
+    sibling.  Each call runs filters + count + ordered fetch against
+    McpActivityLog.
+    """
     query = db.query(McpActivityLog).filter(McpActivityLog.org_id == admin.org_id)
 
     if tool_name:
@@ -159,12 +175,18 @@ async def get_mcp_logs(
 
 
 @router.get("/logs/stats")
+@limiter.limit("60/minute")
 async def get_mcp_log_stats(
+    request: Request,
     days: int = Query(default=7, le=30),
     admin: AuthUser = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Get aggregate MCP activity statistics from persisted logs."""
+    """Get aggregate MCP activity statistics from persisted logs.
+
+    Rate-limited to 60 req/min per org — fans out into multiple
+    aggregating queries, same calculus as audit-stream-logs/stats.
+    """
     from sqlalchemy import func
 
     since = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(days=days)
