@@ -513,7 +513,7 @@ Two endpoints, both Svix-signed (signature verification mandatory in production)
 
 ## Plan Enforcement
 
-`app/core/plans.py` owns plan-cap policy. `PLAN_LIMITS` is the source of truth for every per-tier number — camera/node/seat caps (abuse rails), monthly viewer-hour cap (the real tier axis), per-channel SSE concurrency cap, and log retention days. The `business` slug is retained as a transitional alias for `pro_plus` so JWTs minted before the Clerk-side rename keep resolving correctly.
+`app/core/plans.py` owns plan-cap policy. `PLAN_LIMITS` is the source of truth for every per-tier number — camera/node/seat caps (abuse rails), monthly viewer-hour cap (the real tier axis), per-channel SSE concurrency cap, and log retention days. Three tiers: `free_org`, `pro`, `pro_plus`. (An earlier `business` slug was renamed to `pro_plus` during a Clerk-side reorg; the transitional alias was carried briefly and removed once every known org had rolled over — see ADR `docs/adr/0002-viewer-hour-billing.md` for the original tier names.)
 
 Two entry points for plan resolution:
 

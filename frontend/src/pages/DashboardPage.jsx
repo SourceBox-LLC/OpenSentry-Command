@@ -206,10 +206,7 @@ function DashboardPage() {
       })()}
 
       {planInfo && planInfo.features?.includes("admin") && (() => {
-        // Pro Plus accepts both the new "pro_plus" slug and the transitional
-        // "business" alias. Map both to the same CSS class so the badge
-        // styling is consistent regardless of which slug the JWT carries.
-        const isProPlus = planInfo.plan === "pro_plus" || planInfo.plan === "business"
+        const isProPlus = planInfo.plan === "pro_plus"
         const planClass = isProPlus ? "pro-plus" : "pro"
         return (
         <div className={`pro-status-bar pro-status-${planClass}`}>

@@ -914,7 +914,7 @@ function SettingsPage() {
                   Manage Plan
                 </Link>
               )}
-              {(planInfo.plan === "pro_plus" || planInfo.plan === "business") && (
+              {planInfo.plan === "pro_plus" && (
                 <Link to="/pricing" className="btn btn-secondary btn-small">
                   Manage Plan
                 </Link>

@@ -71,7 +71,7 @@ Source of truth: `backend/app/core/plans.py::PLAN_LIMITS`.
 
 **Neutral:**
 - Tier-scaled SSE concurrency caps and per-tier MCP daily call caps shipped in the same commit (`a94ef35`). They share the same enforcement pattern (resolve plan → look up cap → 429 if exceeded) but live in different modules.
-- The `business` plan slug remains as a transitional alias for `pro_plus` — see PLAN_LIMITS comment.
+- The earlier `business` plan slug was renamed to `pro_plus` during the Clerk-side reorg.  The transitional alias documented here was carried for a short window and removed once every known org had rolled over.
 
 ## Revisiting this decision
 

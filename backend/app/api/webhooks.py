@@ -25,20 +25,18 @@ router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 # Member limits per plan — must match Clerk Dashboard plan keys and
 # PLAN_LIMITS.max_seats in app.core.plans. Source of truth is plans.py; this
 # dict mirrors it here because the webhook handler calls into Clerk's SDK
-# which wants the integer directly. ``business`` kept as a transitional alias.
+# which wants the integer directly.
 PLAN_MEMBER_LIMITS = {
     "free_org": 2,
     "pro": 10,
     "pro_plus": 20,
-    "business": 20,  # transitional alias — remove after rollover
 }
 
 # Paid plan slugs. Seeing a subscription.updated with one of these means the
 # payment card is active (Clerk wouldn't mark the subscription live otherwise),
 # so we can clear any past-due flag we were holding. Kept local to this module
 # rather than imported from plans.py to keep webhook semantics self-contained.
-# ``business`` kept as a transitional alias — see PLAN_MEMBER_LIMITS comment.
-PAID_PLAN_SLUGS_WEBHOOK = frozenset({"pro", "pro_plus", "business"})
+PAID_PLAN_SLUGS_WEBHOOK = frozenset({"pro", "pro_plus"})
 
 
 def set_org_member_limit(org_id: str, limit: int):

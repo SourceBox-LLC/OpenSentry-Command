@@ -50,10 +50,7 @@ const PLAN_COMPARISON = [
   { label: "Priority Support", free: false, pro: false, proPlus: true },
 ]
 
-// ``business`` is the pre-rename Clerk slug kept as a transitional alias in
-// the backend — treat it as Pro Plus in the UI so a user with a stale JWT
-// sees the right tier while their token refreshes.
-const isProPlus = (slug) => slug === "pro_plus" || slug === "business"
+const isProPlus = (slug) => slug === "pro_plus"
 
 function UpgradeModal({ isOpen, onClose, feature, currentPlan }) {
   if (!isOpen) return null

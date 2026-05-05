@@ -6,12 +6,11 @@ Plan slugs must match the keys defined in the Clerk Dashboard:
   - pro       (Pro — $12/mo, or $10/mo billed annually = $120/yr)
   - pro_plus  (Pro Plus — $29/mo, or $25/mo billed annually = $300/yr)
 
-Transitional alias: ``business`` is kept as an alias for ``pro_plus``
-so JWT claims and cached Setting rows written before the Clerk-side
-rename don't silently demote an already-paying customer to the free
-tier during the JWT refresh / webhook propagation window. Remove the
-alias after all known orgs have rolled over (usually within an hour
-of the Clerk rename landing, since Clerk JWTs refresh on the minute).
+Historical note: an earlier ``business`` slug was renamed to ``pro_plus``
+during the Clerk-side plan reorg.  The transitional alias was carried
+for a while to handle in-flight JWTs and unrefreshed Setting rows; it
+was removed after every known org had rolled over.  See ADR
+``docs/adr/0002-viewer-hour-billing.md`` for the original tier names.
 """
 
 import logging
@@ -64,22 +63,10 @@ PLAN_LIMITS = {
         "max_sse_subscribers": 100,
         "log_retention_days": 365,
     },
-    # Transitional alias for the pre-rename "business" slug — see module
-    # docstring. Points at the same limits so a stale JWT (or a Setting
-    # row not yet refreshed from Clerk) still resolves to the correct caps.
-    "business": {
-        "max_cameras": 200,
-        "max_nodes": 999,
-        "max_seats": 20,
-        "max_viewer_hours_per_month": 1500,
-        "max_sse_subscribers": 100,
-        "log_retention_days": 365,
-    },
 }
 
-# Slugs we trust without re-checking against Clerk. "business" kept as a
-# transitional alias — see PLAN_LIMITS comment.
-PAID_PLAN_SLUGS = frozenset({"pro", "pro_plus", "business"})
+# Slugs we trust without re-checking against Clerk.
+PAID_PLAN_SLUGS = frozenset({"pro", "pro_plus"})
 
 # Min seconds between consecutive live Clerk lookups for the same org.
 # Prevents non-paid callers from generating excessive Clerk API traffic
@@ -170,14 +157,11 @@ def get_plan_limits_for_org(db, org_id: str) -> dict:
 
 
 def get_plan_display_name(plan: str) -> str:
-    """Human-readable plan name. ``business`` (transitional alias) maps to
-    the new "Pro Plus" display name so a stale JWT doesn't briefly flash
-    the old tier name in the UI."""
+    """Human-readable plan name."""
     names = {
         "free_org": "Free",
         "pro": "Pro",
         "pro_plus": "Pro Plus",
-        "business": "Pro Plus",  # transitional alias
     }
     return names.get(plan, "Free")
 

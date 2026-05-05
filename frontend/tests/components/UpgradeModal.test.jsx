@@ -66,18 +66,8 @@ describe('UpgradeModal', () => {
     expect(screen.getByText(/Currently on the/)).toHaveTextContent(/\bPro\b/)
   })
 
-  it('treats both pro_plus and the legacy business slug as Pro Plus', () => {
-    // The transitional alias from backend/app/core/plans.py — JWTs minted
-    // before the Clerk-side rename still send "business". The modal should
-    // render those users as Pro Plus.
-    const { rerender } = renderModal({ currentPlan: 'pro_plus' })
-    expect(screen.getByText(/Currently on the/)).toHaveTextContent('Pro Plus')
-
-    rerender(
-      <MemoryRouter>
-        <UpgradeModal isOpen feature="cameras" currentPlan="business" onClose={() => {}} />
-      </MemoryRouter>,
-    )
+  it('renders Pro Plus when currentPlan is pro_plus', () => {
+    renderModal({ currentPlan: 'pro_plus' })
     expect(screen.getByText(/Currently on the/)).toHaveTextContent('Pro Plus')
   })
 

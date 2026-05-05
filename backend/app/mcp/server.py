@@ -120,12 +120,9 @@ def compute_allowed_tools(scope_mode: str | None, scope_tools: list[str] | None)
 #   - daily_limit:  protects against runaway automations overnight (e.g. an
 #                   agent stuck in a loop burning through your Clerk API spend
 #                   and your DB throughput for 8 hours while you sleep)
-# ``business`` kept as a transitional alias for ``pro_plus`` — remove after
-# the Clerk-side rename has fully rolled over.
 RATE_LIMITS = {
     "pro":      {"minute": 30,  "daily": 5_000},
     "pro_plus": {"minute": 120, "daily": 30_000},
-    "business": {"minute": 120, "daily": 30_000},  # transitional alias
 }
 DEFAULT_RATE_LIMIT = None  # Block unrecognized plans (MCP requires Pro+)
 
@@ -321,7 +318,7 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         )
         if not allowed:
             db.close()
-            plan_name = "Pro Plus" if plan in ("pro_plus", "business") else plan.title()
+            plan_name = "Pro Plus" if plan == "pro_plus" else plan.title()
             if breach == "minute":
                 raise ToolError(
                     f"Rate limit exceeded: {limits['minute']} calls/min allowed "
