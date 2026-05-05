@@ -6046,6 +6046,131 @@ body {
     }
 }
 
+/* ── Admin Log Tabs ──────────────────────────────────────────────
+   Three pills selecting which log surface (Stream / Audit / MCP)
+   shows below.  Replaces the previous "stack all three log
+   sections vertically" layout — page is ~3x shorter, and the MCP
+   tab gets a red badge when there are failures. */
+.admin-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.admin-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.admin-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+.admin-tab:active {
+    transform: scale(0.98);
+}
+
+.admin-tab.active {
+    color: var(--text-primary);
+}
+
+.admin-tab-green.active {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: var(--accent-green);
+}
+
+.admin-tab-amber.active {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: var(--accent-amber);
+}
+
+.admin-tab-purple.active {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.4);
+    color: var(--accent-purple);
+}
+
+.admin-tab-icon {
+    font-size: 1rem;
+    opacity: 0.85;
+    flex-shrink: 0;
+}
+
+.admin-tab-label {
+    white-space: nowrap;
+}
+
+.admin-tab-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 1px 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-tab.active .admin-tab-count {
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text-primary);
+}
+
+.admin-tab-error-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--accent-red);
+    color: #fff;
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 14px rgba(239, 68, 68, 0.55);
+    animation: admin-tab-error-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes admin-tab-error-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 14px rgba(239, 68, 68, 0.55); }
+    50% { box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 22px rgba(239, 68, 68, 0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-tab-error-badge {
+        animation: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-tab-label {
+        display: none;
+    }
+    .admin-tab {
+        padding: 0.6rem 0.85rem;
+    }
+}
+
 /* Audit Logs Section */
 .audit-section {
     background: var(--bg-secondary);

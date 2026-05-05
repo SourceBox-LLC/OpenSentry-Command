@@ -7,6 +7,7 @@ import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 import OrgAuditLogPanel from "../components/OrgAuditLogPanel.jsx"
 import AdminKpiStrip from "../components/AdminKpiStrip.jsx"
+import AdminTabs from "../components/AdminTabs.jsx"
 
 function AdminPage() {
   const { getToken } = useAuth()
@@ -42,6 +43,10 @@ function AdminPage() {
   })
   const [mcpTotal, setMcpTotal] = useState(0)
   const [mcpDays, setMcpDays] = useState(7)
+
+  // Active tab in the log strip — Stream / Audit / MCP swap into the
+  // single panel below the KPI strip rather than all three stacking.
+  const [activeTab, setActiveTab] = useState("stream")
 
   // Only load audit data once we know the plan allows it
   useEffect(() => {
@@ -282,6 +287,15 @@ function AdminPage() {
         mcpDays={mcpDays}
       />
 
+      <AdminTabs
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        streamCount={total}
+        mcpCount={mcpStats?.total_calls}
+        mcpErrors={mcpStats?.total_errors}
+      />
+
+      {activeTab === "stream" && (<>
       <div className="audit-section">
         <div className="audit-section-header">
           <div>
@@ -480,18 +494,11 @@ function AdminPage() {
           </div>
         )}
       </div>
+      </>)}
 
-      {/*
-        Organization Audit Log — write_audit() rows for member changes,
-        MCP key gen, settings changes, danger-zone actions, etc.
-        Self-contained component owns its state; mounted between the
-        camera-stream audit (above) and the MCP-tool audit (below)
-        so the three audit surfaces flow naturally as the operator
-        scrolls.
-      */}
-      <OrgAuditLogPanel />
+      {activeTab === "audit" && <OrgAuditLogPanel />}
 
-      {/* MCP Activity Logs */}
+      {activeTab === "mcp" && (<>
       <div className="audit-section">
         <div className="audit-section-header">
           <div>
@@ -760,6 +767,7 @@ function AdminPage() {
           </div>
         )}
       </div>
+      </>)}
     </div>
   )
 }
