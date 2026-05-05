@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useAuth } from "@clerk/clerk-react"
 import { updateCameraRecordingPolicy } from "../services/api"
+import HelpTooltip from "./HelpTooltip.jsx"
 
 /**
  * Per-camera recording-policy controls (v0.1.43+).
@@ -139,7 +140,16 @@ function CameraRecordingControls({ camera, onUpdated, timezone }) {
           marginBottom: "0.4rem",
         }}
       >
-        <span>Continuous 24/7</span>
+        <span>
+          Continuous 24/7
+          <HelpTooltip label="Help: continuous recording">
+            Records <strong>every frame</strong>, all day, every day, until
+            you turn it off.  Highest storage cost — a single 1080p camera
+            on continuous fills ~30 GB/day.  Use for high-stakes feeds
+            (front door, register) where missing a moment is worse than
+            paying for storage.  Mutually exclusive with Scheduled.
+          </HelpTooltip>
+        </span>
         <button
           type="button"
           className={`toggle-switch ${local.continuous_24_7 ? "active" : ""}`}
@@ -162,7 +172,16 @@ function CameraRecordingControls({ camera, onUpdated, timezone }) {
           marginBottom: local.scheduled_recording ? "0.4rem" : 0,
         }}
       >
-        <span>Scheduled Recording</span>
+        <span>
+          Scheduled Recording
+          <HelpTooltip label="Help: scheduled recording">
+            Records only during the time window you set below
+            (defaults to 8am–5pm).  Storage cost scales with the
+            window — a 9-hour daily schedule is roughly 1/3 the
+            cost of Continuous.  Use for business-hours-only feeds.
+            Mutually exclusive with Continuous.
+          </HelpTooltip>
+        </span>
         <button
           type="button"
           className={`toggle-switch ${local.scheduled_recording ? "active" : ""}`}

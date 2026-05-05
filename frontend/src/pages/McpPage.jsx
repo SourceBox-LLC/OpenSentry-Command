@@ -9,6 +9,7 @@ import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 import IncidentReportModal from "../components/IncidentReportModal.jsx"
+import HelpTooltip from "../components/HelpTooltip.jsx"
 
 // Trailing slash is intentional: FastAPI mounts the MCP app at "/mcp"
 // with internal path="/", so requests to "/mcp" 307-redirect to "/mcp/".
@@ -783,7 +784,18 @@ function McpPage() {
               </div>
               <div className="mcp-scope-picker">
                 <div className="mcp-scope-picker-header">
-                  <span className="mcp-scope-picker-label">Tool access</span>
+                  <span className="mcp-scope-picker-label">
+                    Tool access
+                    <HelpTooltip label="Help: MCP tool access scope">
+                      MCP keys can be scoped so an AI agent can only do what
+                      you trust it to do.  <strong>Read-only</strong> is the
+                      safest default for evaluation — the agent can list
+                      cameras, view snapshots, and inspect incidents, but
+                      can&rsquo;t toggle recording or modify state.  Use
+                      <strong> Custom</strong> to grant exactly the tools an
+                      automation needs (principle of least privilege).
+                    </HelpTooltip>
+                  </span>
                   <span className="mcp-scope-picker-help">Limit which MCP tools this key can call.</span>
                 </div>
                 <div className="mcp-scope-options">

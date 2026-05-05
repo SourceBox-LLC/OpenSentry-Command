@@ -1006,6 +1006,127 @@ body {
     line-height: 1.4;
 }
 
+/* ── HelpTooltip — inline contextual ? icon + popover ────────────────
+   Used next to setting labels (recording policy, MCP scope picker,
+   default-off email toggles) to surface a one-sentence explanation
+   of what the control does.  Click or hover to open; click outside
+   or press Escape to close.  Position absolute so it overlays
+   neighbouring rows rather than pushing them around. */
+.help-tooltip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.help-tooltip-trigger {
+    appearance: none;
+    background: var(--bg-input, rgba(255, 255, 255, 0.05));
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.help-tooltip-trigger:hover,
+.help-tooltip-trigger[aria-expanded="true"] {
+    background: var(--accent-color, #22c55e);
+    color: #0a0a0f;
+    border-color: var(--accent-color, #22c55e);
+}
+
+.help-tooltip-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    min-width: 220px;
+    max-width: 320px;
+    padding: 12px 14px;
+    background: var(--bg-card, #1a1a23);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+/* Caret — small triangle pointing up at the trigger.  CSS-only so
+   no SVG asset to maintain. */
+.help-tooltip-popover::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background: var(--bg-card, #1a1a23);
+    border-left: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
+    transform: translateX(-50%) rotate(45deg);
+}
+
+.help-tooltip-body {
+    color: var(--text-secondary);
+}
+
+.help-tooltip-body strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.help-tooltip-body code {
+    background: var(--bg-input, rgba(255, 255, 255, 0.05));
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.85em;
+}
+
+.help-tooltip-doclink {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--accent-color, #22c55e);
+    text-decoration: none;
+}
+
+.help-tooltip-doclink:hover {
+    text-decoration: underline;
+}
+
+/* On narrow viewports, anchor the popover to the right edge of the
+   trigger instead of centering — keeps it from spilling off-screen
+   when the trigger is near the right edge of a settings card. */
+@media (max-width: 600px) {
+    .help-tooltip-popover {
+        left: auto;
+        right: 0;
+        transform: none;
+        max-width: calc(100vw - 40px);
+    }
+    .help-tooltip-popover::before {
+        left: auto;
+        right: 6px;
+        transform: rotate(45deg);
+    }
+}
+
 .welcome-hero-footnote {
     margin-top: 20px;
     padding-top: 16px;

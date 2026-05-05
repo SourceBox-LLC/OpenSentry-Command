@@ -9,6 +9,7 @@ import KeyRotationModal from "../components/KeyRotationModal.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 import NodeStorageBar from "../components/NodeStorageBar.jsx"
 import CameraRecordingControls from "../components/CameraRecordingControls.jsx"
+import HelpTooltip from "../components/HelpTooltip.jsx"
 
 function formatRelativeTime(dateString) {
   if (!dateString) return ""
@@ -747,11 +748,34 @@ function SettingsPage() {
                   "a flappy outdoor camera doesn't flood your inbox.  " +
                   "Default OFF — opt in if you want it.",
                 audience: "All members",
+                // Only motion has a tooltip — the "why is this default
+                // OFF when everything else is default ON?" question is
+                // a real onboarding speed bump.  All other rows speak
+                // for themselves.
+                help: (
+                  <>
+                    Motion is the only email kind that defaults <strong>OFF</strong>.
+                    Per-org motion volume varies wildly (1 indoor doorbell vs.
+                    10 outdoor cameras with foliage triggers) — opting users
+                    in by default risks day-one volume that drives spam-marks.
+                    Spam-marks against our sender domain hurt deliverability
+                    for <strong>every</strong> email kind across <strong>every</strong> customer,
+                    so we let you opt in deliberately.  Cooldown + digest
+                    caps you at 2 emails per camera per 15-minute window.
+                  </>
+                ),
               },
-            ].map(({ key, label, desc, audience }) => (
+            ].map(({ key, label, desc, audience, help }) => (
               <label key={key} className="toggle-row">
                 <div className="toggle-info">
-                  <span className="toggle-label">{label}</span>
+                  <span className="toggle-label">
+                    {label}
+                    {help && (
+                      <HelpTooltip label={`Help: ${label}`}>
+                        {help}
+                      </HelpTooltip>
+                    )}
+                  </span>
                   <span className="toggle-desc">
                     {desc}{" "}
                     <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>
