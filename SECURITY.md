@@ -2,86 +2,75 @@
 
 SourceBox Sentry is a security-focused application and we take vulnerabilities seriously.
 
-## Supported Versions
+The full policy — scope, response timelines, safe-harbour terms, and the standard machine-readable [`security.txt`](https://sourceboxsentry.com/.well-known/security.txt) — lives at:
 
-| Version | Supported |
-|---------|-----------|
-| 2.1.x (FastAPI) | :white_check_mark: |
-| 2.0.x (FastAPI) | :x: |
-| < 2.0 (Flask)   | :x: |
+**https://sourceboxsentry.com/security#vulnerability-disclosure**
 
-Always run the latest version. The current release is tracked in `backend/pyproject.toml` (`version = "2.1.0"` at time of writing) and surfaced by `GET /api/health`.
+This file is the GitHub-standard summary; the deployed page above is canonical when the two disagree.
 
-## Security Features
+## Reporting a vulnerability
 
-| Feature | Description |
-|---------|-------------|
-| **Clerk Authentication** | JWT-based authentication with organization-scoped permissions |
-| **API Key Hashing** | CloudNode API keys stored as SHA-256 hashes |
-| **Same-origin Streaming** | Live segments served through the authenticated backend — no third-party storage in the live video path |
-| **Tenant Isolation** | All queries scoped by `org_id` -- no cross-org data access |
-| **CORS** | Explicit origin allowlist (no wildcards with credentials) |
-| **Audit Logging** | Stream access tracked with user ID, IP, and user agent |
-| **Encrypted Storage** | CloudNode encrypts API key at rest with AES-256-GCM |
-| **Webhook Verification** | Clerk webhooks verified via Svix signature |
+**Preferred:** file a private [Security Advisory on this repository](https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories/new). This gives us a private channel for triage and the standard CVE workflow if one is warranted.
 
-## Reporting a Vulnerability
+**Without a GitHub account:** email `legal@sourcebox.dev` with subject line starting `[SECURITY]`.
 
-### Do NOT
+**Please do NOT:**
 
-- Open a public GitHub issue for security vulnerabilities
-- Disclose the vulnerability publicly before it is fixed
+- Open a public GitHub issue for security vulnerabilities.
+- Disclose details publicly before we've shipped a fix.
 
-### Do
+### What to include
 
-1. **Report via**: https://www.sourceboxai.com/security
+- Description of the issue and its impact
+- Steps to reproduce (URLs, payloads, screenshots)
+- Version / commit you tested against — surfaced by `GET /api/health`
+- Optional suggested fix or mitigation
 
-2. **Include:**
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if any)
+### Response timeline
 
-3. **Response timeline:**
-   - Acknowledgment within 48 hours
-   - Assessment within 7 days
-   - Fix coordinated with reporter
+- Acknowledgement within 72 hours
+- Initial assessment within 7 days
+- Fix coordinated with the reporter, with credit in the release notes if you'd like
 
 ## Scope
 
-### In Scope
+**In scope:**
 
-- Command Center API and web application
-- CloudNode-to-backend communication
-- Authentication and authorization
-- Data storage and tenant isolation
-- HLS segment cache and playlist serving
+- The deployed Command Center API and web application (https://sourceboxsentry.com)
+- The CloudNode binary + repository ([`SourceBox-LLC/opensentry-cloud-node`](https://github.com/SourceBox-LLC/opensentry-cloud-node))
+- Auth / authorization, including IDOR, privilege escalation, and tenant-isolation breaks
+- RCE, SSRF, XSS, CSRF, SQL injection, deserialization
+- Cryptographic weaknesses in the at-rest encryption story
+- MCP key scope-bypass — anything that lets a read-only key call a write tool
 
-### Out of Scope
+**Out of scope:**
 
-- Denial of Service attacks
-- Social engineering
-- Physical access to devices
-- Third-party dependencies (report upstream)
+- Issues in third-party services (Clerk, Stripe, Fly.io, Resend, Sentry) — report upstream
+- Social engineering, physical attacks, attacks needing local access to a CloudNode you don't own
+- Volumetric DoS / bandwidth flood attacks (application-layer rate-limit bypasses ARE in scope)
+- Missing security headers / rate limits we've consciously chosen not to set
+- Self-XSS requiring the victim to paste attacker-controlled content
+- Email spoofing of domains we don't own
+- Reports generated solely by automated scanners with no proof-of-impact
 
-## Best Practices for Deployment
+## Safe harbour
 
-1. **Keep software updated** -- pull latest and rebuild regularly
-2. **Use strong Clerk passwords** -- enforce via Clerk dashboard settings
-3. **Rotate API keys** -- use the key rotation endpoint for CloudNodes periodically
-4. **Restrict CORS** -- set `FRONTEND_URL` to your actual domain
-5. **Monitor audit logs** -- review stream access logs for unauthorized access
-6. **Use HTTPS** -- deploy behind a reverse proxy with TLS (Fly.io handles this)
-7. **Backup your database** -- regular backups of the application database
+If you make a good-faith effort to comply with this policy:
 
-## Security Updates
+- We consider your research authorised under the Computer Fraud and Abuse Act (and equivalent state laws)
+- We will not pursue or support legal action related to your research
+- We will recognise your contribution publicly if you wish
+- We will work with you to understand and resolve the issue quickly
+
+"Good faith" means: avoid privacy violations and service disruptions, only test accounts you own (or have explicit permission to test), don't exfiltrate data beyond what's needed to demonstrate the issue, give us reasonable time to fix before public disclosure, stop and tell us the moment you realise you've encountered customer data.
+
+## Bug bounty
+
+There is no monetary bug bounty today — SourceBox Sentry is pre-PMF. We're upfront about that so you can decide whether to invest the time. If we ever launch one, prior reporters will be at the front of the line.
+
+## Security updates
 
 Monitor:
+
 - [GitHub Releases](https://github.com/SourceBox-LLC/OpenSentry-Command/releases)
 - [GitHub Security Advisories](https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories)
-
-## Contact
-
-- **Security issues**: https://www.sourceboxai.com/security
-- **General questions**: [GitHub Discussions](https://github.com/SourceBox-LLC/OpenSentry-Command/discussions)
-- **Bug reports**: [GitHub Issues](https://github.com/SourceBox-LLC/OpenSentry-Command/issues)

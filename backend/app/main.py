@@ -36,6 +36,7 @@ from app.api import (
     nodes,
     notifications,
     webhooks,
+    well_known,
     ws,
 )
 from app.core.config import settings
@@ -441,6 +442,10 @@ app.include_router(mcp_activity.router)
 app.include_router(incidents.router)
 app.include_router(motion.router)
 app.include_router(notifications.router)
+# /.well-known/security.txt + the legacy /security.txt alias.
+# Mounted before the SPA middleware sees the request — see the
+# pass-through whitelist in spa_middleware below.
+app.include_router(well_known.router)
 
 # Mount MCP server at /mcp
 app.mount("/mcp", mcp_app)
@@ -1154,7 +1159,14 @@ if static_dir.exists():
         # the React DocsPage; FastAPI's auto docs live at /api-docs (see ctor).
         # /downloads/ is the backend binary-redirect route (see install.py);
         # without it, /downloads/linux/x86_64 would fall through to the SPA.
-        if request.url.path.startswith(("/api", "/ws", "/install.", "/mcp-setup.", "/downloads/")):
+        # /.well-known/ + /security.txt are RFC-9116 contact endpoints owned
+        # by app/api/well_known.py — without explicit pass-through they'd be
+        # served the React index.html, which would silently break security
+        # scanners that grep for the file.
+        if request.url.path.startswith((
+            "/api", "/ws", "/install.", "/mcp-setup.", "/downloads/",
+            "/.well-known/", "/security.txt",
+        )):
             return await call_next(request)
 
         # MCP endpoint: only pass POST requests (JSON-RPC) to the MCP server;

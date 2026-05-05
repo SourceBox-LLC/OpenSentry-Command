@@ -489,20 +489,124 @@ function SecurityPage() {
           </p>
         </section>
 
-        {/* ── Reporting a vulnerability ─────────────────────────── */}
-        <section className="security-section">
-          <h2>Reporting a vulnerability</h2>
+        {/* ── Vulnerability disclosure policy ───────────────────── */}
+        {/*
+          The id="vulnerability-disclosure" anchor is referenced from
+          /.well-known/security.txt's Policy: field — DO NOT rename
+          without updating app/api/well_known.py (and ideally publishing
+          a redirect, since security scanners cache the policy URL).
+        */}
+        <section className="security-section" id="vulnerability-disclosure">
+          <h2>Vulnerability Disclosure Policy</h2>
           <p>
-            If you find a security issue, please report it privately via the{" "}
+            We take security seriously and welcome reports from researchers,
+            customers, and operators.  This policy explains how to reach us,
+            what we consider in-scope, what to expect after you report, and
+            the safe-harbour terms we extend to good-faith research.
+          </p>
+
+          <h3>How to report</h3>
+          <p>
+            <strong>Preferred:</strong> file a private{" "}
             <a
-              href="https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories"
+              href="https://github.com/SourceBox-LLC/OpenSentry-Command/security/advisories/new"
               target="_blank"
               rel="noopener noreferrer"
             >
-              Command Center security advisories
+              GitHub Security Advisory
             </a>{" "}
-            page on GitHub. We triage within 72 hours. Coordinated disclosure
-            works — please don't publicly file details of an unpatched issue.
+            on the Command Center repository.  This gives us a private
+            channel for triage + the standard CVE workflow if one is warranted.
+          </p>
+          <p>
+            <strong>Without a GitHub account:</strong> email{" "}
+            <a href="mailto:legal@sourcebox.dev">legal@sourcebox.dev</a>{" "}
+            with subject line starting <code>[SECURITY]</code>.  Slower
+            channel — we still reply within the response timeline below.
+          </p>
+          <p>
+            Machine-readable contact info also lives at{" "}
+            <a
+              href="/.well-known/security.txt"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <code>/.well-known/security.txt</code>
+            </a>{" "}
+            (RFC 9116).
+          </p>
+
+          <h3>What to include</h3>
+          <ul className="security-bullets">
+            <li>A short description of the issue and its impact.</li>
+            <li>Step-by-step reproduction (URLs, payloads, screenshots, etc).</li>
+            <li>The version / commit SHA you tested against — surfaced by{" "}
+              <a href="/api/health" target="_blank" rel="noopener noreferrer"><code>GET /api/health</code></a>.
+            </li>
+            <li>Optionally: a suggested fix or mitigation.</li>
+          </ul>
+
+          <h3>Scope</h3>
+          <p>In scope:</p>
+          <ul className="security-bullets">
+            <li>The deployed Command Center (this site) and its API.</li>
+            <li>The CloudNode binary + repository (
+              <a
+                href="https://github.com/SourceBox-LLC/opensentry-cloud-node"
+                target="_blank"
+                rel="noopener noreferrer"
+              >SourceBox-LLC/opensentry-cloud-node</a>
+              ).</li>
+            <li>Auth / authorization, including IDOR, privilege escalation, and tenant-isolation breaks.</li>
+            <li>RCE, SSRF, XSS, CSRF, SQL injection, deserialization attacks.</li>
+            <li>Information disclosure that crosses tenant boundaries.</li>
+            <li>Cryptographic weaknesses in the at-rest encryption story.</li>
+            <li>MCP key scope-bypass — anything that lets a read-only key call a write tool.</li>
+          </ul>
+          <p>Out of scope (please don't report these as vulnerabilities — go to the upstream provider):</p>
+          <ul className="security-bullets">
+            <li>Issues in third-party services we use (Clerk, Stripe, Fly.io, Resend, Sentry).  Report those to the vendor directly; we'll coordinate if needed.</li>
+            <li>Social engineering, physical attacks, or attacks requiring local access to a CloudNode you don't own.</li>
+            <li>Volumetric DoS or bandwidth-exhaustion attacks on the deployed service.  Application-layer rate-limit bypasses ARE in scope; pure flood attacks are not.</li>
+            <li>Missing security headers we've consciously chosen not to set, missing rate limits on read-only authenticated GETs (covered in our design — see commit history of <code>backend/app/core/limiter.py</code>).</li>
+            <li>Self-XSS that requires the victim to paste attacker-controlled content into their own console.</li>
+            <li>Email spoofing of domains we don't own.</li>
+            <li>Reports generated solely by automated scanners with no proof-of-impact.</li>
+          </ul>
+
+          <h3>What you can expect from us</h3>
+          <ul className="security-bullets">
+            <li><strong>Acknowledgement</strong> within 72 hours of receiving the report.</li>
+            <li><strong>Initial assessment</strong> within 7 days — confirmed / can't reproduce / declined-with-reason.</li>
+            <li><strong>Fix coordination</strong> for confirmed reports — we'll keep you in the loop on timing and let you know when we've shipped.</li>
+            <li><strong>Recognition</strong> in the release notes for the fix (and on a future hall-of-fame page) if you'd like — we'll ask before naming you.</li>
+            <li><strong>No bug bounty</strong> today — we're pre-PMF.  We're upfront about that so you can decide whether to invest the time.  If we ever launch one, you'll be at the front of the line.</li>
+          </ul>
+
+          <h3>Safe harbour</h3>
+          <p>
+            If you make a good-faith effort to comply with this policy
+            during your security research, we will:
+          </p>
+          <ul className="security-bullets">
+            <li>Consider your research authorised under the Computer Fraud and Abuse Act (and equivalent state laws).</li>
+            <li>Not pursue or support legal action related to your research.</li>
+            <li>Work with you to understand and resolve the issue quickly.</li>
+            <li>Recognise your contribution publicly if you wish.</li>
+          </ul>
+          <p>
+            "Good faith" means: you avoid privacy violations and service
+            disruptions, you only access accounts you own (or have explicit
+            permission to test), you don't exfiltrate data beyond the
+            minimum needed to demonstrate the issue, you give us reasonable
+            time to fix before public disclosure, and you stop and tell us
+            the moment you realise you've encountered customer data or
+            personal information.
+          </p>
+          <p>
+            If legal action is brought against you by a third party for
+            activities that complied with this policy, we'll make it known
+            that your actions were authorised.
           </p>
         </section>
 
