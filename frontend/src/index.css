@@ -5714,6 +5714,17 @@ body {
     margin-bottom: 1rem;
 }
 
+/* Privacy & Data section action row — single button today
+   (GDPR export).  Styled minimally; the section sits just above
+   the Danger Zone so its actions need to read as benign rather
+   than visually borrow danger affordances. */
+.privacy-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
 /* Header row that puts the section title on the left and the
    "Export CSV" action on the right.  When the section's h2 lives
    inside this wrapper, drop its bottom margin since the wrapper

@@ -399,29 +399,52 @@ function SecurityPage() {
 
         {/* ── Your data, your control ────────────────────────────── */}
         <section className="security-section">
-          <h2>Deleting your data</h2>
+          <h2>Your data: export and delete</h2>
           <p>
-            Two buttons in the dashboard, both irreversible:
+            Two GDPR rights, both implemented as in-app buttons that an
+            org admin can use without contacting support:
           </p>
           <ul className="security-bullets">
             <li>
-              <strong>Node &rarr; Decommission</strong> — removes a node and all
-              its cameras from your org, cleans up in-memory caches, and
-              invalidates the node's API key. The node itself wipes its local
-              database on confirmation.
+              <strong>Settings &rarr; Privacy &amp; Data &rarr; Download my data
+              (ZIP)</strong> &mdash; GDPR <em>Article 20</em> (data
+              portability).  Streams a ZIP containing one JSON file per
+              data table in your organization &mdash; cameras, settings,
+              audit log, motion events, notifications, MCP keys, email
+              log, incidents, and the monthly usage counter &mdash; plus a
+              machine-readable manifest.  Recordings live on your CloudNode
+              devices, not Command Center, so they're not in the ZIP &mdash;
+              use the CloudNode TUI to export local recordings.  Rate-
+              limited to 3 exports/hour.
             </li>
             <li>
-              <strong>Settings &rarr; Delete Organization</strong> — triggers a
-              full cascade: every node, camera, group, MCP key, audit log,
-              stream access log, motion event, and settings row is removed in
-              a single transaction. There's no archival copy and no soft-delete
-              grace window for this path.
+              <strong>Settings &rarr; Danger Zone &rarr; Reset Everything</strong>
+              {" "}&mdash; GDPR <em>Article 17</em> (right to erasure).
+              Triggers a full cascade across every org-scoped table:
+              every node, camera, group, MCP key, audit log, stream
+              access log, motion event, notification, incident, email
+              log/outbox row, monthly-usage counter, and settings row
+              is removed in a single transaction.  CloudNode devices
+              are notified to wipe local data too.  No archival copy,
+              no soft-delete grace window.
+            </li>
+            <li>
+              <strong>Node &rarr; Decommission</strong> &mdash; removes a single
+              node and all its cameras from your org, cleans up in-memory
+              caches, and invalidates the node's API key.  The node
+              itself wipes its local database on confirmation.  Use this
+              when you're retiring one device but keeping the
+              organization.
             </li>
           </ul>
           <p>
-            Between those two, every piece of data we hold about your
-            organization can be removed by you, at any time, without contacting
-            support.
+            The export and delete cascades both route through the same
+            single source of truth (<code>app/core/gdpr.py</code>), so
+            what you can download in the export is exactly what gets
+            erased on delete &mdash; no partial coverage, no silent gaps.
+            A separate <code>organization.deleted</code> webhook handler
+            ensures that deleting your org via Clerk's UI runs the same
+            cascade, even if you never click the in-app button.
           </p>
         </section>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { Link } from "react-router-dom"
 import { useAuth, useOrganization } from "@clerk/clerk-react"
-import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateNotificationSettings, updateOrgTimezone, getCameras, getEmailPreferences, updateEmailPreferences } from "../services/api"
+import { getNodes, createNode as createNodeApi, rotateNodeKey, deleteNode as deleteNodeApi, wipeStreamLogs, fullReset, getSettings, updateNotificationSettings, updateOrgTimezone, getCameras, getEmailPreferences, updateEmailPreferences, downloadGdprExport } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AddNodeModal from "../components/AddNodeModal.jsx"
@@ -77,6 +77,25 @@ function SettingsPage() {
   const [dangerConfirmText, setDangerConfirmText] = useState("")
   const [dangerLoading, setDangerLoading] = useState(false)
   const [dangerResult, setDangerResult] = useState(null)
+
+  // GDPR Article 20 export.  Separate state from Danger Zone because
+  // export is benign + reversible (you get a ZIP, nothing changes
+  // server-side beyond an audit row).
+  const [gdprExporting, setGdprExporting] = useState(false)
+
+  const handleExportGdpr = async () => {
+    setGdprExporting(true)
+    try {
+      const token = await getToken()
+      await downloadGdprExport(() => Promise.resolve(token))
+      showToast("Data export downloaded.", "success")
+    } catch (err) {
+      console.error("GDPR export failed:", err)
+      showToast(`Export failed: ${err.message || "unknown error"}`, "error")
+    } finally {
+      setGdprExporting(false)
+    }
+  }
 
   useEffect(() => {
     if (organization) {
@@ -934,6 +953,38 @@ function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/*
+        Privacy & Data — sits just above Danger Zone because the
+        themes are related (control over your org's data) but
+        deliberately distinct: Export is benign + reversible (you
+        get a ZIP, nothing changes server-side beyond an audit
+        row).  Danger Zone actions are irreversible.  Putting them
+        in separate sections keeps the visual hierarchy honest.
+      */}
+      <div className="settings-section">
+        <h2>Privacy &amp; Data</h2>
+        <p className="section-description">
+          GDPR Article 20 (data portability) export.  Downloads a
+          ZIP with one JSON file per data table in your organization
+          &mdash; cameras, settings, audit log, motion events,
+          notifications, MCP keys, email log, incidents, and the
+          monthly usage counter.  Recordings live on your CloudNode
+          devices, not Command Center, and are <strong>not</strong>
+          included.  Admin only.  Rate-limited to 3 exports/hour.
+        </p>
+        <div className="privacy-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleExportGdpr}
+            disabled={gdprExporting}
+            title="Download a ZIP with all your organization's data"
+          >
+            {gdprExporting ? "Preparing export…" : "Download my data (ZIP)"}
+          </button>
+        </div>
+      </div>
 
       <div className="settings-section danger-zone">
         <h2>Danger Zone</h2>

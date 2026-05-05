@@ -257,6 +257,21 @@ export async function getStreamLogs(getToken, params = {}) {
   return fetchWithAuth(`/api/audit/stream-logs?${queryString}`, getToken)
 }
 
+// GDPR Article 20 — full org data export as a ZIP.
+// Same blob-download flow as the CSV exports below; the backend
+// streams a ZIP containing one JSON file per org-scoped table
+// (cameras, settings, audit, motion events, notifications, MCP
+// keys, email logs, incidents, etc.) plus a manifest.json.
+export async function downloadGdprExport(getToken) {
+  return _downloadFile(
+    "/api/gdpr/export",
+    getToken,
+    "gdpr-export.zip",
+    "application/zip",
+    { method: "POST" },
+  )
+}
+
 // CSV export for stream access logs.  Triggers a browser download via
 // blob → object URL → hidden anchor click.  We can't just point the
 // browser at the endpoint with window.open() because that wouldn't
@@ -432,10 +447,11 @@ export async function clearAllNotifications(getToken) {
   })
 }
 
-// ── CSV download helper ─────────────────────────────────────────────
+// ── Generic file-download helper ─────────────────────────────────────
 //
-// Streams a CSV response from a backend endpoint and triggers a
-// browser download.  Used by downloadStreamLogsCsv + downloadMcpLogsCsv.
+// Streams an arbitrary attachment response from a backend endpoint
+// and triggers a browser download.  Used by downloadStreamLogsCsv,
+// downloadMcpLogsCsv, and downloadGdprExport.
 //
 // Why not just window.open(url)?  Because the browser navigation
 // wouldn't carry the Clerk JWT — we'd get a 401.  Auth has to ride
@@ -448,12 +464,17 @@ export async function clearAllNotifications(getToken) {
 //      includes the org id + date stamped server-side)
 //   2. The fallback name passed by the caller — only used if the
 //      header is missing or unparseable.
-async function _downloadCsv(endpoint, getToken, fallbackFilename) {
+async function _downloadFile(
+  endpoint, getToken, fallbackFilename, _expectedMime = null, fetchOptions = {},
+) {
   const token = getToken ? await getToken() : null
-  const headers = {}
+  const headers = { ...(fetchOptions.headers || {}) }
   if (token) headers["Authorization"] = `Bearer ${token}`
 
-  const response = await fetch(`${API_URL}${endpoint}`, { headers })
+  const response = await fetch(`${API_URL}${endpoint}`, {
+    ...fetchOptions,
+    headers,
+  })
   if (!response.ok) {
     // Try to surface the API's error envelope so the toast in the
     // caller can show something useful (rate-limit detail, 403, etc.)
@@ -485,4 +506,9 @@ async function _downloadCsv(endpoint, getToken, fallbackFilename) {
   // setTimeout gives the click a tick to actually fire before we yank
   // the URL out from under it.
   setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+// Backward-compat shim — existing CSV callers still reach for the old name.
+async function _downloadCsv(endpoint, getToken, fallbackFilename) {
+  return _downloadFile(endpoint, getToken, fallbackFilename, "text/csv")
 }

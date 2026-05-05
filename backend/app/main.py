@@ -27,6 +27,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api import (
     audit,
     cameras,
+    gdpr,
     hls,
     incidents,
     install,
@@ -442,6 +443,11 @@ app.include_router(mcp_activity.router)
 app.include_router(incidents.router)
 app.include_router(motion.router)
 app.include_router(notifications.router)
+# GDPR Article 20 export endpoint.  Article 17 erasure is served
+# by the existing /api/settings/danger/full-reset endpoint, which
+# now routes through app.core.gdpr.delete_org_data so both paths
+# delete identical data sets.
+app.include_router(gdpr.router)
 # /.well-known/security.txt + the legacy /security.txt alias.
 # Mounted before the SPA middleware sees the request — see the
 # pass-through whitelist in spa_middleware below.

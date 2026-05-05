@@ -779,72 +779,80 @@ async def full_reset(
     db: Session = Depends(get_db),
 ):
     """
-    Full organization reset: wipe all nodes (with CloudNode notification),
-    clear stream logs, clear settings.
+    Full organization reset.
+
+    Behaviour:
+      1. Send each CloudNode a ``wipe_data`` command so the per-node
+         local recordings + encrypted blobs are erased on the device.
+      2. Clean up Command Center in-memory caches (HLS segments,
+         broadcaster subscribers — those survive a DB delete).
+      3. Delete every row across every org-scoped table via the
+         shared ``app.core.gdpr.delete_org_data`` helper — the same
+         path the GDPR Article 17 endpoint uses, so a customer
+         clicking "Delete my data" and an operator clicking "Full
+         Reset" produce identical end-states.
+
+    Previously this endpoint only cleared 5 tables (Settings, Audit,
+    Stream, MCP activity, CameraNode/Camera).  The other 10 (motion
+    events, notifications, incidents, email logs, monthly usage,
+    etc.) silently persisted, which was both an Article 17 violation
+    and a quiet way for stale data to leak across cancellations.
     """
     _require_active_paid_plan(user, db)
     from app.api.hls import cleanup_camera_cache
-    from app.models import CameraNode, StreamAccessLog
+    from app.api.ws import manager
+    from app.core.gdpr import delete_org_data
+    from app.models import CameraNode
 
-    results = {
-        "nodes_deleted": 0,
-        "nodes_wiped": 0,
-        "cameras_deleted": 0,
-        "logs_deleted": 0,
-        "settings_deleted": 0,
-    }
+    nodes_wiped = 0
 
-    # 1. Delete all nodes (send wipe_data to each, clean caches, remove from DB)
+    # 1. Tell each CloudNode to wipe its local data BEFORE we delete
+    # the row.  After deletion we wouldn't have the node_id to send
+    # to.  Failures here are logged but don't block the local delete
+    # — a node that's already offline can't ack the command anyway,
+    # and we can't leave the customer's CC data sitting around
+    # waiting for a node that may never come back.
     nodes = db.query(CameraNode).filter_by(org_id=user.org_id).all()
     for node in nodes:
-        # Tell CloudNode to wipe local data
         try:
-            from app.api.ws import manager
-
             result = await manager.send_command(
                 node.node_id, "wipe_data", {}, timeout=10
             )
             if result and result.get("status") == "success":
-                results["nodes_wiped"] += 1
+                nodes_wiped += 1
         except Exception as e:
             logger.warning("Could not send wipe_data to node %s: %s", node.node_id, e)
 
+        # Drop the segment cache for every camera under this node;
+        # Query.delete() can't reach the in-memory dict.
         for camera in list(node.cameras):
             cleanup_camera_cache(camera.camera_id)
-            results["cameras_deleted"] += 1
 
-        db.delete(node)
-        results["nodes_deleted"] += 1
+    # 2. Single-source-of-truth cascade.  ``delete_org_data`` flushes
+    # but doesn't commit so we can append the audit row and commit
+    # everything atomically below.
+    counts = delete_org_data(db, user.org_id)
 
-    # 2. Wipe stream access logs
-    results["logs_deleted"] = (
-        db.query(StreamAccessLog).filter_by(org_id=user.org_id).delete()
-    )
+    results = {
+        "nodes_wiped": nodes_wiped,
+        # Surfaced fields the existing dashboard JSON expects;
+        # the full per-table breakdown is logged + audited below.
+        "nodes_deleted":    counts.get("camera_nodes", 0),
+        "cameras_deleted":  counts.get("cameras", 0),
+        "logs_deleted":     counts.get("stream_access_logs", 0),
+        "mcp_logs_deleted": counts.get("mcp_activity_logs", 0),
+        "settings_deleted": counts.get("settings", 0),
+    }
 
-    # 3. Wipe MCP activity logs
-    from app.models.models import McpActivityLog
-
-    results["mcp_logs_deleted"] = (
-        db.query(McpActivityLog).filter_by(org_id=user.org_id).delete()
-    )
-
-    # 4. Wipe settings
-    results["settings_deleted"] = (
-        db.query(Setting).filter_by(org_id=user.org_id).delete()
-    )
-
-    # 5. Wipe audit logs
-    db.query(AuditLog).filter_by(org_id=user.org_id).delete()
-
-    db.commit()
-    logger.warning("Admin performed FULL RESET (org redacted): %s", results)
+    logger.warning("Admin performed FULL RESET (org redacted): %s", counts)
     write_audit(
         db,
         org_id=user.org_id,
         event="full_reset",
         user_id=user.user_id,
         username=audit_label(user),
-        details=results,
+        details=counts,
         request=request,
     )
+    db.commit()
     return {"success": True, **results}

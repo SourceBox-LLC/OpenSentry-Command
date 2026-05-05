@@ -11,16 +11,11 @@ from app.core.database import get_db
 from app.core.limiter import limiter
 from app.core.plans import enforce_camera_cap
 from app.models.models import (
-    AuditLog,
-    CameraGroup,
     CameraNode,
     EmailOutbox,
     EmailSuppression,
-    McpActivityLog,
-    McpApiKey,
     ProcessedWebhook,
     Setting,
-    StreamAccessLog,
 )
 
 logger = logging.getLogger(__name__)
@@ -369,27 +364,37 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     elif event_type == "organization.deleted":
         org_id = data.get("id")
         if org_id:
-            # Clean up in-memory caches and delete all DB records.
+            # Clean up in-memory caches FIRST so the segment-cache
+            # entries don't outlive the camera rows.  Then route
+            # through the shared GDPR helper for the actual DB
+            # cascade — same path the customer-facing
+            # /api/gdpr/delete-organization endpoint uses, so a
+            # Clerk-initiated org deletion and an in-app one
+            # produce identical end-states.
+            #
+            # Previously this handler only cleared 7 tables
+            # (CameraNode→Camera, CameraGroup, McpApiKey,
+            # McpActivityLog, StreamAccessLog, AuditLog, Setting),
+            # leaving motion events, notifications, incidents,
+            # email outbox/logs, monthly usage, and user-notification
+            # state to silently outlive the org.  Article 17
+            # violation; fixed by routing through delete_org_data.
             from app.api.hls import cleanup_camera_cache
+            from app.core.gdpr import delete_org_data
+
             nodes = db.query(CameraNode).filter_by(org_id=org_id).all()
             camera_count = 0
             for node in nodes:
                 for camera in (node.cameras or []):
                     cleanup_camera_cache(camera.camera_id)
                     camera_count += 1
-                db.delete(node)  # cascade deletes cameras
 
-            group_count = db.query(CameraGroup).filter_by(org_id=org_id).delete()
-            key_count = db.query(McpApiKey).filter_by(org_id=org_id).delete()
-            db.query(McpActivityLog).filter_by(org_id=org_id).delete()
-            db.query(StreamAccessLog).filter_by(org_id=org_id).delete()
-            db.query(AuditLog).filter_by(org_id=org_id).delete()
-            db.query(Setting).filter_by(org_id=org_id).delete()
+            counts = delete_org_data(db, org_id)
             db.commit()
 
             logger.info(
-                "Org %s deleted — cleaned up %d nodes, %d cameras, %d groups, %d API keys",
-                org_id, len(nodes), camera_count, group_count, key_count,
+                "Org %s deleted — cleaned %d nodes, %d cameras + %s",
+                org_id, len(nodes), camera_count, counts,
             )
 
     # Mark this msg id as processed so Svix retries short-circuit.
