@@ -85,8 +85,9 @@ terminate the affected Service per Section 4.4 of the
 - **Privacy policy:** https://sentry.io/privacy/
 - **DPA reference:** https://sentry.io/legal/dpa/
 - **Notes:** Disabled when the `SENTRY_DSN` environment variable is
-  unset. Self-hosting deployments and any deployment that hasn't
-  configured a DSN do not engage Sentry as a sub-processor.
+  unset. SourceBox's own deployment runs with Sentry enabled; an
+  AGPL-3.0 fork running without a DSN does not engage Sentry as a
+  sub-processor for that deployment.
 
 ### Resend — *optional, off by default*
 - **Service provided:** Transactional email delivery for operator-
@@ -108,10 +109,10 @@ terminate the affected Service per Section 4.4 of the
 - **DPA reference:** https://resend.com/legal/dpa
 - **Notes:** Disabled when the `EMAIL_ENABLED` environment variable
   is unset or `false`. Resend is also bypassed when `RESEND_API_KEY`
-  is unset. Self-hosting deployments that haven't configured both
-  do not engage Resend as a sub-processor. Recipient emails are
-  derived from Clerk org membership at send time — no separate
-  mailing-list state is held by SourceBox or Resend.
+  is unset. An AGPL-3.0 fork that hasn't configured both does not
+  engage Resend as a sub-processor for that deployment. Recipient
+  emails are derived from Clerk org membership at send time — no
+  separate mailing-list state is held by SourceBox or Resend.
 
 ---
 
