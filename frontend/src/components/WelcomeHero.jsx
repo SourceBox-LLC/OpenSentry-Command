@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import InstallCloudNodeCard from "./InstallCloudNodeCard.jsx"
 
 // Dashboard empty-state heroes, differentiated by role. Admins get the
 // "set up your first camera" checklist; members get a capability-focused
@@ -43,21 +44,25 @@ export function AdminWelcomeHero() {
           <div className="welcome-step-body">
             <div className="welcome-step-title">Install a CloudNode</div>
             <div className="welcome-step-desc">
-              Run one command on any computer with a webcam. You&rsquo;ll get credentials you can paste into the setup wizard.
+              Run one command on the computer where your cameras live. CloudNode
+              auto-registers with this org &mdash; no credentials to copy or paste.
             </div>
-            <div className="welcome-step-actions">
-              <Link to="/settings" className="btn btn-primary">
-                Add your first node
-              </Link>
-              <a
-                href="https://github.com/sbussiso/opensentry-cloudnode"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary"
-              >
-                Installation guide ↗
-              </a>
-            </div>
+            {/*
+              In-app install widget replaces the old "Add your first node"
+              + "Installation guide ↗ (GitHub)" button pair.  The biggest
+              moment of customer drop-off is here — they signed up, they
+              see an empty grid, they need to run a CLI command.  Anything
+              that takes them OUT of the app at this moment loses them.
+              The widget auto-detects OS, shows the exact one-liner with
+              a copy button, and animates a "waiting for connection"
+              indicator so they know we'll notice when CloudNode comes up.
+            */}
+            <InstallCloudNodeCard />
+            {/* No secondary "Generate node credentials manually" link
+                here anymore — the widget itself calls POST /api/nodes
+                on the user's first click, and the Settings link in
+                the header is always available for users who want to
+                see existing nodes or manage them. */}
           </div>
         </li>
 
