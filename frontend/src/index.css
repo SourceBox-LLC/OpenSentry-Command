@@ -5869,6 +5869,183 @@ body {
     font-size: 0.9rem;
 }
 
+/* ── Admin KPI Strip ─────────────────────────────────────────────
+   Four glanceable cards at the top of the admin dashboard so the
+   pulse of the org is visible without scrolling past five log
+   tables. Reuses the data already fetched by AdminPage; the value
+   here is purely visualisation. */
+.admin-kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.kpi-card {
+    position: relative;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Left edge accent — picks up the colour theme of the metric so
+   the eye finds the section without reading the label. */
+.kpi-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--accent-green);
+    opacity: 0.9;
+}
+
+.kpi-card-green::before { background: var(--accent-green); }
+.kpi-card-purple::before { background: var(--accent-purple); }
+.kpi-card-blue::before { background: var(--accent-blue); }
+.kpi-card-amber::before { background: var(--accent-amber); }
+.kpi-card-red::before { background: var(--accent-red); }
+
+/* Soft glow when the card is in a non-OK state — the errors card
+   does this to draw the eye when something needs attention. */
+.kpi-card[data-status="warn"] {
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25), 0 0 24px rgba(245, 158, 11, 0.12);
+}
+.kpi-card[data-status="critical"] {
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.30), 0 0 28px rgba(239, 68, 68, 0.16);
+}
+
+.kpi-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.6rem;
+    gap: 0.5rem;
+}
+
+.kpi-card-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    line-height: 1.2;
+}
+
+.kpi-card-icon {
+    font-size: 1rem;
+    opacity: 0.55;
+    flex-shrink: 0;
+}
+
+.kpi-card-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 0.7rem;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+
+.kpi-card-green .kpi-card-value { color: var(--accent-green); }
+.kpi-card-purple .kpi-card-value { color: var(--accent-purple); }
+.kpi-card-blue .kpi-card-value { color: var(--accent-blue); }
+.kpi-card-amber .kpi-card-value { color: var(--accent-amber); }
+.kpi-card-red .kpi-card-value { color: var(--accent-red); }
+
+.kpi-card-footer {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.kpi-card-footer-empty {
+    visibility: hidden;
+}
+
+.kpi-sparkline {
+    display: block;
+}
+
+.kpi-card-meter {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.kpi-card-meter-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.kpi-card-meter-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent-blue);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.kpi-card-meter-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.kpi-card-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.kpi-card-pill-ok {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--accent-green);
+}
+
+.kpi-card-pill-warn {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--accent-amber);
+}
+
+.kpi-card-pill-critical {
+    background: rgba(239, 68, 68, 0.18);
+    color: var(--accent-red);
+}
+
+@media (max-width: 1024px) {
+    .admin-kpi-strip {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-kpi-strip {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Audit Logs Section */
 .audit-section {
     background: var(--bg-secondary);

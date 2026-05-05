@@ -6,6 +6,7 @@ import { useToasts } from "../hooks/useToasts.jsx"
 import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import UpgradeModal from "../components/UpgradeModal.jsx"
 import OrgAuditLogPanel from "../components/OrgAuditLogPanel.jsx"
+import AdminKpiStrip from "../components/AdminKpiStrip.jsx"
 
 function AdminPage() {
   const { getToken } = useAuth()
@@ -272,6 +273,14 @@ function AdminPage() {
         <h1>Admin Dashboard</h1>
         <p>View stream access logs and usage statistics for your organization.</p>
       </div>
+
+      <AdminKpiStrip
+        stats={stats}
+        mcpStats={mcpStats}
+        planInfo={planInfo}
+        streamDays={days}
+        mcpDays={mcpDays}
+      />
 
       <div className="audit-section">
         <div className="audit-section-header">
