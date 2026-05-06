@@ -16,6 +16,14 @@ function Layout() {
   const isProPlus = planName === "pro_plus"
   const isPro = planName === "pro" || isProPlus
 
+  // Routes that own their own primary sidebar — when we're on one of
+  // them, suppress the global AppSidebar (and its mobile hamburger)
+  // so we don't end up with two sidebars stacked at left:0.  /docs
+  // ships with the dense in-page docs nav (DocsSidebar) which is the
+  // right primary nav while reading; signed-in users can still jump
+  // back via the logo or browser back.
+  const hideAppSidebar = location.pathname.startsWith("/docs")
+
   useEffect(() => {
     setSidebarOpen(false)
   }, [location.pathname])
@@ -38,15 +46,17 @@ function Layout() {
         <div className="header-content">
           <div className="header-left">
             <SignedIn>
-              <button
-                type="button"
-                className="app-sidebar-toggle"
-                aria-label={sidebarOpen ? "Close navigation" : "Open navigation"}
-                aria-expanded={sidebarOpen}
-                onClick={() => setSidebarOpen((o) => !o)}
-              >
-                <span aria-hidden="true">☰</span>
-              </button>
+              {!hideAppSidebar && (
+                <button
+                  type="button"
+                  className="app-sidebar-toggle"
+                  aria-label={sidebarOpen ? "Close navigation" : "Open navigation"}
+                  aria-expanded={sidebarOpen}
+                  onClick={() => setSidebarOpen((o) => !o)}
+                >
+                  <span aria-hidden="true">☰</span>
+                </button>
+              )}
             </SignedIn>
 
             <Link to="/" className="logo">
@@ -92,7 +102,9 @@ function Layout() {
 
       <div className="layout-body">
         <SignedIn>
-          <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          {!hideAppSidebar && (
+            <AppSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          )}
         </SignedIn>
         <main className="main">
           <Outlet />
@@ -100,12 +112,14 @@ function Layout() {
       </div>
 
       <SignedIn>
-        <div
-          className="app-sidebar-backdrop"
-          data-open={sidebarOpen ? "true" : "false"}
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
+        {!hideAppSidebar && (
+          <div
+            className="app-sidebar-backdrop"
+            data-open={sidebarOpen ? "true" : "false"}
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
       </SignedIn>
 
       <ToastContainer />
