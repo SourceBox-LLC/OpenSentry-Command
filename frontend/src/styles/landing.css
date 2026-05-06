@@ -67,6 +67,17 @@
   color: var(--text-primary);
 }
 
+/* Mobile-only auth CTAs that live INSIDE the .landing-nav-links dropdown.
+   They MUST be hidden on desktop (>1024px) — at desktop widths the
+   dropdown renders as the inline marketing-link row, and without this
+   hide-rule the Sign In / Get Started <li>s would duplicate in the
+   visible row alongside the proper buttons in .landing-nav-actions.
+   The 1024px @media block below re-shows them as block-level pills
+   inside the hamburger dropdown. */
+.landing-nav-links li.landing-nav-mobile-cta {
+  display: none;
+}
+
 .landing-nav-actions {
   display: flex;
   align-items: center;
@@ -1818,6 +1829,9 @@
      dropdown is a complete navigation surface — marketing links + auth
      CTAs, no separate visible row. */
   .landing-nav-links li.landing-nav-mobile-cta {
+    /* Re-show inside the hamburger dropdown — default rule above hides
+       these on desktop so they don't duplicate the visible auth buttons. */
+    display: block;
     padding: 0.5rem 1rem;
   }
   .landing-nav-links li.landing-nav-mobile-cta:first-of-type {
