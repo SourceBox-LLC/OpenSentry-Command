@@ -2151,7 +2151,37 @@
    so the visual differentiator is obvious at a glance without any copy. */
 .landing-privacy-visual {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+}
+
+/* Privacy section image — replaces the comparison cards with a moody
+   close-up of a CloudNode-style local compute box (green status LED,
+   USB cables exiting frame, deep teal-purple bokeh background).
+   Visual reinforcement of the "your hardware, your data" message in
+   the copy on the left. Generated via Nano Banana Pro from
+   docs/image-specs/privacy-visual.json. */
+.landing-privacy-image {
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  display: block;
+  border-radius: 16px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 10px 30px rgba(34, 197, 94, 0.10),
+    0 0 0 1px rgba(34, 197, 94, 0.18);
+}
+
+.landing-privacy-image-caption {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+  letter-spacing: 0.02em;
+  max-width: 520px;
 }
 
 .landing-privacy-compare {

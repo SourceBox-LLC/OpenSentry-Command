@@ -204,26 +204,20 @@ function LandingPage() {
               </div>
             </div>
 
-            <div className="landing-privacy-visual" aria-hidden="true">
-              <div className="landing-privacy-compare">
-                <div className="landing-privacy-card us">
-                  <div className="landing-privacy-card-label">SourceBox Sentry</div>
-                  <ul>
-                    <li><span className="chk yes">✓</span> Motion runs on-device</li>
-                    <li><span className="chk yes">✓</span> Recordings encrypted at rest</li>
-                    <li><span className="chk yes">✓</span> No analytics or trackers</li>
-                    <li><span className="chk yes">✓</span> Open source (AGPL / GPL)</li>
-                  </ul>
-                </div>
-                <div className="landing-privacy-card them">
-                  <div className="landing-privacy-card-label">Ring · Nest · Wyze</div>
-                  <ul>
-                    <li><span className="chk no">✗</span> Cloud ML on your video</li>
-                    <li><span className="chk no">✗</span> Vendor holds the keys</li>
-                    <li><span className="chk no">✗</span> Ad-sharing disclosed (Wyze)</li>
-                    <li><span className="chk no">✗</span> Proprietary firmware</li>
-                  </ul>
-                </div>
+            <div className="landing-privacy-visual">
+              <picture>
+                <source srcSet="/images/privacy.webp" type="image/webp" />
+                <img
+                  src="/images/privacy.jpg"
+                  alt=""
+                  className="landing-privacy-image"
+                  width="1200"
+                  height="1200"
+                  loading="lazy"
+                />
+              </picture>
+              <div className="landing-privacy-image-caption" aria-hidden="true">
+                Your CloudNode. Your hardware. Your data.
               </div>
             </div>
           </div>

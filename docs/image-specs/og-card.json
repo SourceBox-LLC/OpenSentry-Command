@@ -1,0 +1,83 @@
+{
+  "marketing_image": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "SourceBox Sentry OG Card",
+      "campaign": "social_share_v1",
+      "brand_name": "SourceBox Sentry",
+      "usage_context": "Open Graph / Twitter card image for social sharing — final crop is 1200x630"
+    },
+    "subject": {
+      "type": "product_close_up",
+      "name": "USB security webcam — moody macro",
+      "physical_properties": {
+        "shape": "compact black USB webcam, generic shape, no logos, small green LED indicator dot illuminated"
+      }
+    },
+    "props": {
+      "foreground": [],
+      "midground": [
+        {
+          "type": "usb_webcam",
+          "count": 1,
+          "position": "left_third",
+          "notes": "Compact black USB webcam, side three-quarter view, in macro focus. Plastic and lens detail visible. The green LED indicator on the front is the brightest point in the frame — small but unmistakably illuminated. NO logos, NO text on the camera body."
+        }
+      ],
+      "background": [
+        {
+          "type": "abstract_dashboard_bokeh",
+          "count": 1,
+          "position": "full_background",
+          "notes": "Dark out-of-focus environment suggesting a glowing dashboard / computer screen behind the camera. Soft bokeh circles in green (#22c55e) and purple (#a855f7) brand colors floating at varying depths. Strong vignetting toward corners. Deep teal-black base (#0a0a0f to #003b47 gradient)."
+        }
+      ]
+    },
+    "environment": {
+      "surface": {
+        "material": "matte_dark",
+        "reflection_strength": 0.05
+      },
+      "background": {
+        "color": "deep teal-black gradient with green and purple bokeh accents",
+        "texture": "atmospheric, vignetted",
+        "effect": "bokeh_strong"
+      },
+      "atmosphere": {
+        "mood": "premium, moody, cinematic, eye-catching at thumbnail size",
+        "keywords": ["macro", "moody", "premium", "tech", "private", "guarding", "evening", "branded"]
+      }
+    },
+    "camera": {
+      "angle": "side_three_quarter",
+      "framing": "extreme_close_up",
+      "focal_length_mm": 90,
+      "depth_of_field": "very_shallow"
+    },
+    "lighting": {
+      "key_light_direction": "back_left",
+      "key_light_intensity": "low",
+      "fill_light_direction": "front",
+      "fill_light_intensity": "very_low",
+      "rim_light": true,
+      "color_temperature": "neutral",
+      "notes": "Moody key light from back-left edge, just enough to define the camera silhouette. Brightest point in image is the small green LED on the camera front. Subtle purple-tinted rim from the right side. Background bokeh provides ~30% of total scene illumination via colored orbs."
+    },
+    "brand": {
+      "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
+      "must_match_assets": [],
+      "forbidden_changes": [
+        "do_not_show_text_or_logos_in_image",
+        "do_not_show_recognizable_human_faces",
+        "do_not_show_real_branded_camera_models_like_Ring_Nest_Wyze_Logitech",
+        "do_not_show_visible_brand_names_anywhere"
+      ]
+    },
+    "controls": {
+      "lock_subject_geometry": false,
+      "allow_background_variation": true,
+      "leave_negative_space": "right_third — keep that area lower contrast for potential text overlay",
+      "notes": "Photorealistic close-up. Generate at 16:9 aspect ratio; final delivery is center-cropped to 1200x630 for OG/Twitter cards. Should read instantly at thumbnail size as 'tech, private, dark, branded green-purple'. Subject (camera) sits left of center."
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "marketing_image": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Privacy Section Visual — Local CloudNode hardware",
+      "campaign": "landing_privacy_v1",
+      "brand_name": "SourceBox Sentry",
+      "usage_context": "right column of the 'Privacy by design' section on the landing page; replaces the SourceBox-vs-incumbents comparison card"
+    },
+    "subject": {
+      "type": "compact_local_compute_device",
+      "name": "CloudNode-style compact computer with security camera cables",
+      "physical_properties": {
+        "shape": "small black or dark grey single-board computer / mini-PC, generic and bezel-less, no logos. Roughly the size of a deck of cards. A small green status LED is illuminated on its front face. Two USB cables exit from the back / right side, suggesting connections to cameras."
+      }
+    },
+    "props": {
+      "foreground": [
+        {
+          "type": "usb_cables",
+          "count": 2,
+          "position": "right_exiting_frame",
+          "notes": "Two short black USB cables plugged into the back of the device, exiting frame-right with a subtle curve. Cables are slightly out of focus."
+        }
+      ],
+      "midground": [
+        {
+          "type": "compact_computer",
+          "count": 1,
+          "position": "center_slightly_left",
+          "notes": "Small dark single-board / mini-PC sitting on a warm wooden surface. Generic shape, NO logos, NO branding. Front face has a small green status LED illuminated. Body is matte black/charcoal with subtle texture."
+        }
+      ],
+      "background": [
+        {
+          "type": "dim_room_with_bokeh",
+          "count": 1,
+          "position": "full_background",
+          "notes": "Out-of-focus dim interior, deep teal-black tones, with a few soft purple bokeh orbs hinting at distant electronics. Strong vignetting toward corners. Suggests 'office at night' or 'home server closet'."
+        }
+      ]
+    },
+    "environment": {
+      "surface": {
+        "material": "wood",
+        "reflection_strength": 0.1,
+        "notes": "warm walnut or oak surface, visible grain"
+      },
+      "background": {
+        "color": "deep teal-black (#0a0a0f to #003b47) with purple bokeh accents",
+        "texture": "atmospheric, vignetted",
+        "effect": "bokeh_strong"
+      },
+      "atmosphere": {
+        "mood": "quiet, technical, on-prem, locked-down, your-hardware-your-data",
+        "keywords": ["local", "on-prem", "encrypted", "private", "self-hosted-feel", "edge-compute", "moody"]
+      }
+    },
+    "camera": {
+      "angle": "three_quarter_front",
+      "framing": "close_up",
+      "focal_length_mm": 60,
+      "depth_of_field": "shallow"
+    },
+    "lighting": {
+      "key_light_direction": "back_right",
+      "key_light_intensity": "low",
+      "fill_light_direction": "front",
+      "fill_light_intensity": "very_low",
+      "rim_light": true,
+      "color_temperature": "neutral",
+      "notes": "Moody side light skimming across the device's body to bring out texture. The brightest visible point is the small green status LED on the device. Subtle purple wash from background bokeh tints the right side of the scene. Overall low-key exposure."
+    },
+    "brand": {
+      "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
+      "must_match_assets": [],
+      "forbidden_changes": [
+        "do_not_show_text_or_logos_in_image",
+        "do_not_show_recognizable_human_faces",
+        "do_not_show_real_branded_hardware_like_Raspberry_Pi_logo_Intel_NUC_logo_Apple_logo",
+        "do_not_show_visible_brand_names_anywhere"
+      ]
+    },
+    "controls": {
+      "lock_subject_geometry": false,
+      "allow_background_variation": true,
+      "leave_negative_space": "balanced — composition can be square (1:1) for a privacy-section card slot",
+      "notes": "Photorealistic close-up. Aspect ratio 1:1 — fits square card slot in the privacy section layout. Should evoke 'your local hardware quietly running your security stack' without being cluttered or text-heavy."
+    }
+  }
+}
