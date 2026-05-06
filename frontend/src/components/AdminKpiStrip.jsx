@@ -134,7 +134,7 @@ function AdminKpiStrip({ stats, mcpStats, planInfo, streamDays = 7, mcpDays = 7 
         sparkColor={COLORS.purple}
       />
       <KpiCard
-        label="Active cameras"
+        label="Registered cameras"
         value={cameras}
         accent="blue"
         icon="📹"
