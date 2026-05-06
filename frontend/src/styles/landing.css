@@ -1187,6 +1187,12 @@
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 0.875em;
   color: var(--accent-purple);
+  /* Long inline tokens (Windows registry paths, full URLs, env-var
+     strings) have no break points for `word-break: normal` and would
+     punch out of narrow viewports as single unbreakable boxes. anywhere
+     lets them wrap mid-token only when actually needed; short tokens
+     still render on a single line. */
+  overflow-wrap: anywhere;
 }
 
 .docs-code-block {
