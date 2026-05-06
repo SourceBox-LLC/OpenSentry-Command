@@ -10,6 +10,8 @@ import AdminKpiStrip from "../components/AdminKpiStrip.jsx"
 import AdminTabs from "../components/AdminTabs.jsx"
 import { BarList, DailyActivityChart } from "../components/AdminCharts.jsx"
 
+const API_URL = import.meta.env.VITE_API_URL || ""
+
 function AdminPage() {
   const { getToken } = useAuth()
   const { organization } = useOrganization()
@@ -48,6 +50,10 @@ function AdminPage() {
   // Active tab in the log strip — Stream / Audit / MCP swap into the
   // single panel below the KPI strip rather than all three stacking.
   const [activeTab, setActiveTab] = useState("stream")
+
+  // SSE connection state for the live MCP activity feed.  Drives the
+  // small "Live" indicator in the MCP Tool Activity section header.
+  const [sseConnected, setSseConnected] = useState(false)
 
   // Only load audit data once we know the plan allows it
   useEffect(() => {
@@ -176,6 +182,93 @@ function AdminPage() {
       loadMcpStats()
     }
   }, [mcpDays])
+
+  // Live SSE feed for MCP tool calls — backend at /api/mcp/activity/stream
+  // emits {type: "tool_call", ...} events as agents fire tools.  We
+  // prepend each one to mcpLogs with an _isNew flag the row renderer
+  // picks up to play a short flash animation.  Mirrors the McpPage.jsx
+  // pattern (fetch + ReadableStream because EventSource can't carry an
+  // Authorization header), with reconnect-on-drop after a 5s backoff.
+  useEffect(() => {
+    if (!organization || !planInfo?.features?.includes("admin")) return
+
+    let cancelled = false
+    let reader = null
+    let reconnectTimer = null
+
+    const connect = async () => {
+      try {
+        const token = await getToken()
+        const response = await fetch(`${API_URL}/api/mcp/activity/stream`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (!response.ok || cancelled) {
+          if (!cancelled) {
+            reconnectTimer = setTimeout(connect, 5000)
+          }
+          return
+        }
+
+        setSseConnected(true)
+        reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+
+        while (!cancelled) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() || ""
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.type !== "tool_call") continue
+              // Backend emits Unix-seconds-float; the row renderer
+              // expects what new Date(string) can parse.  Convert.
+              const log = {
+                ...data,
+                timestamp:
+                  typeof data.timestamp === "number"
+                    ? new Date(data.timestamp * 1000).toISOString()
+                    : data.timestamp,
+                _isNew: true,
+              }
+              setMcpLogs((prev) => {
+                if (prev.some((p) => p.id === log.id)) return prev
+                return [log, ...prev]
+              })
+              // Best-effort tab-count bump — next loadMcpLogs will
+              // reconcile against the persisted count.
+              setMcpTotal((t) => t + 1)
+            } catch {
+              /* ignore parse errors */
+            }
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("[Admin SSE] Connection error:", err)
+          setSseConnected(false)
+          reconnectTimer = setTimeout(connect, 5000)
+        }
+      }
+    }
+
+    connect()
+
+    return () => {
+      cancelled = true
+      setSseConnected(false)
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      if (reader) reader.cancel().catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [organization, planInfo])
 
   const handleMcpFilterChange = (key, value) => {
     setMcpFilters(prev => ({ ...prev, [key]: value, offset: 0 }))
@@ -487,7 +580,17 @@ function AdminPage() {
       <div className="audit-section">
         <div className="audit-section-header">
           <div>
-            <h2>MCP Tool Activity</h2>
+            <h2>
+              MCP Tool Activity
+              <span
+                className={`live-dot${sseConnected ? " live-dot-on" : ""}`}
+                title={sseConnected ? "Live — new tool calls appear in real time" : "Reconnecting…"}
+                aria-label={sseConnected ? "Live feed connected" : "Live feed disconnected"}
+              >
+                <span className="live-dot-pulse" aria-hidden="true" />
+                {sseConnected ? "LIVE" : "OFFLINE"}
+              </span>
+            </h2>
             <p className="section-description">
               AI tool call history — see what MCP clients have done with your cameras and data.
             </p>
@@ -624,8 +727,10 @@ function AdminPage() {
                     const keyLabel = KEY_EVENT_LABELS[log.tool_name]
                     const isKeyEvent = !!keyLabel
                     const isDestructive = log.tool_name === "key_revoked" || log.tool_name === "node_deleted"
+                    const baseClass = log.status === "error" ? "row-error" : isKeyEvent ? "row-admin" : ""
+                    const rowClass = [baseClass, log._isNew ? "row-new" : ""].filter(Boolean).join(" ")
                     return (
-                      <tr key={log.id} className={log.status === "error" ? "row-error" : isKeyEvent ? "row-admin" : ""}>
+                      <tr key={log.id} className={rowClass}>
                         <td className="timestamp">
                           {new Date(log.timestamp).toLocaleString()}
                         </td>

@@ -6281,6 +6281,104 @@ body {
     font-size: 9px;
 }
 
+/* ── Live SSE feed ───────────────────────────────────────────────
+   Visual signal that the MCP activity table is updating in real
+   time. ``.live-dot`` is the "LIVE / OFFLINE" pill in the section
+   header; ``.row-new`` is the brief highlight that fires when a new
+   tool-call event arrives over SSE. */
+
+.live-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.6rem;
+    padding: 2px 9px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    vertical-align: middle;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.live-dot-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.live-dot.live-dot-on {
+    background: rgba(168, 85, 247, 0.12);
+    border-color: rgba(168, 85, 247, 0.35);
+    color: var(--accent-purple);
+}
+
+.live-dot.live-dot-on .live-dot-pulse {
+    background: var(--accent-purple);
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.6);
+    animation: live-dot-ring 1.8s ease-out infinite;
+}
+
+@keyframes live-dot-ring {
+    0%   { box-shadow: 0 0 0 0   rgba(168, 85, 247, 0.55); }
+    70%  { box-shadow: 0 0 0 7px rgba(168, 85, 247, 0); }
+    100% { box-shadow: 0 0 0 0   rgba(168, 85, 247, 0); }
+}
+
+/* New-row flash — fires once when an SSE event prepends a row.
+   The ::before stripe slides in from the left; the row background
+   pulses purple. After 3s the row settles to look identical to a
+   normal row so the stale "new" state isn't visually distracting. */
+.audit-table tr.row-new {
+    animation: row-new-flash 3s ease-out 1;
+}
+
+.audit-table tr.row-new td {
+    position: relative;
+}
+
+.audit-table tr.row-new td:first-child::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    background: var(--accent-purple);
+    animation: row-new-stripe 3s ease-out 1;
+}
+
+@keyframes row-new-flash {
+    0%   { background: rgba(168, 85, 247, 0.18); }
+    35%  { background: rgba(168, 85, 247, 0.10); }
+    100% { background: transparent; }
+}
+
+@keyframes row-new-stripe {
+    0%   { opacity: 1; }
+    70%  { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .live-dot.live-dot-on .live-dot-pulse {
+        animation: none;
+    }
+    .audit-table tr.row-new {
+        animation: none;
+    }
+    .audit-table tr.row-new td:first-child::before {
+        animation: none;
+        opacity: 0;
+    }
+}
+
 /* Audit Logs Section */
 .audit-section {
     background: var(--bg-secondary);
