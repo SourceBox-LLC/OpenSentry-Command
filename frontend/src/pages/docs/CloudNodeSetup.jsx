@@ -13,6 +13,23 @@ function CloudNodeSetup() {
         backend, which serves them to viewers from an in-memory cache.
       </p>
 
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/setup-wizard.webp" type="image/webp" />
+          <img
+            src="/images/setup-wizard.jpg"
+            alt="CloudNode setup wizard 5-step flow: Prerequisites, Configuration, Install, Verify, Launch — left to right. Annotation branches: 'IF FFMPEG MISSING' (winget on Windows, brew on macOS, apt/dnf/pacman on Linux) above step 1; 'ENCODER AUTO-DETECT' (NVENC/NVIDIA, QSV/Intel, AMF/AMD, libx264 fallback) below step 3."
+            className="docs-diagram-image"
+            width="2752"
+            height="1536"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          The wizard runs once per machine. Steps 1–3 set you up, step 4 round-trips a credential check against Command Center, and step 5 hands the node off to live operation. The two annotated branches show where the wizard makes choices for you — installing FFmpeg via the OS package manager and picking the best available hardware encoder.
+        </figcaption>
+      </figure>
+
       <h3>Installation</h3>
       <OsTabs id="cn" />
       <p style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>

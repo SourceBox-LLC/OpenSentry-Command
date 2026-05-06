@@ -1,0 +1,132 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Notifications Fan-out — one event, four channels",
+      "description": "A platform event enters from the left, passes through the audience filter (admin-only vs all members) and the email opt-in gate, then fans out to four delivery channels on the right: in-app SSE inbox, email via Resend, Incidents tab, and the MCP activity log. The diagram shows where each gate sits and which channels are gated by what."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 1000,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. NOT photographic. NOT 3D. NOT illustrative. Subtle grid background. Premium technical-doc aesthetic — crisp typography, generous whitespace, soft glow on accents."
+    },
+    "regions": {
+      "event_source": {
+        "x_pct": 0.06,
+        "y_pct": 0.50,
+        "label": "EVENT",
+        "subtitle": "platform-detected change",
+        "examples_panel": {
+          "title": "examples",
+          "items": [
+            "node offline / recovered",
+            "camera offline / recovered",
+            "motion detected",
+            "incident opened",
+            "MCP key created / revoked",
+            "member added / role changed",
+            "CloudNode disk almost full"
+          ],
+          "styling": "small panel attached below the EVENT node, JetBrains Mono items, muted grey, no bullets — just a stacked list"
+        },
+        "node_styling": "tall rounded rectangle, amber accent border, label in spaced caps, subtitle in muted grey Inter"
+      },
+      "audience_gate": {
+        "x_pct": 0.30,
+        "y_pct": 0.50,
+        "label": "AUDIENCE FILTER",
+        "subtitle": "admin-only vs all members",
+        "node_styling": "diamond / hexagonal shape with subtle purple accent border to read as 'decision point', label centered"
+      },
+      "email_gate": {
+        "x_pct": 0.52,
+        "y_pct": 0.18,
+        "label": "EMAIL GATE",
+        "subtitle": "per-org opt-in · bounce suppression · motion cooldown 15 min",
+        "node_styling": "rectangular gate with green accent border, sits ON the line going to the email channel"
+      }
+    },
+    "channels": [
+      {
+        "label": "IN-APP INBOX",
+        "subtitle": "bell icon · SSE · real-time",
+        "accent": "cyan",
+        "x_pct": 0.85,
+        "y_pct": 0.10
+      },
+      {
+        "label": "EMAIL",
+        "subtitle": "Resend · opt-in · cooldown",
+        "accent": "green",
+        "x_pct": 0.85,
+        "y_pct": 0.36
+      },
+      {
+        "label": "INCIDENTS TAB",
+        "subtitle": "if filed as incident",
+        "accent": "amber",
+        "x_pct": 0.85,
+        "y_pct": 0.62
+      },
+      {
+        "label": "MCP ACTIVITY LOG",
+        "subtitle": "admin dashboard · audit",
+        "accent": "purple",
+        "x_pct": 0.85,
+        "y_pct": 0.88
+      }
+    ],
+    "arrows": [
+      {"from": "event_source", "to": "audience_gate", "style": "solid_white_with_arrowhead"},
+      {"from": "audience_gate", "to": "channel_in_app",       "style": "solid_cyan_curve_up"},
+      {"from": "audience_gate", "to": "email_gate",           "style": "solid_white_with_arrowhead"},
+      {"from": "email_gate",    "to": "channel_email",        "style": "solid_green_curve"},
+      {"from": "audience_gate", "to": "channel_incidents",    "style": "solid_amber_curve_down"},
+      {"from": "audience_gate", "to": "channel_mcp_log",      "style": "solid_purple_curve_down"}
+    ],
+    "annotations": [
+      {
+        "near": "channel_email",
+        "label": "MOTION DIGEST",
+        "subtitle": "1 immediate + 1 summary, capped at 2 / cycle / camera",
+        "position": "small_pill_below_email_channel",
+        "color": "#06b6d4"
+      },
+      {
+        "near": "channel_mcp_log",
+        "label": "ADMIN ONLY",
+        "position": "small_pill_above_mcp_log_channel",
+        "color": "#a855f7"
+      }
+    ],
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "EVENT", "platform-detected change",
+        "examples",
+        "node offline / recovered",
+        "camera offline / recovered",
+        "motion detected",
+        "incident opened",
+        "MCP key created / revoked",
+        "member added / role changed",
+        "CloudNode disk almost full",
+        "AUDIENCE FILTER", "admin-only vs all members",
+        "EMAIL GATE", "per-org opt-in · bounce suppression · motion cooldown 15 min",
+        "IN-APP INBOX", "bell icon · SSE · real-time",
+        "EMAIL", "Resend · opt-in · cooldown",
+        "INCIDENTS TAB", "if filed as incident",
+        "MCP ACTIVITY LOG", "admin dashboard · audit",
+        "MOTION DIGEST", "1 immediate + 1 summary, capped at 2 / cycle / camera",
+        "ADMIN ONLY"
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "do_not_render_metadata": "Do NOT render any color hex codes, rgba() values, x_pct/y_pct positioning values, JSON field names, or any other JSON metadata as visible text on the canvas. Visible text must come ONLY from the exact_text array.",
+      "do_not_show_logos": "Do NOT render any company logos (no real Resend logo, no Gmail icon, no Slack mark). Text labels alone.",
+      "rendering_notes": "Premium technical-doc style matching the existing dashboard-ia and mcp-workflow diagrams. The fan-out reads left-to-right: EVENT → AUDIENCE FILTER → 4 channels stacked on the right. The EMAIL GATE is an inline gate that sits ON the line going to the EMAIL channel, NOT a separate node. Channel boxes are rounded rectangles, accent border per channel. The 'examples' panel under EVENT lists the seven event types as a clean stacked list with NO bullet symbols. Gate shapes are visually distinct from channel shapes — diamonds/hexagons read as decisions, rectangles read as destinations. Aspect ratio 16:8.3. NOT photographic."
+    }
+  }
+}

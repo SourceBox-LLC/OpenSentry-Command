@@ -9,6 +9,23 @@ function Notifications() {
         the MCP tool activity log.
       </p>
 
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/notifications-fanout.webp" type="image/webp" />
+          <img
+            src="/images/notifications-fanout.jpg"
+            alt="Notifications fan-out: a single platform event passes through the audience filter (admin-only vs all members), then fans out to four channels — In-app inbox (SSE, real-time), Email (Resend, with per-org opt-in, bounce suppression, and 15-minute motion cooldown), Incidents tab (when filed as incident), and MCP activity log (admin only). Motion digest behavior is surfaced near the email channel: 1 immediate + 1 summary, capped at 2 per cycle per camera."
+            className="docs-diagram-image"
+            width="2752"
+            height="1536"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          One event, four destinations. The audience filter decides whether the event goes to admins only or to every member. The email gate adds per-org opt-in, bounce suppression, and motion-event cooldown — so the in-app inbox can be loud while email volume stays bounded.
+        </figcaption>
+      </figure>
+
       <h3>What triggers a notification</h3>
       <ul>
         <li><strong>Node offline</strong> — Command Center hasn't received a heartbeat from a node for 90 seconds.</li>

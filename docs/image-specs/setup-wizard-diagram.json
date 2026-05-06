@@ -1,0 +1,76 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "CloudNode Setup Wizard — 5-step flow",
+      "description": "Left-to-right pipeline showing the 5 wizard steps a user walks through after running install.sh / the MSI. Two annotation branches: FFmpeg fallback path above step 1 (winget / brew / apt), encoder auto-detect options below step 3 (NVENC / QSV / AMF / libx264)."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 840,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. NOT photographic. NOT 3D. NOT illustrative. Subtle grid background. Premium technical-doc aesthetic — crisp typography, generous whitespace, soft glow on accents."
+    },
+    "main_pipeline": [
+      {"step": 1, "label": "Prerequisites", "subtitle": "platform · cameras · FFmpeg", "accent": "cyan",   "x_pct": 0.08},
+      {"step": 2, "label": "Configuration", "subtitle": "node_id · API key",          "accent": "cyan",   "x_pct": 0.27},
+      {"step": 3, "label": "Install",       "subtitle": "encrypted config · encoder", "accent": "cyan",   "x_pct": 0.46},
+      {"step": 4, "label": "Verify",        "subtitle": "round-trip Command Center",  "accent": "purple", "x_pct": 0.65},
+      {"step": 5, "label": "Launch",        "subtitle": "node online",                "accent": "green",  "x_pct": 0.84}
+    ],
+    "main_arrows": [
+      {"from": 1, "to": 2},
+      {"from": 2, "to": 3},
+      {"from": 3, "to": 4},
+      {"from": 4, "to": 5}
+    ],
+    "node_styling": "Each main step is a rounded rectangle with a circled white step-number badge top-left, a bold title, and a muted-grey monospace subtitle. Accent border colour per step (cyan for steps 1-3, purple for verify, green for launch). Soft glow matching the accent.",
+    "ffmpeg_branch": {
+      "lane_label": "IF FFMPEG MISSING",
+      "lane_color": "#f59e0b",
+      "position": "above_step_1",
+      "explanatory_text": "wizard offers to install via OS package manager",
+      "nodes": [
+        {"label": "winget", "subtitle": "Windows", "x_offset_from_step_1": -0.04},
+        {"label": "brew",   "subtitle": "macOS",   "x_offset_from_step_1":  0.00},
+        {"label": "apt / dnf / pacman", "subtitle": "Linux", "x_offset_from_step_1": 0.05}
+      ],
+      "connections_style": "thin dashed amber curved line from step 1 up to a small junction, then three short branches to each pill",
+      "node_styling": "small pill-shaped rounded rectangles, amber border, JetBrains Mono label + Inter subtitle below"
+    },
+    "encoder_branch": {
+      "lane_label": "ENCODER AUTO-DETECT",
+      "lane_color": "#3b82f6",
+      "position": "below_step_3",
+      "explanatory_text": "wizard picks the best available, falls back left-to-right",
+      "nodes": [
+        {"label": "NVENC",   "subtitle": "NVIDIA",  "x_offset_from_step_3": -0.06},
+        {"label": "QSV",     "subtitle": "Intel",   "x_offset_from_step_3": -0.02},
+        {"label": "AMF",     "subtitle": "AMD",     "x_offset_from_step_3":  0.02},
+        {"label": "libx264", "subtitle": "fallback","x_offset_from_step_3":  0.06}
+      ],
+      "connections_style": "thin dashed blue curved line from step 3 down to a junction, then four short branches to each encoder pill. The first three pills (NVENC / QSV / AMF) share the same subtle blue accent; libx264 has a slightly muted grey accent to read as the always-available fallback.",
+      "node_styling": "small pill-shaped rounded rectangles, blue border, JetBrains Mono label + Inter subtitle below"
+    },
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "Prerequisites", "platform · cameras · FFmpeg",
+        "Configuration", "node_id · API key",
+        "Install", "encrypted config · encoder",
+        "Verify", "round-trip Command Center",
+        "Launch", "node online",
+        "IF FFMPEG MISSING", "wizard offers to install via OS package manager",
+        "winget", "Windows", "brew", "macOS", "apt / dnf / pacman", "Linux",
+        "ENCODER AUTO-DETECT", "wizard picks the best available, falls back left-to-right",
+        "NVENC", "NVIDIA", "QSV", "Intel", "AMF", "AMD", "libx264", "fallback"
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "do_not_render_metadata": "Do NOT render any color hex codes, rgba() values, x_pct/x_offset positioning values, JSON field names, or any other JSON metadata as visible text on the canvas. Visible text must come ONLY from the exact_text array.",
+      "do_not_show_logos": "Do NOT render any company logos (no real Intel/NVIDIA/AMD/Apple/Microsoft/Linux logos). The text labels alone identify each platform.",
+      "rendering_notes": "Premium technical-doc style matching incident-lifecycle and motion-fsm diagrams. Step 1-3 cyan, step 4 purple, step 5 green. Numbered step badges read '1' through '5'. The two branches (ffmpeg above, encoder below) are visually subordinate — smaller pills, dashed connectors, lane labels in spaced caps. Aspect ratio 16:7. NOT photographic."
+    }
+  }
+}
