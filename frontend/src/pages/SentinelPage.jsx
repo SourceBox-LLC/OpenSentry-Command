@@ -23,6 +23,23 @@ function SentinelPage() {
         </p>
       </div>
 
+      <div className="sentinel-banner" aria-hidden="true">
+        <picture>
+          <source srcSet="/images/sentinel-hero.webp" type="image/webp" />
+          <img
+            src="/images/sentinel-hero.jpg"
+            alt=""
+            className="sentinel-banner-image"
+            width="2240"
+            height="960"
+            loading="lazy"
+          />
+        </picture>
+        <div className="sentinel-banner-caption">
+          What Sentinel sees, at 3am, when motion fires.
+        </div>
+      </div>
+
       <div className="sentinel-status-card">
         <div className="sentinel-status-row">
           <div className="sentinel-status-dot"></div>

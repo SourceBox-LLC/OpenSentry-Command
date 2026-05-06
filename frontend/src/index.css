@@ -8046,6 +8046,37 @@ body {
     margin: 0 auto;
 }
 
+/* Sentinel hero banner — wide cinematic camera-POV image with AI
+   overlay accents (green corner brackets, purple scan line). Sits
+   between the hero text block and the status card.  Generated via
+   Nano Banana Pro from docs/image-specs/sentinel-hero.json. */
+.sentinel-banner {
+    position: relative;
+    z-index: 1;
+    margin: 0 auto 2.5rem;
+    max-width: 1100px;
+}
+
+.sentinel-banner-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 16px;
+    box-shadow:
+        0 30px 80px rgba(0, 0, 0, 0.7),
+        0 10px 30px rgba(168, 85, 247, 0.12),
+        0 0 0 1px var(--border-color);
+}
+
+.sentinel-banner-caption {
+    margin-top: 0.85rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-style: italic;
+    letter-spacing: 0.02em;
+}
+
 .sentinel-status-card {
     position: relative;
     z-index: 1;

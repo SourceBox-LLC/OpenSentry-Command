@@ -1,0 +1,98 @@
+{
+  "marketing_image": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Sentinel Page Hero Banner — AI-watching POV",
+      "campaign": "sentinel_teaser_v1",
+      "brand_name": "SourceBox Sentry",
+      "usage_context": "wide cinematic banner at the top of the Sentinel page, sits below the COMING SOON badge and above the title"
+    },
+    "subject": {
+      "type": "scene_through_camera_pov",
+      "name": "Dim home interior viewed through a security camera with subtle AI analysis overlay",
+      "physical_properties": {
+        "scene_type": "view from a security camera looking down a hallway or living room at night, slight wide-angle distortion at edges, suggesting the camera's lens character"
+      }
+    },
+    "props": {
+      "foreground": [
+        {
+          "type": "ai_corner_brackets",
+          "count": 4,
+          "position": "framing_a_focus_area",
+          "notes": "Four small corner brackets (L-shaped) drawn as a subtle AI overlay around a focus area (e.g. near a doorway or piece of furniture). Brackets are thin, glowing green (#22c55e), about 1-2 px stroke. Suggest 'object of interest detected'. Not too prominent — they are accents, not the main subject."
+        },
+        {
+          "type": "motion_scan_line",
+          "count": 1,
+          "position": "horizontal_across_lower_third",
+          "notes": "A faint horizontal scan line in soft purple (#a855f7), traveling across the frame — an AI analysis line. Very subtle, looks like a TV scanline or radar sweep. About 5-10% opacity."
+        }
+      ],
+      "midground": [
+        {
+          "type": "home_interior_at_night",
+          "count": 1,
+          "position": "full_frame",
+          "notes": "Dim living room or hallway viewed from an upper corner / camera angle. Soft furniture silhouettes, a couch, a doorway, maybe a window letting in faint outdoor street light. Empty of people. Quiet. Slight grain/noise like a low-light camera sensor."
+        }
+      ],
+      "background": [
+        {
+          "type": "ambient_dimness",
+          "count": 1,
+          "position": "deep_background",
+          "notes": "Far end of the room fades to deep teal-black. A faint blue/orange glow suggests an outdoor street lamp through a distant window."
+        }
+      ]
+    },
+    "environment": {
+      "surface": {
+        "material": "matte",
+        "reflection_strength": 0.05
+      },
+      "background": {
+        "color": "deep teal-black (#0a0a0f) with low-key cool ambient",
+        "texture": "soft, slightly grainy (low-light sensor character)",
+        "effect": "wide_angle_subtle_distortion"
+      },
+      "atmosphere": {
+        "mood": "watchful, quiet, after-hours, AI-observing, technical, calm-but-alert",
+        "keywords": ["camera_pov", "low_light", "watchful", "ai_overlay", "after_hours", "cinematic", "wide_angle"]
+      }
+    },
+    "camera": {
+      "angle": "high_ceiling_corner_looking_down",
+      "framing": "wide",
+      "focal_length_mm": 16,
+      "depth_of_field": "deep",
+      "notes": "Camera POV — placed near the ceiling in a corner, looking diagonally across the room. Subtle wide-angle distortion at the corners adds 'security camera lens character' without being cartoonish."
+    },
+    "lighting": {
+      "key_light_direction": "far_back",
+      "key_light_intensity": "very_low",
+      "fill_light_direction": "front",
+      "fill_light_intensity": "very_low",
+      "rim_light": false,
+      "color_temperature": "cool",
+      "notes": "Almost ambient — a faint cool blue-teal wash from a distant window, just enough to define silhouettes. Sensor-noise grain over the whole image. The brightest visible elements are the green AI corner brackets and the purple scan line, which serve as the brand-color accents in an otherwise low-key scene."
+    },
+    "brand": {
+      "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
+      "must_match_assets": [],
+      "forbidden_changes": [
+        "do_not_show_text_or_logos_in_image",
+        "do_not_show_recognizable_human_faces_or_full_bodies",
+        "do_not_show_real_branded_camera_models_or_furniture_brands",
+        "do_not_show_visible_brand_names_anywhere",
+        "do_not_make_the_AI_overlay_look_corny_or_HUD_video_game_style — keep it subtle and minimal"
+      ]
+    },
+    "controls": {
+      "lock_subject_geometry": false,
+      "allow_background_variation": true,
+      "leave_negative_space": "center — the title text will overlay near the top so keep the upper third visually quieter",
+      "notes": "Photorealistic camera-POV scene with minimalist AI overlay accents. Aspect ratio 21:9 — cinematic wide banner above the hero title. The whole image should read as 'this is what Sentinel sees, quietly, at 3am' — not 'this is a futuristic robot eye'."
+    }
+  }
+}
