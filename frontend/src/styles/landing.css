@@ -815,25 +815,51 @@
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* Docs Page - Sidebar Layout */
+/* Docs Page - Sidebar Layout
+   ──────────────────────────
+   The sidebar uses ``position: sticky`` inside the ``.docs-layout``
+   flex row rather than ``position: fixed`` to the viewport.  That
+   was important once SmartLayout started rendering /docs inside
+   the in-app ``Layout`` shell for signed-in users — a fixed sidebar
+   anchors to ``left: 0`` of the viewport, which collides with the
+   AppSidebar.  Sticky-in-flow keeps the docs sidebar inside the
+   ``.main`` column where it belongs in either context.
+
+   The ``--docs-sidebar-top`` var lets each layout pick its own
+   sticky offset (4rem under LandingNav, 56px under Layout's app
+   header).  See ``.layout .docs-layout`` below for the in-app
+   override. */
 .docs-layout {
   display: flex;
   min-height: 100vh;
   padding-top: 4rem;
+  --docs-sidebar-top: 4rem;
 }
 
 .docs-sidebar {
-  position: fixed;
-  left: 0;
-  top: 4rem;
+  position: sticky;
+  top: var(--docs-sidebar-top, 4rem);
+  align-self: flex-start;
   width: 280px;
-  height: calc(100vh - 4rem);
+  flex-shrink: 0;
+  max-height: calc(100vh - var(--docs-sidebar-top, 4rem));
   background: var(--bg-card);
   border-right: 1px solid var(--border-color);
   padding: 2rem 1.5rem;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+}
+
+/* In-app override: when /docs is rendered inside Layout (signed-in
+   user via SmartLayout), the page header is sticky-in-flow rather
+   than fixed-overlay, so the docs-layout doesn't need its own top
+   padding, and the sidebar pins below the 56px app header instead
+   of the 4rem marketing nav. */
+.layout .docs-layout {
+  padding-top: 0;
+  min-height: auto;
+  --docs-sidebar-top: 56px;
 }
 
 .docs-sidebar-header {
@@ -956,7 +982,7 @@
 
 .docs-content {
   flex: 1;
-  margin-left: 280px;
+  min-width: 0;
   padding: 3rem 4rem;
   display: flex;
   justify-content: center;
@@ -1617,9 +1643,8 @@
   .docs-sidebar {
     width: 240px;
   }
-  
+
   .docs-content {
-    margin-left: 240px;
     padding: 2rem 3rem;
   }
 }
