@@ -109,16 +109,14 @@ body {
     text-decoration: none;
 }
 
+/* Brand mark in the app header. The SVG (LogoMark) carries its own
+   visual presence — gradient stroke, lens iris, green pupil. We only
+   need to make sure it doesn't shrink in flex flow and add a soft
+   green glow behind the silhouette. */
 .logo-icon {
-    width: 32px;
-    height: 32px;
-    background: var(--gradient-1);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    box-shadow: 0 0 20px var(--accent-green-glow);
+    flex-shrink: 0;
+    display: block;
+    filter: drop-shadow(0 0 14px rgba(34, 197, 94, 0.35));
 }
 
 .logo-text {

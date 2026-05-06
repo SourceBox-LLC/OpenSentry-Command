@@ -1,0 +1,66 @@
+{
+  "marketing_image": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "SourceBox Sentry Logo Concepts — design presentation",
+      "campaign": "logo_design_v1",
+      "brand_name": "SourceBox Sentry",
+      "usage_context": "design-review presentation showing three distinct logo-mark candidates side-by-side on a dark backdrop, like a brand designer's first-round options sheet"
+    },
+    "subject": {
+      "type": "logo_concept_presentation",
+      "name": "Three logo mark candidates rendered as crisp flat vector-style icons",
+      "physical_properties": {
+        "format": "presentation slide / brand-board mock — three rounded-rectangle cards arranged horizontally on a dark backdrop, each containing one logo concept centered, with a small caption label below each."
+      }
+    },
+    "concepts": [
+      {
+        "id": "A",
+        "label": "A · Shield + Lens",
+        "position": "left_card",
+        "description": "A classic shield silhouette (rounded shoulders, gentle pointed bottom) drawn as a 2-3px line stroke. Inside the shield, a camera-lens iris: a single concentric circle ring centered slightly above middle, with a smaller solid filled circle dot at its center. The shield outline and lens ring use a single linear gradient stroke from green (#22c55e) at top-left to purple (#a855f7) at bottom-right. The center pupil dot is solid green (#22c55e). NO other detail. Crisp, geometric, premium. This concept communicates 'guarded + watching'."
+      },
+      {
+        "id": "B",
+        "label": "B · Aperture",
+        "position": "center_card",
+        "description": "A pure camera-aperture / iris mark — six geometric blades arranged in a circle forming a stylized aperture, with a small empty hexagonal opening at center. Each blade drawn as a clean angular shape with green (#22c55e) outline and a subtle purple (#a855f7) inner shade — flat shading, no gradients on the blades themselves. Single accent: a small solid green dot floating in the center opening. No shield, no other ornament. Very distinctive, very 'camera'. This concept communicates 'pure lens / focus'."
+      },
+      {
+        "id": "C",
+        "label": "C · Viewfinder Frame",
+        "position": "right_card",
+        "description": "Four L-shaped corner brackets arranged at the corners of an imagined square frame, like an AI / object-detection viewfinder overlay. Each bracket has equal-length arms (rounded ends) drawn in green (#22c55e) with a 2-3px stroke. Inside the frame, a single solid green (#22c55e) dot in the dead center. The brackets DO NOT touch — there's clear negative space between them. A subtle purple (#a855f7) accent dot sits in one corner bracket joint. This concept communicates 'active surveillance / locked focus'."
+      }
+    ],
+    "layout_notes": {
+      "background": "Dark near-black canvas (#0a0a0f) with a very subtle grid pattern overlay (rgba(255,255,255,0.04)).",
+      "card_styling": "Three equal-sized rounded-corner cards (~14px radius) in a row, each ~33% of canvas width with consistent gaps between. Each card has a subtle dark fill (#161620) with 1px tinted border (rgba(255,255,255,0.10)), and contains the logo concept centered with generous whitespace around it (the logo should take up ~50-60% of the card's area, not fill edge-to-edge). Below each logo, a small monospace caption (e.g. 'A · Shield + Lens') in muted off-white, separated from the logo by a thin divider line.",
+      "title": "A bold sans-serif header at the top of the canvas reading 'SourceBox Sentry — Logo Concepts' in white, with a smaller sublabel below in green reading 'first-round directions, vector-ready.'",
+      "consistent_logo_size": "All three logo marks should appear at the SAME visual size in their respective cards so they can be compared fairly — roughly 200x200px in the card. Stroke weights should also be consistent across all three (~2-3px)."
+    },
+    "environment": {
+      "atmosphere": {
+        "mood": "design studio, premium brand presentation, product designer's first-round mocks",
+        "keywords": ["brand_design", "vector_logo", "minimal", "geometric", "premium", "presentation"]
+      }
+    },
+    "brand": {
+      "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
+      "must_match_assets": [],
+      "forbidden_changes": [
+        "do_not_render_a_3D_logo_or_photographic_logo — these are flat vector concepts",
+        "do_not_use_serif_typography",
+        "do_not_add_extraneous_decorative_elements_inside_the_logos",
+        "do_not_render_the_word_'SourceBox' or 'Sentry' as part of the logos themselves — these are MARKS only, not lockups",
+        "do_not_render_metadata_like_color_hex_codes_or_position_values_as_visible_text"
+      ]
+    },
+    "controls": {
+      "lock_subject_geometry": false,
+      "leave_negative_space": "around each logo within its card — the logos should breathe",
+      "notes": "Render as a flat brand-presentation graphic. Each of the three cards should contain ONE logo concept rendered as a crisp flat vector-style icon. Aspect ratio 16:9. Premium dark-theme design-studio aesthetic. The viewer should be able to compare the three concepts at a glance and pick a favorite."
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import { LogoMark } from "./Logo.jsx"
 
 function LandingFooter() {
   return (
@@ -7,7 +8,7 @@ function LandingFooter() {
         <div className="landing-footer-content">
           <div className="landing-footer-brand">
             <div className="landing-logo">
-              <span className="landing-logo-icon">🛡️</span>
+              <LogoMark size={28} className="landing-logo-icon" />
               <span>SourceBox </span>
               <span className="landing-logo-text">Sentry</span>
             </div>

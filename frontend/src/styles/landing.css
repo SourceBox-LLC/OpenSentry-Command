@@ -37,8 +37,12 @@
   text-decoration: none;
 }
 
+/* Brand mark in the public LandingNav + LandingFooter. SVG handles
+   its own dimensions; we just lock layout + add a soft green glow. */
 .landing-logo-icon {
-  font-size: 1.5rem;
+  flex-shrink: 0;
+  display: block;
+  filter: drop-shadow(0 0 12px rgba(34, 197, 94, 0.35));
 }
 
 .landing-logo-text {

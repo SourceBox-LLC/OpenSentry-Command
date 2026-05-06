@@ -5,6 +5,7 @@ import { usePlanInfo } from "../hooks/usePlanInfo.jsx"
 import AppSidebar from "./AppSidebar.jsx"
 import ToastContainer from "./ToastContainer.jsx"
 import NotificationBell from "./NotificationBell.jsx"
+import { LogoMark } from "./Logo.jsx"
 
 function Layout() {
   const { organization, isLoaded: orgLoaded } = useOrganization()
@@ -60,7 +61,7 @@ function Layout() {
             </SignedIn>
 
             <Link to="/" className="logo">
-              <div className="logo-icon">🛡️</div>
+              <LogoMark size={32} className="logo-icon" />
               <div className="logo-text">SourceBox <span>Sentry</span></div>
             </Link>
           </div>

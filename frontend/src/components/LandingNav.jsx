@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Link } from "react-router-dom"
 import { SignedIn, SignedOut, UserButton, OrganizationSwitcher, useOrganization } from "@clerk/clerk-react"
+import { LogoMark } from "./Logo.jsx"
 
 // Extracted into its own component so useOrganization() only runs when there
 // is an active Clerk session — otherwise Clerk logs a console warning on every
@@ -51,7 +52,7 @@ function LandingNav() {
     <nav className="landing-nav">
       <div className="landing-nav-container">
         <Link to="/" className="landing-logo">
-          <span className="landing-logo-icon">🛡️</span>
+          <LogoMark size={28} className="landing-logo-icon" />
           <span>SourceBox </span>
           <span className="landing-logo-text">Sentry</span>
         </Link>
