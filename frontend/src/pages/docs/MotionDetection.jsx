@@ -1,4 +1,3 @@
-import { MotionStateMachineDiagram } from "../../components/DocsDiagrams"
 import { useDocs } from "./context"
 
 
@@ -23,7 +22,22 @@ function MotionDetection() {
         <li>The event is sent over the persistent WebSocket to Command Center. If the socket is down, it falls back to <code>POST /api/cameras/{"{id}"}/motion</code></li>
         <li>A per-camera cooldown timer prevents flapping (identical wind-blown tree, flickering light) from spamming events</li>
       </ol>
-      <MotionStateMachineDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/motion-fsm.webp" type="image/webp" />
+          <img
+            src="/images/motion-fsm.jpg"
+            alt="Motion detection state machine: Idle, Scoring, Fire event, Cooldown — looping clockwise. Side panel labelled Delivery shows three branches: primary (WebSocket — low latency), fallback (POST /cameras/{id}/motion), and consumed by (dashboard + MCP agents)."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          The state machine runs once per camera. The cooldown prevents a waving branch or flickering light from hammering the events channel — tune the threshold to control sensitivity, the cooldown to control chatter.
+        </figcaption>
+      </figure>
 
       <h3>Configuration</h3>
       <div className="docs-plans-table">

@@ -1,0 +1,225 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Motion Detection State Machine",
+      "description": "Per-camera FSM showing the Idle → Scoring → Fire event → Cooldown loop, with a side panel describing how the emitted MotionEvent is delivered.",
+      "tags": ["motion", "state_machine", "fsm", "per_camera"]
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 1080,
+      "unit": "px",
+      "direction": "circular",
+      "background_color": "#0a0a0f",
+      "style_notes": "Dark theme. All nodes are rounded rectangles with subtle borders. Crisp 1.5px arrows in amber. Use Inter or similar geometric sans-serif for labels. Apply a soft outer glow to active-state nodes (Scoring, Fire event) in amber. Subtle grid texture in deep teal-black background, very low contrast."
+    },
+    "semantics": {
+      "diagram_type": "state_machine",
+      "primary_relationship": "control_flow_loop",
+      "swimlanes": []
+    },
+    "nodes": [
+      {
+        "id": "node_idle",
+        "label": "Idle",
+        "subtitle": "waiting for frames",
+        "role": "process",
+        "position": {"x": 960, "y": 280},
+        "size": {"width": 220, "height": 90},
+        "style": {
+          "shape": "rounded_rectangle",
+          "fill_color": "#161620",
+          "border_color": "rgba(255,255,255,0.10)",
+          "border_width": 1,
+          "corner_radius": 12,
+          "title_color": "#ffffff",
+          "subtitle_color": "rgba(255,255,255,0.55)",
+          "accent": "default"
+        }
+      },
+      {
+        "id": "node_scoring",
+        "label": "Scoring",
+        "subtitle": "scene > threshold?",
+        "role": "process",
+        "position": {"x": 1280, "y": 540},
+        "size": {"width": 220, "height": 90},
+        "style": {
+          "shape": "rounded_rectangle",
+          "fill_color": "rgba(245, 158, 11, 0.10)",
+          "border_color": "rgba(245, 158, 11, 0.45)",
+          "border_width": 1.5,
+          "corner_radius": 12,
+          "title_color": "#f5a209",
+          "subtitle_color": "rgba(255,255,255,0.55)",
+          "accent": "amber",
+          "glow": "soft_amber"
+        }
+      },
+      {
+        "id": "node_fire",
+        "label": "Fire event",
+        "subtitle": "MotionEvent emitted",
+        "role": "process",
+        "position": {"x": 960, "y": 800},
+        "size": {"width": 220, "height": 90},
+        "style": {
+          "shape": "rounded_rectangle",
+          "fill_color": "rgba(245, 158, 11, 0.10)",
+          "border_color": "rgba(245, 158, 11, 0.45)",
+          "border_width": 1.5,
+          "corner_radius": 12,
+          "title_color": "#f5a209",
+          "subtitle_color": "rgba(255,255,255,0.55)",
+          "accent": "amber",
+          "glow": "soft_amber"
+        }
+      },
+      {
+        "id": "node_cooldown",
+        "label": "Cooldown",
+        "subtitle": "30s quiet window",
+        "role": "process",
+        "position": {"x": 640, "y": 540},
+        "size": {"width": 220, "height": 90},
+        "style": {
+          "shape": "rounded_rectangle",
+          "fill_color": "#161620",
+          "border_color": "rgba(255,255,255,0.10)",
+          "border_width": 1,
+          "corner_radius": 12,
+          "title_color": "#ffffff",
+          "subtitle_color": "rgba(255,255,255,0.55)",
+          "accent": "default"
+        }
+      }
+    ],
+    "center_label": {
+      "position": {"x": 960, "y": 540},
+      "eyebrow": "PER-CAMERA",
+      "title": "Motion FSM",
+      "eyebrow_color": "rgba(255,255,255,0.45)",
+      "title_color": "#ffffff",
+      "eyebrow_letter_spacing": "0.12em",
+      "title_size": 18,
+      "title_weight": "semibold"
+    },
+    "edges": [
+      {
+        "id": "e_idle_to_scoring",
+        "from": "node_idle",
+        "to": "node_scoring",
+        "label": "frame in",
+        "label_color": "rgba(255,255,255,0.65)",
+        "label_position": "outside_curve_top_right",
+        "style": {
+          "line_type": "curved_clockwise",
+          "stroke_color": "#f59e0b",
+          "stroke_width": 1.5,
+          "arrowhead": "filled_triangle",
+          "curvature": "arc_around_center"
+        }
+      },
+      {
+        "id": "e_scoring_to_fire",
+        "from": "node_scoring",
+        "to": "node_fire",
+        "label": "score ≥ threshold",
+        "label_color": "rgba(255,255,255,0.65)",
+        "label_position": "outside_curve_bottom_right",
+        "style": {
+          "line_type": "curved_clockwise",
+          "stroke_color": "#f59e0b",
+          "stroke_width": 1.5,
+          "arrowhead": "filled_triangle",
+          "curvature": "arc_around_center"
+        }
+      },
+      {
+        "id": "e_fire_to_cooldown",
+        "from": "node_fire",
+        "to": "node_cooldown",
+        "label": "delivered",
+        "label_color": "rgba(255,255,255,0.65)",
+        "label_position": "outside_curve_bottom_left",
+        "style": {
+          "line_type": "curved_clockwise",
+          "stroke_color": "#f59e0b",
+          "stroke_width": 1.5,
+          "arrowhead": "filled_triangle",
+          "curvature": "arc_around_center"
+        }
+      },
+      {
+        "id": "e_cooldown_to_idle",
+        "from": "node_cooldown",
+        "to": "node_idle",
+        "label": "elapsed",
+        "label_color": "rgba(255,255,255,0.65)",
+        "label_position": "outside_curve_top_left",
+        "style": {
+          "line_type": "curved_clockwise",
+          "stroke_color": "#f59e0b",
+          "stroke_width": 1.5,
+          "arrowhead": "filled_triangle",
+          "curvature": "arc_around_center"
+        }
+      }
+    ],
+    "side_panel": {
+      "position": {"x": 1640, "y": 360},
+      "width": 220,
+      "height": 360,
+      "background": "#161620",
+      "border_color": "rgba(255,255,255,0.10)",
+      "border_radius": 12,
+      "title": "Delivery",
+      "title_color": "#ffffff",
+      "title_size": 14,
+      "title_weight": "semibold",
+      "title_underline_color": "rgba(255,255,255,0.10)",
+      "items": [
+        {
+          "bullet_color": "#22c55e",
+          "label": "primary",
+          "label_color": "#ffffff",
+          "sublabel": "WebSocket — low latency",
+          "sublabel_color": "rgba(255,255,255,0.55)"
+        },
+        {
+          "bullet_color": "#f59e0b",
+          "label": "fallback",
+          "label_color": "#ffffff",
+          "sublabel": "POST /cameras/{id}/motion",
+          "sublabel_color": "rgba(255,255,255,0.55)"
+        },
+        {
+          "bullet_color": "#3b82f6",
+          "label": "consumed by",
+          "label_color": "#ffffff",
+          "sublabel": "dashboard + MCP agents",
+          "sublabel_color": "rgba(255,255,255,0.55)"
+        }
+      ]
+    },
+    "constraints": {
+      "layout_lock": true,
+      "allow_auto_routing": false,
+      "exact_text": [
+        "Idle", "waiting for frames",
+        "Scoring", "scene > threshold?",
+        "Fire event", "MotionEvent emitted",
+        "Cooldown", "30s quiet window",
+        "frame in", "score ≥ threshold", "delivered", "elapsed",
+        "PER-CAMERA", "Motion FSM",
+        "Delivery", "primary", "WebSocket — low latency",
+        "fallback", "POST /cameras/{id}/motion",
+        "consumed by", "dashboard + MCP agents"
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "rendering_notes": "Render as a clean technical diagram in a premium dark UI style. Crisp typography (Inter / system sans-serif), perfect alignment, no hand-drawn or rough look. Output should look like a high-end product-doc diagram, not an illustration. Aspect ratio 16:9. NO photographic imagery, NO 3D rendering, NO illustrative styling — pure flat technical diagram on a dark background."
+    }
+  }
+}

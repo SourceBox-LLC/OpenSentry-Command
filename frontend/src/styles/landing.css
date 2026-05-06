@@ -1443,6 +1443,16 @@
   overflow: hidden;
 }
 
+/* AI-generated diagram image — when a docs section ships a raster
+   diagram instead of the in-component SVG (see MotionDetection.jsx).
+   Behaves identically to the inline SVGs from a layout perspective. */
+.docs-diagram-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+}
+
 .docs-diagram::before {
   /* A faint horizontal accent bar at the top edge, matching the site's
      gradient language without competing with the diagram itself. */
