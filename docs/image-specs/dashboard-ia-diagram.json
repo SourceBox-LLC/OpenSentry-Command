@@ -1,0 +1,102 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Dashboard Information Architecture",
+      "description": "Tree diagram: 'Dashboard' root at top, four child sections below (Live view, Settings, Admin, Incidents), each with 4-5 leaf bullet items. Settings and Admin carry an ADMIN badge."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 920,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. NOT photographic. NOT 3D. Subtle grid background."
+    },
+    "root": {
+      "label": "Dashboard",
+      "subtitle": "opensentry-command.fly.dev",
+      "accent": "green",
+      "icon": "cloud",
+      "x_pct": 0.50,
+      "y_pct": 0.06
+    },
+    "children": [
+      {
+        "label": "Live view",
+        "accent": "blue",
+        "x_pct": 0.10,
+        "y_pct": 0.22,
+        "items": [
+          "Camera tiles",
+          "Fullscreen + multi-view",
+          "Snapshot capture",
+          "Manual record"
+        ]
+      },
+      {
+        "label": "Settings",
+        "accent": "amber",
+        "admin_only": true,
+        "x_pct": 0.36,
+        "y_pct": 0.22,
+        "items": [
+          "Node Management",
+          "Recording Policy",
+          "Organization",
+          "Subscription",
+          "Danger Zone"
+        ]
+      },
+      {
+        "label": "Admin",
+        "accent": "purple",
+        "admin_only": true,
+        "x_pct": 0.62,
+        "y_pct": 0.22,
+        "items": [
+          "Stream Access Logs",
+          "Usage Statistics",
+          "MCP Tool Activity",
+          "System Health"
+        ]
+      },
+      {
+        "label": "Incidents",
+        "accent": "cyan",
+        "x_pct": 0.88,
+        "y_pct": 0.22,
+        "items": [
+          "Open incidents",
+          "Evidence viewer",
+          "Markdown reports",
+          "Triage actions"
+        ]
+      }
+    ],
+    "tree_lines": "Connect root node down to a horizontal busbar at y_pct ~0.16, then drop a thin vertical line from the busbar to the top of each child node. All lines in muted white (rgba(255,255,255,0.10)).",
+    "child_node_styling": "Rounded rectangles with title only (no subtitle), accent border per spec. Width about 220px, height about 50px.",
+    "leaf_styling": "Bullet items hang off a thin vertical line dropping from the LEFT edge of each child node. Each item is a thin horizontal tick line + plain-text label in muted grey, sans-serif, 14px. Items stack vertically with consistent 28px spacing.",
+    "admin_badge_styling": "Small pill badge labelled 'ADMIN' (caps, letter-spacing) in purple, attached to the top-right corner of nodes flagged admin_only.",
+    "footer_caption": {
+      "text": "The dashboard splits into four top-level sections. Admin-only branches are gated on the Pro / Pro Plus plan.",
+      "color": "rgba(255,255,255,0.55)",
+      "position": "centered_below_diagram"
+    },
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "Dashboard", "opensentry-command.fly.dev",
+        "Live view", "Camera tiles", "Fullscreen + multi-view", "Snapshot capture", "Manual record",
+        "Settings", "Node Management", "Recording Policy", "Organization", "Subscription", "Danger Zone",
+        "Admin", "Stream Access Logs", "Usage Statistics", "MCP Tool Activity", "System Health",
+        "Incidents", "Open incidents", "Evidence viewer", "Markdown reports", "Triage actions",
+        "ADMIN",
+        "The dashboard splits into four top-level sections. Admin-only branches are gated on the Pro / Pro Plus plan."
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "do_not_render_metadata": "do NOT render any color hex codes, rgba() values, x_pct/y_pct positioning values, or any JSON metadata as visible text. Visible text must come ONLY from the exact_text array.",
+      "rendering_notes": "Premium technical-doc tree diagram. Crisp typography. Settings and Admin nodes get a small purple ADMIN pill in their top-right corner. Leaf items in muted grey hang off a thin connecting line from each child. Footer caption below the tree. NOT photographic. Aspect ratio 16:9."
+    }
+  }
+}

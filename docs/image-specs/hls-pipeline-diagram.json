@@ -1,0 +1,77 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "HLS Segment Pipeline",
+      "description": "How a frame becomes playable video. Three horizontal swimlanes (CLOUDNODE, CLOUD, CLIENT). Main path: Camera → FFmpeg → HLS segments → Segment uploader → (HTTPS) → Segment RAM cache → Same-origin proxy → hls.js player. Side branch parallel motion probe in CloudNode lane: Motion probe → scene-change score → WebSocket event."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 920,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. NOT photographic. Three horizontal swimlanes with dashed coloured borders."
+    },
+    "lanes": [
+      {"label": "CLOUDNODE", "color": "#3b82f6", "fill": "rgba(59,130,246,0.03)", "y_pct": 0.10, "height_pct": 0.40},
+      {"label": "CLOUD",     "color": "#22c55e", "fill": "rgba(34,197,94,0.04)",  "y_pct": 0.55, "height_pct": 0.18},
+      {"label": "CLIENT",    "color": "#a855f7", "fill": "rgba(168,85,247,0.03)", "y_pct": 0.78, "height_pct": 0.12}
+    ],
+    "cloudnode_lane_main_row": [
+      {"label": "Camera",            "subtitle": "raw frames",         "accent": "blue", "x_pct": 0.05},
+      {"label": "FFmpeg",            "subtitle": "libx264 / NVENC",    "accent": "blue", "x_pct": 0.21},
+      {"label": "HLS segments",      "subtitle": ".ts · 1s each",      "accent": "blue", "x_pct": 0.37},
+      {"label": "Segment uploader",  "subtitle": "POST /push-segment", "accent": "blue", "x_pct": 0.55}
+    ],
+    "cloudnode_lane_motion_branch_row": [
+      {"label": "Motion probe",         "accent": "amber", "x_pct": 0.21},
+      {"label": "scene-change score",   "accent": "amber", "x_pct": 0.37},
+      {"label": "WebSocket event",      "accent": "amber", "x_pct": 0.55}
+    ],
+    "cloud_lane": [
+      {"label": "Segment RAM cache", "accent": "green", "x_pct": 0.32},
+      {"label": "Same-origin proxy", "accent": "green", "x_pct": 0.52}
+    ],
+    "client_lane": [
+      {"label": "hls.js player", "accent": "purple", "x_pct": 0.52}
+    ],
+    "edges": [
+      {"from": "Camera", "to": "FFmpeg", "label": "", "lane": "cloudnode_main"},
+      {"from": "FFmpeg", "to": "HLS segments", "label": "", "lane": "cloudnode_main"},
+      {"from": "HLS segments", "to": "Segment uploader", "label": "", "lane": "cloudnode_main"},
+      {"from": "FFmpeg", "to": "Motion probe", "label": "", "lane": "cloudnode_main_to_branch", "style": "dashed_amber"},
+      {"from": "Motion probe", "to": "scene-change score", "label": "", "style": "solid_amber"},
+      {"from": "scene-change score", "to": "WebSocket event", "label": "", "style": "solid_amber"},
+      {"from": "Segment uploader", "to": "Segment RAM cache", "label": "HTTPS", "style": "solid_green_arrow_crossing_lanes"},
+      {"from": "WebSocket event", "to": "Same-origin proxy", "label": "", "style": "dashed_green"},
+      {"from": "Segment RAM cache", "to": "Same-origin proxy", "label": "", "style": "solid_green"},
+      {"from": "Same-origin proxy", "to": "hls.js player", "label": "GET .ts", "style": "solid_grey_crossing_lanes"}
+    ],
+    "annotation_pill": {
+      "position": "right_side_of_cloud_lane",
+      "text_top": "~15 segments",
+      "text_bottom": "rolling window",
+      "fill": "rgba(34,197,94,0.1)",
+      "border_color": "#22c55e"
+    },
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "CLOUDNODE", "CLOUD", "CLIENT",
+        "Camera", "raw frames",
+        "FFmpeg", "libx264 / NVENC",
+        "HLS segments", ".ts · 1s each",
+        "Segment uploader", "POST /push-segment",
+        "Motion probe", "scene-change score", "WebSocket event",
+        "Segment RAM cache", "Same-origin proxy",
+        "hls.js player",
+        "HTTPS", "GET .ts",
+        "~15 segments", "rolling window"
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "do_not_render_metadata": "do NOT render any color hex codes, rgba() values, x_pct/y_pct positioning values, or any JSON metadata as visible text. Visible text must come ONLY from the exact_text array.",
+      "rendering_notes": "Premium technical-doc style. Crisp typography. Three horizontal swimlanes with dashed coloured borders, lane labels in spaced caps on the left edge. Main encode path on top row of CloudNode lane (blue). Parallel motion branch on second row of CloudNode lane (amber). Cloud lane has 2 nodes. Client lane has 1 node. NOT photographic. Aspect ratio 16:9."
+    }
+  }
+}

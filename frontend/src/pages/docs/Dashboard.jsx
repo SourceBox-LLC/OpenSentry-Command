@@ -1,13 +1,25 @@
-import { DashboardIaDiagram, IncidentLifecycleDiagram } from "../../components/DocsDiagrams"
-
-
 function Dashboard() {
   return (
     <section className="docs-section" id="dashboard">
       <h2>Dashboard & Features<a href="#dashboard" className="docs-anchor">#</a></h2>
       <p>The Command Center web dashboard is where your team actually uses the system. It's organized into a few main areas.</p>
 
-      <DashboardIaDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/dashboard-ia.webp" type="image/webp" />
+          <img
+            src="/images/dashboard-ia.jpg"
+            alt="Dashboard information architecture tree. Root: Dashboard (opensentry-command.fly.dev). Four children: Live view (Camera tiles, Fullscreen + multi-view, Snapshot capture, Manual record); Settings — admin-only (Node Management, Recording Policy, Organization, Subscription, Danger Zone); Admin — admin-only (Stream Access Logs, Usage Statistics, MCP Tool Activity, System Health); Incidents (Open incidents, Evidence viewer, Markdown reports, Triage actions)."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          The dashboard splits into four top-level sections. Admin-only branches are gated on the Pro / Pro Plus plan.
+        </figcaption>
+      </figure>
 
       <h3>Live view</h3>
       <p>
@@ -50,7 +62,22 @@ function Dashboard() {
         snapshots, video clips, and a timeline of observations — all editable from the
         Incidents tab in the dashboard.
       </p>
-      <IncidentLifecycleDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/incident-lifecycle.webp" type="image/webp" />
+          <img
+            src="/images/incident-lifecycle.jpg"
+            alt="Incident lifecycle: Create (title, severity, camera) → Investigate (attach evidence + notes) → Finalize (markdown report body) → Review (human triage) → Resolve or Dismiss. Investigate has parallel branches: Evidence (snapshot, clip) above, and Notes & Revisions (observation, update_incident) below."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          An incident is an append-only record until it's reviewed. Agents attach evidence as they investigate; the finalize call seals the markdown report body. Humans make the close call.
+        </figcaption>
+      </figure>
       <ul>
         <li><strong>Create</strong> — Agents open an incident when they notice something worth
           flagging (possible intruder, equipment fault, unexpected motion).</li>

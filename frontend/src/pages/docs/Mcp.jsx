@@ -1,4 +1,3 @@
-import { McpWorkflowDiagram } from "../../components/DocsDiagrams"
 import { useDocs } from "./context"
 
 
@@ -34,7 +33,22 @@ function Mcp() {
         and routes it; CloudNode produces physical data (JPEGs, clip bytes)
         whenever a tool needs a live view of a camera.
       </p>
-      <McpWorkflowDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/mcp-workflow.webp" type="image/webp" />
+          <img
+            src="/images/mcp-workflow.jpg"
+            alt="MCP agent workflow swimlane. AI AGENT lane drives 7 numbered tool calls: list_cameras, view_camera, watch_camera, create_incident, attach_snapshot, attach_clip, finalize_incident. COMMAND CENTER lane authenticates and dispatches each call. CLOUDNODE lane produces physical data (JPEG snapshot, JPEG burst, JPEG → DB, clip from cache) only when the tool needs it. Legend: green READ, amber VISUAL, purple WRITE."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          A typical agent loop. Each numbered step is a tool call. The agent drives the conversation; Command Center authenticates and dispatches; CloudNode produces image / clip bytes when the tool needs them.
+        </figcaption>
+      </figure>
 
       <h3>Setup</h3>
       <div className="docs-steps">

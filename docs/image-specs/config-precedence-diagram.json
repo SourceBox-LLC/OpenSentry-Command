@@ -1,0 +1,92 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Configuration Precedence",
+      "description": "4 stacked horizontal bands showing config-source priority: SQLite (lowest) → YAML → Environment → CLI flags (highest)."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 760,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. Subtle background grid texture. NOT photographic, NOT 3D, NOT illustrative — a technical product-doc diagram."
+    },
+    "semantics": {
+      "diagram_type": "priority_stack",
+      "primary_relationship": "override"
+    },
+    "bands": [
+      {
+        "label": "CLI flags",
+        "sub_label": "--node-id · --api-key · --api-url",
+        "fill_color": "#a855f7",
+        "fill_opacity": 0.85,
+        "rounded_corners": 6,
+        "width_pct": 0.30,
+        "y_position_top": true,
+        "priority_label": "priority 4"
+      },
+      {
+        "label": "Environment",
+        "sub_label": "SOURCEBOX_SENTRY_* · RUST_LOG",
+        "fill_color": "#f59e0b",
+        "fill_opacity": 0.85,
+        "rounded_corners": 6,
+        "width_pct": 0.42,
+        "priority_label": "priority 3"
+      },
+      {
+        "label": "YAML config",
+        "sub_label": "config.yaml (legacy, migrated)",
+        "fill_color": "#3b82f6",
+        "fill_opacity": 0.85,
+        "rounded_corners": 6,
+        "width_pct": 0.54,
+        "priority_label": "priority 2"
+      },
+      {
+        "label": "SQLite database",
+        "sub_label": "data/node.db — source of truth",
+        "fill_color": "#22c55e",
+        "fill_opacity": 0.85,
+        "rounded_corners": 6,
+        "width_pct": 0.66,
+        "y_position_bottom": true,
+        "priority_label": "priority 1"
+      }
+    ],
+    "layout_notes": "Four bands stacked vertically with consistent vertical spacing. Centered horizontally. Each band wider than the one above it forming a downward-widening pyramid (priority 4 narrowest at top, priority 1 widest at bottom). Each band has bold label on the left in white sans-serif (Inter), code-style sub-label in JetBrains Mono below the label in 70% white. To the right of each band, the 'priority N' text in muted grey sans-serif.",
+    "annotations": [
+      {
+        "type": "vertical_arrow",
+        "label": "overrides",
+        "position": "left_of_stack",
+        "color": "rgba(255,255,255,0.4)",
+        "direction": "upward",
+        "label_rotation": -90,
+        "notes": "thin vertical arrow on the left side of the stack pointing UP, with the word 'overrides' labelled vertically (rotated 90° counter-clockwise) alongside it"
+      },
+      {
+        "type": "footer_note",
+        "text": "Missing values fall through to the next band. Present values at a higher band win.",
+        "position": "centered_below_stack",
+        "color": "rgba(255,255,255,0.55)"
+      }
+    ],
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "CLI flags", "--node-id · --api-key · --api-url", "priority 4",
+        "Environment", "SOURCEBOX_SENTRY_* · RUST_LOG", "priority 3",
+        "YAML config", "config.yaml (legacy, migrated)", "priority 2",
+        "SQLite database", "data/node.db — source of truth", "priority 1",
+        "overrides",
+        "Missing values fall through to the next band. Present values at a higher band win."
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "rendering_notes": "Flat dark UI technical diagram. Crisp typography. Sub-labels in monospace. NOT photographic. Aspect ratio 16:9. Premium product-doc styling."
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "SourceBox Sentry System Architecture",
+      "description": "Three-zone architecture: LOCAL (USB Camera + CloudNode) → CLOUD (Command Center + RAM cache + Incident DB) → CLIENT (Browser + AI Agent), with HTTPS push and same-origin streaming."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 840,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. Subtle grid background. Three vertical dashed-border zones: blue (LOCAL), green (CLOUD), purple (CLIENT). Lock icons (amber 🔒 glyph) at the security boundaries between zones. NOT photographic, NOT 3D, NOT illustrative."
+    },
+    "zones": [
+      {
+        "id": "zone_local",
+        "label": "LOCAL",
+        "label_color": "#3b82f6",
+        "label_letter_spacing": "0.15em",
+        "border_color": "rgba(59,130,246,0.2)",
+        "border_dashed": true,
+        "fill_color": "rgba(59,130,246,0.04)",
+        "x_pct": 0.04,
+        "width_pct": 0.28
+      },
+      {
+        "id": "zone_cloud",
+        "label": "CLOUD",
+        "label_color": "#22c55e",
+        "label_letter_spacing": "0.15em",
+        "border_color": "rgba(34,197,94,0.25)",
+        "border_dashed": true,
+        "fill_color": "rgba(34,197,94,0.05)",
+        "x_pct": 0.36,
+        "width_pct": 0.28
+      },
+      {
+        "id": "zone_client",
+        "label": "CLIENT",
+        "label_color": "#a855f7",
+        "label_letter_spacing": "0.15em",
+        "border_color": "rgba(168,85,247,0.2)",
+        "border_dashed": true,
+        "fill_color": "rgba(168,85,247,0.04)",
+        "x_pct": 0.68,
+        "width_pct": 0.28
+      }
+    ],
+    "nodes": [
+      {"zone": "zone_local",  "label": "USB Camera",       "subtitle": "UVC / DirectShow / V4L2",       "accent": "blue",   "y_pct": 0.18},
+      {"zone": "zone_local",  "label": "CloudNode",        "subtitle": "Rust · FFmpeg · SQLite",         "accent": "blue",   "y_pct": 0.42},
+      {"zone": "zone_cloud",  "label": "Command Center",   "subtitle": "FastAPI · Clerk · SQLAlchemy",   "accent": "green",  "y_pct": 0.22},
+      {"zone": "zone_cloud",  "label": "Segment RAM Cache","subtitle": "~15 × 1s chunks / camera",       "accent": "green",  "y_pct": 0.42},
+      {"zone": "zone_cloud",  "label": "Incident DB",      "subtitle": "Reports + evidence metadata",    "accent": "green",  "y_pct": 0.62},
+      {"zone": "zone_client", "label": "Browser",          "subtitle": "hls.js + Clerk JWT",             "accent": "purple", "y_pct": 0.22},
+      {"zone": "zone_client", "label": "AI Agent (MCP)",   "subtitle": "Claude, Cursor, custom",         "accent": "purple", "y_pct": 0.50}
+    ],
+    "edges": [
+      {"from": "USB Camera",    "to": "CloudNode",       "label": "",            "style": "solid_arrow_grey"},
+      {"from": "Command Center","to": "Segment RAM Cache","label": "",           "style": "solid_arrow_green"},
+      {"from": "Command Center","to": "Incident DB",     "label": "",            "style": "solid_arrow_green"},
+      {"from": "CloudNode",     "to": "Command Center",  "label": "HTTPS push",  "style": "solid_arrow_grey_with_amber_lock_at_midpoint"},
+      {"from": "Command Center","to": "Browser",         "label": "same-origin", "style": "solid_arrow_grey_with_amber_lock_at_midpoint"},
+      {"from": "Command Center","to": "AI Agent (MCP)",  "label": "MCP tools",   "style": "dashed_arrow_grey"}
+    ],
+    "footer_annotation": {
+      "text": "outbound only · no inbound ports",
+      "position": "below_local_zone",
+      "color": "#f59e0b",
+      "small_tick_above": true
+    },
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "LOCAL", "CLOUD", "CLIENT",
+        "USB Camera", "UVC / DirectShow / V4L2",
+        "CloudNode", "Rust · FFmpeg · SQLite",
+        "Command Center", "FastAPI · Clerk · SQLAlchemy",
+        "Segment RAM Cache", "~15 × 1s chunks / camera",
+        "Incident DB", "Reports + evidence metadata",
+        "Browser", "hls.js + Clerk JWT",
+        "AI Agent (MCP)", "Claude, Cursor, custom",
+        "HTTPS push", "same-origin", "MCP tools",
+        "outbound only · no inbound ports"
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "rendering_notes": "Flat dark UI technical diagram. Three labelled zones with dashed borders. Nodes are rounded rectangles with title + subtitle, accent border per zone color. Arrows are thin solid (or dashed for MCP tools). Amber padlock icons sit on the boundary-crossing arrows (HTTPS push, same-origin). NOT photographic. Aspect ratio 16:9."
+    }
+  }
+}

@@ -1,10 +1,3 @@
-import {
-  HlsPipelineDiagram,
-  SecurityModelDiagram,
-  SystemArchitectureDiagram,
-} from "../../components/DocsDiagrams"
-
-
 function Architecture() {
   return (
     <section className="docs-section" id="architecture">
@@ -12,7 +5,22 @@ function Architecture() {
       <p>SourceBox Sentry uses a cloud-first architecture designed for simplicity and security.</p>
 
       <h3>Data Flow</h3>
-      <SystemArchitectureDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/system-architecture.webp" type="image/webp" />
+          <img
+            src="/images/system-architecture.jpg"
+            alt="Three-zone system architecture: LOCAL (USB Camera and CloudNode), CLOUD (Command Center, Segment RAM Cache, Incident DB), CLIENT (Browser, AI Agent over MCP). HTTPS push from CloudNode to Command Center. Same-origin streaming to Browser. Outbound only — no inbound ports."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          The live-video path runs entirely inside the authenticated backend — CloudNode pushes outbound, the browser fetches same-origin. No third-party object storage in the hot path.
+        </figcaption>
+      </figure>
 
       <h3>How It Works</h3>
       <ol>
@@ -29,7 +37,22 @@ function Architecture() {
         scene changes for motion events. Playback is served same-origin from
         the backend's RAM cache, never through object storage.
       </p>
-      <HlsPipelineDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/hls-pipeline.webp" type="image/webp" />
+          <img
+            src="/images/hls-pipeline.jpg"
+            alt="HLS segment pipeline. CloudNode lane: Camera → FFmpeg → HLS segments → Segment uploader. Parallel motion branch: Motion probe → scene-change score → WebSocket event. Cloud lane: Segment RAM cache → Same-origin proxy with a ~15 segments rolling-window pill. Client lane: hls.js player fetched via GET .ts."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          Each camera runs two FFmpeg processes: the encoder producing HLS segments, and a second probe scoring scene changes for motion events. Playback is served from the RAM cache same-origin, never through object storage.
+        </figcaption>
+      </figure>
 
       <h3>Security Model</h3>
       <p>
@@ -38,7 +61,22 @@ function Architecture() {
         data is stored, and tenant isolation all the way down to the database
         query.
       </p>
-      <SecurityModelDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/security-model.webp" type="image/webp" />
+          <img
+            src="/images/security-model.jpg"
+            alt="Security model — four concentric rings: TRANSPORT (TLS 1.2+, outbound-only CloudNode → cloud), AUTH (Clerk JWT for users, nak_* for CloudNode keys, osc_* for MCP agent keys), DATA (SHA-256 hashed API keys, AES-256-GCM creds on CloudNode, live video in RAM only), TENANT isolation (every row scoped to org_id, no cross-org reads, MCP scope filters per key)."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          Every call crosses every ring: TLS on the wire, a key or JWT at the edge, hashing or encryption wherever data lives, and org-scoped queries all the way down.
+        </figcaption>
+      </figure>
       <ul>
         <li><strong>Outbound Only</strong> — CloudNode pushes to cloud. No inbound ports, no router config.</li>
         <li><strong>Same-origin Streaming</strong> — Live segments are served through the authenticated backend, not a third-party object store.</li>

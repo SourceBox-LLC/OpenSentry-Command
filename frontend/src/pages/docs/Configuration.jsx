@@ -1,4 +1,3 @@
-import { ConfigPrecedenceDiagram } from "../../components/DocsDiagrams"
 import { useDocs } from "./context"
 
 
@@ -22,7 +21,22 @@ function Configuration() {
         <li><strong>Environment variables</strong> — override any stored value at runtime</li>
         <li><strong>CLI flags</strong> — highest priority, typically used for debugging</li>
       </ol>
-      <ConfigPrecedenceDiagram />
+      <figure className="docs-diagram">
+        <picture>
+          <source srcSet="/images/config-precedence.webp" type="image/webp" />
+          <img
+            src="/images/config-precedence.jpg"
+            alt="Configuration precedence stack: CLI flags (priority 4, top) override Environment (priority 3) override YAML config (priority 2) override SQLite database (priority 1, bottom). Vertical 'overrides' arrow on the left points up. Footnote: missing values fall through to the next band; present values at a higher band win."
+            className="docs-diagram-image"
+            width="1920"
+            height="1080"
+            loading="lazy"
+          />
+        </picture>
+        <figcaption className="docs-diagram-caption">
+          Higher bands override lower ones at runtime. The DB is the persistent source of truth — YAML, env vars, and CLI flags are ephemeral overrides layered on top for a single invocation.
+        </figcaption>
+      </figure>
 
       <h3>Environment variables</h3>
       <div className="docs-plans-table">

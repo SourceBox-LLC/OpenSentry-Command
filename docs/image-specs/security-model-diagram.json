@@ -1,0 +1,66 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Security Model — Layered Rings",
+      "description": "Four concentric rings showing layered security: TRANSPORT (outermost, blue) → AUTH (purple) → DATA (amber) → TENANT isolation (innermost, green filled). Right-side panel lists details for each ring."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 960,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. NOT photographic. NOT 3D. Rings on the left half, detail panel on the right half."
+    },
+    "rings": [
+      {"label": "TRANSPORT", "color": "#3b82f6", "ring_radius_pct": 0.40, "stroke_width": 2, "fill": "transparent"},
+      {"label": "AUTH",      "color": "#a855f7", "ring_radius_pct": 0.30, "stroke_width": 2, "fill": "transparent"},
+      {"label": "DATA",      "color": "#f59e0b", "ring_radius_pct": 0.20, "stroke_width": 2, "fill": "transparent"},
+      {"label": "TENANT",    "color": "#22c55e", "ring_radius_pct": 0.10, "stroke_width": 2, "fill": "rgba(34,197,94,0.15)", "subtitle": "isolation"}
+    ],
+    "ring_layout_notes": "Concentric circles centered in the LEFT third of the canvas (so the right half is free for the detail panel). Each ring's label is placed at the TOP of its circle (above the arc), in spaced caps, in the ring's accent color. The innermost TENANT ring is the only one with a coloured fill (subtle green); the others are stroke-only.",
+    "detail_panel": {
+      "position": "right_half_of_canvas",
+      "background": "#161620",
+      "border_color": "rgba(255,255,255,0.10)",
+      "border_radius": 12,
+      "rows": [
+        {
+          "bullet_color": "#3b82f6",
+          "bold_label": "Transport",
+          "lines": ["TLS 1.2+ on every hop", "outbound-only CloudNode → cloud"]
+        },
+        {
+          "bullet_color": "#a855f7",
+          "bold_label": "Authentication",
+          "lines": ["Clerk JWT — dashboard users", "nak_*  — CloudNode keys", "osc_*  — MCP agent keys"]
+        },
+        {
+          "bullet_color": "#f59e0b",
+          "bold_label": "Data at rest",
+          "lines": ["SHA-256 hashed API keys (backend)", "AES-256-GCM creds (CloudNode DB)", "live video in RAM only"]
+        },
+        {
+          "bullet_color": "#22c55e",
+          "bold_label": "Tenant isolation",
+          "lines": ["every row scoped to org_id", "no cross-org reads, ever", "MCP scope filters per key"]
+        }
+      ],
+      "row_separator": "thin_horizontal_line_between_rows_in_rgba(255,255,255,0.10)"
+    },
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "TRANSPORT", "AUTH", "DATA", "TENANT", "isolation",
+        "Transport", "TLS 1.2+ on every hop", "outbound-only CloudNode → cloud",
+        "Authentication", "Clerk JWT — dashboard users", "nak_*  — CloudNode keys", "osc_*  — MCP agent keys",
+        "Data at rest", "SHA-256 hashed API keys (backend)", "AES-256-GCM creds (CloudNode DB)", "live video in RAM only",
+        "Tenant isolation", "every row scoped to org_id", "no cross-org reads, ever", "MCP scope filters per key"
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "do_not_render_metadata": "do NOT render any color hex codes, rgba() values, ring_radius_pct values, or any JSON metadata as visible text. Visible text must come ONLY from the exact_text array.",
+      "rendering_notes": "Premium technical-doc style. Rings are crisp circles, well-spaced, with the ring-name label sitting on top of each arc. Detail panel on the right is a tall card with 4 rows separated by thin lines. Typography: spaced caps for ring labels, regular weight for body text. NOT photographic. Aspect ratio 16:9."
+    }
+  }
+}

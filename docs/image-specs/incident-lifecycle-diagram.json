@@ -1,0 +1,70 @@
+{
+  "diagram_spec": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Incident Lifecycle",
+      "description": "Left-to-right pipeline: Create → Investigate → Finalize → Review → branch into Resolve or Dismiss. Investigate has parallel Evidence (snapshot, clip) and Notes & Revisions (observation, update_incident) branches above and below."
+    },
+    "canvas": {
+      "width": 1920,
+      "height": 840,
+      "unit": "px",
+      "background_color": "#0a0a0f",
+      "style_notes": "Flat dark UI. NOT photographic. NOT 3D. NOT illustrative. Subtle grid background."
+    },
+    "main_pipeline": [
+      {"label": "Create",      "subtitle": "title · severity · camera",    "accent": "amber",  "x_pct": 0.05},
+      {"label": "Investigate", "subtitle": "attach evidence + notes",      "accent": "amber",  "x_pct": 0.22, "wide": true},
+      {"label": "Finalize",    "subtitle": "markdown report body",         "accent": "blue",   "x_pct": 0.43},
+      {"label": "Review",      "subtitle": "human triage",                 "accent": "purple", "x_pct": 0.60},
+      {"label": "Resolve",     "subtitle": "",                             "accent": "green",  "x_pct": 0.80, "y_offset": -0.08, "small": true},
+      {"label": "Dismiss",     "subtitle": "",                             "accent": "default","x_pct": 0.80, "y_offset":  0.08, "small": true}
+    ],
+    "main_arrows": [
+      {"from": "Create",      "to": "Investigate", "label": "open"},
+      {"from": "Investigate", "to": "Finalize",    "label": "write report"},
+      {"from": "Finalize",    "to": "Review",      "label": "publish"},
+      {"from": "Review",      "to": "Resolve",     "color": "green"},
+      {"from": "Review",      "to": "Dismiss",     "color": "grey"}
+    ],
+    "evidence_branch": {
+      "lane_label": "EVIDENCE",
+      "lane_color": "#06b6d4",
+      "position": "above_investigate_node",
+      "nodes": [
+        {"label": "snapshot",  "x_offset_from_investigate": -0.025},
+        {"label": "clip",      "x_offset_from_investigate":  0.025}
+      ],
+      "connections_style": "dashed_cyan_curved_lines_from_investigate_node_up_to_each_evidence_node",
+      "node_styling": "small_pill_shaped_rounded_rectangle_with_cyan_border_and_label"
+    },
+    "notes_branch": {
+      "lane_label": "NOTES & REVISIONS",
+      "lane_color": "#06b6d4",
+      "position": "below_investigate_node",
+      "nodes": [
+        {"label": "observation",     "x_offset_from_investigate": -0.025},
+        {"label": "update_incident", "x_offset_from_investigate":  0.025}
+      ],
+      "connections_style": "dashed_cyan_curved_lines_from_investigate_node_down_to_each_notes_node",
+      "node_styling": "small_pill_shaped_rounded_rectangle_with_cyan_border_and_label"
+    },
+    "constraints": {
+      "layout_lock": true,
+      "exact_text": [
+        "Create", "title · severity · camera",
+        "Investigate", "attach evidence + notes",
+        "Finalize", "markdown report body",
+        "Review", "human triage",
+        "Resolve", "Dismiss",
+        "open", "write report", "publish",
+        "snapshot", "clip", "observation", "update_incident",
+        "EVIDENCE", "NOTES & REVISIONS"
+      ],
+      "do_not_change_text": true,
+      "do_not_misspell_anything": true,
+      "do_not_render_metadata": "do NOT render any color hex codes, rgba() values, x_pct/y_pct positioning values, or any other JSON metadata as visible text. Visible text must come ONLY from the exact_text array.",
+      "rendering_notes": "Premium technical-doc style. Crisp typography. Main pipeline nodes are rounded rectangles with title + subtitle and accent border per spec. Evidence and Notes nodes are smaller cyan pill-shapes. Dashed cyan curved lines connect Investigate up to Evidence and down to Notes. Resolve has a green accent (positive); Dismiss is neutral. NOT photographic. Aspect ratio 16:9."
+    }
+  }
+}
