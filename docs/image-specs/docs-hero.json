@@ -1,0 +1,98 @@
+{
+  "marketing_image": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Docs Page Hero Banner — Daytime Camera POV",
+      "campaign": "docs_hero_v1",
+      "brand_name": "SourceBox Sentry",
+      "usage_context": "wide cinematic banner at the top of the /docs page, sits above the 'Documentation' title; matches the visual language of the Sentinel banner but in daylight (different mood, same camera-POV idiom)"
+    },
+    "subject": {
+      "type": "scene_through_camera_pov",
+      "name": "Daytime camera POV looking at a residential front entryway / foyer with normal everyday activity captured by a security camera",
+      "physical_properties": {
+        "scene_type": "residential front entryway or open-plan living area, photographed through a security camera with slight wide-angle lens character. Bright but soft natural daylight. Unoccupied — it's the camera's quiet 'on, watching' state during the day."
+      }
+    },
+    "props": {
+      "foreground": [
+        {
+          "type": "live_indicator_badge",
+          "count": 1,
+          "position": "top_left_corner",
+          "notes": "Small minimal HUD-style badge in the top-left corner. Reads as a tiny rounded-rect with a green pulsing dot followed by the text 'LIVE' (small, all caps, monospace) and a faint timestamp like '14:32:08' in muted white below it. The badge is subtle, semi-transparent dark background, NOT a video-game HUD. Brand green dot (#22c55e). Roughly 2-3% of the frame's area."
+        },
+        {
+          "type": "camera_label",
+          "count": 1,
+          "position": "bottom_left_corner",
+          "notes": "Tiny text label 'CAM-01 · FRONT ENTRY' in monospace, semi-transparent dark background, in the bottom-left corner. Same minimal style as a real surveillance camera HUD overlay. About 1-2% of the frame. NO other text anywhere else."
+        }
+      ],
+      "midground": [
+        {
+          "type": "residential_front_entryway",
+          "count": 1,
+          "position": "full_frame",
+          "notes": "Front entry of a residential home: a wooden front door with a small console table beside it holding a key dish and a vase with flowers. A staircase visible on one side. Tile or hardwood floor. Possibly a doormat. Bright but soft daylight streaming through the door's glass / a side window. Empty of people and pets. A quiet midday moment."
+        }
+      ],
+      "background": [
+        {
+          "type": "ambient_daylight_room",
+          "count": 1,
+          "position": "deep_background",
+          "notes": "Soft warm daylight fills the room. Subtle bokeh in the deep background suggesting the rest of the home. Highlights blown to a clean soft white where light enters through the door."
+        }
+      ]
+    },
+    "environment": {
+      "surface": {
+        "material": "wood_or_tile",
+        "reflection_strength": 0.15
+      },
+      "background": {
+        "color": "warm whites and creams (daylight) with neutral wood tones",
+        "texture": "soft, slightly grainy (low-light sensor character even in daylight — surveillance camera look)",
+        "effect": "wide_angle_subtle_distortion"
+      },
+      "atmosphere": {
+        "mood": "calm, midday, watchful but unalarmed, professional, on-watch",
+        "keywords": ["camera_pov", "daylight", "watchful", "calm", "professional", "wide_angle", "residential", "everyday"]
+      }
+    },
+    "camera": {
+      "angle": "high_ceiling_corner_looking_down",
+      "framing": "wide",
+      "focal_length_mm": 16,
+      "depth_of_field": "deep",
+      "notes": "Camera POV — placed near the ceiling in a corner, looking diagonally across the entryway toward the front door. Subtle wide-angle lens distortion at the corners (the same security-camera character as the Sentinel banner). Slight grain from the camera sensor."
+    },
+    "lighting": {
+      "key_light_direction": "front_through_doorway",
+      "key_light_intensity": "high",
+      "fill_light_direction": "ambient",
+      "fill_light_intensity": "medium",
+      "rim_light": false,
+      "color_temperature": "warm_neutral",
+      "notes": "Bright soft daylight from outside the front door, fills the entryway. Some subtle warm bounce off wood and walls. Highlights in the doorway are clean and slightly blown — typical surveillance-camera dynamic range. No harsh shadows."
+    },
+    "brand": {
+      "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
+      "must_match_assets": [],
+      "forbidden_changes": [
+        "do_not_show_text_or_logos_in_image_other_than_the_minimal_LIVE_badge_and_camera_label_described_above",
+        "do_not_show_recognizable_human_faces_or_full_bodies",
+        "do_not_show_real_branded_products_or_furniture",
+        "do_not_show_visible_brand_names_anywhere",
+        "keep_HUD_overlay_minimal_and_realistic — not_video_game_styled"
+      ]
+    },
+    "controls": {
+      "lock_subject_geometry": false,
+      "allow_background_variation": true,
+      "leave_negative_space": "balanced — the title 'Documentation' will overlay or sit above this banner; keep the upper third visually quieter so text reads on or near it",
+      "notes": "Photorealistic camera-POV scene with minimal HUD overlay accents — distinct DAYTIME mood vs the Sentinel banner's NIGHT mood, but same camera-POV visual language. Aspect ratio 21:9 cinematic wide. Should read as 'this is what an everyday view looks like through your camera, calmly online'."
+    }
+  }
+}

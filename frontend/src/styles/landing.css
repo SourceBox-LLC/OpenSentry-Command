@@ -1014,6 +1014,28 @@
   width: 100%;
 }
 
+/* Docs hero banner — wide cinematic camera-POV view of a residential
+   front entryway in daylight, with subtle LIVE / camera-label HUD
+   overlays.  Same camera-POV visual language as the Sentinel banner
+   but in a daytime mood — visually anchors the docs page above the
+   "Documentation" headline.  Generated via Nano Banana Pro from
+   docs/image-specs/docs-hero.json. */
+.docs-hero-banner {
+  margin-bottom: 2.5rem;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 10px 30px rgba(34, 197, 94, 0.08),
+    0 0 0 1px var(--border-color);
+}
+
+.docs-hero-banner-image {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 .docs-section {
   margin-bottom: 4rem;
   padding-bottom: 3rem;

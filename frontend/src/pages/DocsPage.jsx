@@ -91,6 +91,20 @@ function DocsPage() {
         <DocsSidebar />
         <main className="docs-content">
           <div className="docs-content-inner">
+            <div className="docs-hero-banner" aria-hidden="true">
+              <picture>
+                <source srcSet="/images/docs-hero.webp" type="image/webp" />
+                <img
+                  src="/images/docs-hero.jpg"
+                  alt=""
+                  className="docs-hero-banner-image"
+                  width="2240"
+                  height="960"
+                  loading="eager"
+                />
+              </picture>
+            </div>
+
             <div className="docs-header">
               <h1>Documentation</h1>
               <p>How to use SourceBox Sentry — installing CloudNode on your camera machine, working with the cloud dashboard, and connecting AI tools over MCP.</p>
