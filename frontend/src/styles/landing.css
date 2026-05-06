@@ -1274,6 +1274,24 @@
   margin: 0.75rem 0;
 }
 
+/* Landing-page variant of the install-tabs container — overrides the
+   row-flex defined on plain .install-tabs in index.css.  In the docs
+   context the tabs container is a single row of OS chips with a code
+   block to the side; on the landing page Quick Start we want the OS
+   chips on top, the code block / MSI button below them, and the note
+   below that — a vertical stack.  Without this override all three
+   children share one horizontal row and the layout collapses (Linux /
+   macOS / Windows tabs + Download MSI button + note all jammed
+   side-by-side). */
+.install-tabs.install-tabs-landing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  border-bottom: none;
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+}
+
 .install-tab-buttons {
   display: flex;
   gap: 0;
