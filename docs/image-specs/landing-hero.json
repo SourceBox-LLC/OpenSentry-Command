@@ -1,11 +1,11 @@
 {
   "marketing_image": {
     "meta": {
-      "spec_version": "1.0.0",
+      "spec_version": "1.1.0",
       "title": "SourceBox Sentry Landing Hero",
-      "campaign": "landing_hero_v2",
+      "campaign": "landing_hero_v3",
       "brand_name": "SourceBox Sentry",
-      "usage_context": "website landing page hero — right-side visual, replacing CameraGridPreview mockup"
+      "usage_context": "website landing page hero — right-side visual. v3 changes vs v2: (1) the 2x2 dashboard tiles now show recognizable security-camera scenes instead of abstract camera icons, (2) added a low-profile wireless keyboard + mouse on the desk so the workstation reads as a real, lived-in setup."
     },
     "subject": {
       "type": "scene",
@@ -21,6 +21,18 @@
           "count": 1,
           "position": "clipped_to_top_of_monitor",
           "notes": "compact black USB webcam clipped onto the top edge of a desktop monitor with a tiny green LED indicator dot visible. NO logos, NO branding text on the camera. Slightly out of focus to emphasize depth."
+        },
+        {
+          "type": "wireless_keyboard",
+          "count": 1,
+          "position": "centered_in_front_of_monitor_on_desk",
+          "notes": "low-profile matte-black wireless keyboard sitting flat on the desk in front of the monitor. Compact tenkeyless or 75% layout — not a full-size board. Slim profile, dark keycaps with very subtle backlight bleed. NO visible logos, NO branded keycaps, NO readable text on any key. Slightly out of focus per the shallow depth of field — felt rather than studied."
+        },
+        {
+          "type": "wireless_mouse",
+          "count": 1,
+          "position": "right_of_keyboard_within_natural_reach_distance",
+          "notes": "small matte-black wireless mouse, modern ergonomic shape, sitting to the right of the keyboard at a natural angle as if recently used. NO logos, NO scroll-wheel branding. Slightly out of focus to match the keyboard."
         }
       ],
       "midground": [
@@ -28,18 +40,18 @@
           "type": "monitor_with_dashboard",
           "count": 1,
           "position": "center",
-          "notes": "modern computer monitor on a wooden desk. Screen shows a dark security dashboard with a 2x2 grid of small camera feed thumbnails. Dashboard uses green (#22c55e) and subtle purple (#a855f7) accent colors on a near-black background (#0a0a0f). The dashboard glow casts a soft green tint onto the desk surface. NO readable text on screen — just suggested dashboard shapes and colored accents."
+          "notes": "modern computer monitor on a wooden desk. Screen shows a dark security-camera dashboard — a 2x2 grid of FOUR LIVE CAMERA FEED TILES (see camera_feed_tiles below for the contents of each). Dashboard chrome around the tiles is minimal: a thin top header bar with subtle UI shapes suggesting menu / nav (no readable text), and small accent indicator dots in green (#22c55e) and subtle purple (#a855f7) along the edges of the tiles. Background of the dashboard is near-black (#0a0a0f). The dashboard glow casts a soft green tint onto the desk surface and onto the keyboard's keycaps. Each feed tile fills its quadrant — they are NOT abstract camera icons; they are actual security-camera POV scenes."
         },
         {
           "type": "small_potted_plant",
           "count": 1,
-          "position": "left_of_monitor",
+          "position": "left_of_monitor_pulled_slightly_back_to_make_room_for_keyboard",
           "notes": "small green leafy plant in a matte ceramic pot, soft organic shape, adds warmth"
         },
         {
           "type": "ceramic_coffee_mug",
           "count": 1,
-          "position": "right_of_monitor",
+          "position": "right_of_monitor_pulled_slightly_back_to_make_room_for_keyboard_and_mouse",
           "notes": "matte ceramic mug, warm earth color, with subtle steam — communicates end-of-day calm"
         }
       ],
@@ -58,6 +70,42 @@
         }
       ]
     },
+    "camera_feed_tiles": {
+      "intent": "Each of the four 2x2 dashboard tiles must depict a recognizable security-camera POV — a real-looking surveillance scene, not an abstract icon. The tiles together should read as 'this dashboard is monitoring my actual property.' All tiles render with a subtle slight wide-angle / fisheye distortion that's characteristic of real consumer security cameras. Each tile sits inside a thin rounded rectangle border with a small accent dot in the corner.",
+      "tiles": [
+        {
+          "position": "top_left",
+          "label_concept": "front porch",
+          "scene": "FRONT-PORCH evening view, looking down at a doormat / threshold area in front of a wooden front door. Soft warm porch light. Empty — no people, no pets. Slight downward camera angle as if the camera is mounted above the door.",
+          "accent_color": "#22c55e",
+          "border_state": "neutral_thin"
+        },
+        {
+          "position": "top_right",
+          "label_concept": "driveway",
+          "scene": "DRIVEWAY view at dusk, looking down a paved driveway from a wide-angle outdoor camera. A car parked at the far end of the driveway (NO readable license plate, NO recognizable car logo / make / model — generic dark sedan silhouette). Faint motion-blur artifact along one edge to suggest the feed just caught movement.",
+          "accent_color": "#a855f7",
+          "border_state": "active_brighter_glow",
+          "notes": "This is the tile that reads as ACTIVE / motion-flagged — its border glows slightly brighter purple than the other three, and a small filled dot in the corner is purple instead of the muted neutral colour."
+        },
+        {
+          "position": "bottom_left",
+          "label_concept": "backyard",
+          "scene": "BACKYARD / patio view at dusk, looking out over a small lawn with a wooden fence at the far end and some leafy greenery at the edges. Empty patio chairs visible. Calm, no activity.",
+          "accent_color": "#22c55e",
+          "border_state": "neutral_thin"
+        },
+        {
+          "position": "bottom_right",
+          "label_concept": "side gate",
+          "scene": "SIDE-GATE view, narrow path between two walls leading to a closed wooden gate. Soft outdoor evening lighting. Empty.",
+          "accent_color": "#22c55e",
+          "border_state": "neutral_thin"
+        }
+      ],
+      "ui_affordances_per_tile": "Each tile carries small visual UI hints that suggest a real surveillance dashboard — a small filled circle in one corner (recording dot), an unreadable timestamp-shape in another corner (rendered as small dimensional bars / glyph-like marks, NOT legible characters), and a thin label-bar shape across the top of the tile (also unreadable — pure geometry). NONE of these UI affordances should render legible text. The viewer's brain should fill in 'oh, that's a label' / 'that's a timestamp' / 'that's a recording indicator' from shape and position alone.",
+      "no_text_constraint": "ABSOLUTELY NO READABLE TEXT inside any tile or its UI chrome. No camera names, no timestamps as actual digits, no menu labels. The same constraint that produced the existing 8 docs diagrams cleanly."
+    },
     "environment": {
       "surface": {
         "material": "wood",
@@ -70,8 +118,8 @@
         "effect": "bokeh_soft"
       },
       "atmosphere": {
-        "mood": "private, calm, end-of-day, home, safe, premium, quietly technical",
-        "keywords": ["dusk", "private", "homey", "warm", "controlled", "tech-meets-home", "cinematic", "moody"]
+        "mood": "private, calm, end-of-day, home, safe, premium, quietly technical, lived-in",
+        "keywords": ["dusk", "private", "homey", "warm", "controlled", "tech-meets-home", "cinematic", "moody", "real-workstation"]
       }
     },
     "camera": {
@@ -79,7 +127,7 @@
       "framing": "medium_wide",
       "focal_length_mm": 35,
       "depth_of_field": "shallow",
-      "notes": "3/4 angle from slightly above and to the left of the desk, looking across the scene toward the window. Monitor + camera in sharpest focus; foreground and bookshelf fall off into bokeh."
+      "notes": "3/4 angle from slightly above and to the left of the desk, looking across the scene toward the window. Monitor screen + clipped webcam in sharpest focus; keyboard, mouse, mug, plant, and bookshelf fall off into bokeh. The four feed tiles on the screen should be sharp enough that a viewer can clearly identify each scene type (porch / driveway / backyard / side gate) without needing to peer."
     },
     "lighting": {
       "key_light_direction": "back_right",
@@ -88,7 +136,7 @@
       "fill_light_intensity": "low",
       "rim_light": true,
       "color_temperature": "warm",
-      "notes": "Primary: warm golden window light from back-right, creating a soft rim on the monitor edge and webcam. Secondary: subtle green tint from the dashboard screen casting onto the desk and nearby objects, creating a brand-aligned color spill. No harsh shadows. Overall exposure on the moody/dim side — like a high-end product photograph at dusk."
+      "notes": "Primary: warm golden window light from back-right, creating a soft rim on the monitor edge and webcam. Secondary: subtle green tint from the dashboard screen casting onto the desk, the keyboard, and nearby objects, creating a brand-aligned color spill. The active-tile (driveway) casts a slightly stronger purple highlight on its corresponding portion of the desk. No harsh shadows. Overall exposure on the moody/dim side — like a high-end product photograph at dusk."
     },
     "brand": {
       "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
@@ -97,7 +145,10 @@
         "do_not_show_text_or_logos_in_image",
         "do_not_show_recognizable_human_faces",
         "do_not_show_real_branded_camera_models_like_Ring_Nest_Wyze_Logitech",
-        "do_not_show_visible_brand_names_anywhere"
+        "do_not_show_visible_brand_names_anywhere",
+        "do_not_show_branded_keyboards_or_mice (no Apple/Logitech/Razer/Microsoft logos)",
+        "do_not_show_real_license_plates_or_recognizable_car_makes_in_the_driveway_tile",
+        "do_not_render_any_legible_text_on_the_dashboard_chrome_or_inside_the_feed_tiles"
       ]
     },
     "controls": {
@@ -105,7 +156,7 @@
       "allow_background_variation": false,
       "allow_prop_relayout": "small_only",
       "leave_negative_space": "none — full image is composed",
-      "notes": "Photorealistic, cinematic, premium product-photography aesthetic. Aspect ratio 4:3. Should evoke 'your space, your stack, your data' without being too on-the-nose."
+      "notes": "Photorealistic, cinematic, premium product-photography aesthetic. Aspect ratio 4:3. Should evoke 'your space, your stack, your data, your real cameras' without being too on-the-nose. The four feed tiles are the most important detail — they're what differentiates this hero from generic SaaS dashboard mockups."
     }
   }
 }
