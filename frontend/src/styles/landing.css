@@ -1453,6 +1453,14 @@
 .docs-endpoint-path {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   color: var(--text-primary);
+  /* Long URLs like /api/incidents/{incident_id}/evidence/{evidence_id}/playlist.m3u8
+     don't have natural break opportunities — slashes and underscores aren't
+     break points for `word-break: normal`, so the path renders on a single
+     line and overflows narrow viewports. anywhere lets the browser break
+     between any two characters when needed without sprinkling hyphens or
+     introducing wrap markers in the JSX. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .docs-flow-diagram {
@@ -1791,6 +1799,42 @@
     padding: 1rem;
   }
 
+  /* Hide the inline auth buttons at hamburger-breakpoint widths — at iPhone
+     widths they push the row past the viewport and clip the "Get Started"
+     CTA. The dropdown menu surfaces auth actions instead via the
+     .landing-nav-mobile-cta items appended to .landing-nav-links. */
+  .landing-nav-actions {
+    display: none;
+  }
+
+  /* Auth CTAs that live INSIDE the mobile dropdown. They are appended at
+     the bottom of .landing-nav-links and styled like proper buttons so the
+     dropdown is a complete navigation surface — marketing links + auth
+     CTAs, no separate visible row. */
+  .landing-nav-links li.landing-nav-mobile-cta {
+    padding: 0.5rem 1rem;
+  }
+  .landing-nav-links li.landing-nav-mobile-cta:first-of-type {
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1rem;
+  }
+  .landing-nav-links li.landing-nav-mobile-cta a {
+    display: block;
+    text-align: center;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+  }
+  .landing-nav-links li.landing-nav-mobile-cta a.landing-btn-ghost {
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+  }
+  .landing-nav-links li.landing-nav-mobile-cta a.landing-btn-primary {
+    background: var(--accent-green);
+    color: #0a0a0f;
+  }
+
   .landing-mobile-menu-btn {
     display: flex;
   }
@@ -1863,11 +1907,32 @@
   .docs-step {
     gap: 0.75rem;
   }
-  
+
   .docs-step-number {
     width: 1.75rem;
     height: 1.75rem;
     font-size: 0.8125rem;
+  }
+
+  /* Step content can be wider than the viewport on mobile because some
+     steps embed an OS-tabs picker followed by a code block. Without this
+     min-width: 0 the inner flex child (.docs-step-content) refuses to
+     shrink below its intrinsic content width, pushing the whole row out
+     past the viewport edge. */
+  .docs-step-content {
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* The docs Quick Setup wraps an <OsTabs> inside step 3. OsTabs renders
+     `.install-tabs` (display: flex, default row) with three OS chips and
+     a code block side-by-side — fits desktop, blows past mobile. Force
+     a vertical stack at narrow widths so the code block lands BELOW
+     the OS tab strip instead of overflowing to the right. Mirrors the
+     fix already in place for .install-tabs.install-tabs-landing on the
+     landing-page Quick Start. */
+  .install-tabs {
+    flex-direction: column;
   }
   
   .docs-flow-diagram {

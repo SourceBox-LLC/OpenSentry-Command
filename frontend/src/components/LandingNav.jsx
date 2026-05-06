@@ -81,6 +81,28 @@ function LandingNav() {
             <li>
               <Link to="/pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
             </li>
+            {/* Mobile-only auth CTAs. The desktop nav has these in
+                .landing-nav-actions (hidden via media query at ≤1024px); the
+                dropdown duplicates them so the hamburger menu is a complete
+                navigation surface on phones / narrow tablets. */}
+            <li className="landing-nav-mobile-cta">
+              <Link
+                to="/sign-in"
+                className="landing-btn-ghost"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Sign In
+              </Link>
+            </li>
+            <li className="landing-nav-mobile-cta">
+              <Link
+                to="/sign-up"
+                className="landing-btn-primary"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Get Started
+              </Link>
+            </li>
           </ul>
         </SignedOut>
 
