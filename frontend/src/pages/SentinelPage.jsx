@@ -1,4 +1,12 @@
 import { Link } from "react-router-dom"
+import {
+  EyeIcon,
+  BrainIcon,
+  FileTextIcon,
+  CrosshairIcon,
+  LinkIcon,
+  ShieldCheckIcon,
+} from "../components/FeatureIcons.jsx"
 
 function SentinelPage() {
   return (
@@ -59,7 +67,7 @@ function SentinelPage() {
         <h2 className="sentinel-features-title">What Sentinel will do</h2>
         <div className="sentinel-features-grid">
           <div className="sentinel-feature-item">
-            <div className="sentinel-feature-icon">👁️</div>
+            <div className="sentinel-feature-icon"><EyeIcon /></div>
             <h3>Motion-triggered response</h3>
             <p>
               Wakes up the instant a camera reports motion. No polling,
@@ -67,7 +75,7 @@ function SentinelPage() {
             </p>
           </div>
           <div className="sentinel-feature-item">
-            <div className="sentinel-feature-icon">🧠</div>
+            <div className="sentinel-feature-icon"><BrainIcon /></div>
             <h3>Visual reasoning</h3>
             <p>
               Pulls a live snapshot, analyzes the scene, and decides what it's
@@ -75,7 +83,7 @@ function SentinelPage() {
             </p>
           </div>
           <div className="sentinel-feature-item">
-            <div className="sentinel-feature-icon">📝</div>
+            <div className="sentinel-feature-icon"><FileTextIcon /></div>
             <h3>Automatic incident reports</h3>
             <p>
               Generates a structured report with evidence — snapshot, short
@@ -83,7 +91,7 @@ function SentinelPage() {
             </p>
           </div>
           <div className="sentinel-feature-item">
-            <div className="sentinel-feature-icon">🎯</div>
+            <div className="sentinel-feature-icon"><CrosshairIcon /></div>
             <h3>Trained for surveillance</h3>
             <p>
               Unlike a general-purpose LLM, Sentinel is tuned on security
@@ -91,7 +99,7 @@ function SentinelPage() {
             </p>
           </div>
           <div className="sentinel-feature-item">
-            <div className="sentinel-feature-icon">🔗</div>
+            <div className="sentinel-feature-icon"><LinkIcon /></div>
             <h3>Native MCP integration</h3>
             <p>
               Built on the same Model Context Protocol server your other
@@ -99,7 +107,7 @@ function SentinelPage() {
             </p>
           </div>
           <div className="sentinel-feature-item">
-            <div className="sentinel-feature-icon">🛡️</div>
+            <div className="sentinel-feature-icon"><ShieldCheckIcon /></div>
             <h3>Stays in your org</h3>
             <p>
               Scoped to your organization's cameras and data. Never sees

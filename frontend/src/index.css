@@ -8178,9 +8178,30 @@ body {
     transform: translateY(-2px);
 }
 
+/* Sentinel feature icon badge — same pattern as the landing page,
+   tinted purple to match the Sentinel page's accent palette. */
 .sentinel-feature-icon {
-    font-size: 1.5rem;
-    margin-bottom: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 0.85rem;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.14), rgba(168, 85, 247, 0.02));
+    border: 1px solid rgba(168, 85, 247, 0.30);
+    color: var(--accent-purple);
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.sentinel-feature-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.sentinel-feature-item:hover .sentinel-feature-icon {
+    transform: translateY(-2px);
+    border-color: rgba(168, 85, 247, 0.50);
 }
 
 .sentinel-feature-item h3 {

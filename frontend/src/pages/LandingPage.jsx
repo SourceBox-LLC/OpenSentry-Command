@@ -1,5 +1,14 @@
 import { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
+import {
+  CloudIcon,
+  ShieldLockIcon,
+  MemoryIcon,
+  UsersIcon,
+  VideoIcon,
+  KeyIcon,
+  CodeIcon,
+} from "../components/FeatureIcons.jsx"
 
 function LandingPage() {
   const [os, setOs] = useState('linux')
@@ -109,7 +118,7 @@ function LandingPage() {
           </div>
           <div className="landing-features-grid">
             <div className="landing-feature-card">
-              <div className="landing-feature-icon">☁️</div>
+              <div className="landing-feature-icon"><CloudIcon /></div>
               <h3>Hosted by Us</h3>
               <p>
                 Sign up and connect cameras — no servers to run on your end. No
@@ -117,7 +126,7 @@ function LandingPage() {
               </p>
             </div>
             <div className="landing-feature-card">
-              <div className="landing-feature-icon">🔒</div>
+              <div className="landing-feature-icon"><ShieldLockIcon /></div>
               <h3>Encrypted End to End to Disk</h3>
               <p>
                 HTTPS from camera to browser. Recordings on the CloudNode are sealed at
@@ -126,7 +135,7 @@ function LandingPage() {
               </p>
             </div>
             <div className="landing-feature-card">
-              <div className="landing-feature-icon">🌐</div>
+              <div className="landing-feature-icon"><MemoryIcon /></div>
               <h3>In-Memory Streaming</h3>
               <p>
                 Live HLS segments are cached in RAM by the Command Center and served directly
@@ -134,7 +143,7 @@ function LandingPage() {
               </p>
             </div>
             <div className="landing-feature-card">
-              <div className="landing-feature-icon">👥</div>
+              <div className="landing-feature-icon"><UsersIcon /></div>
               <h3>Multi-Tenant</h3>
               <p>
                 Organizations with role-based permissions. Admin and member roles.
@@ -142,15 +151,15 @@ function LandingPage() {
               </p>
             </div>
             <div className="landing-feature-card">
-              <div className="landing-feature-icon">🎥</div>
+              <div className="landing-feature-icon"><VideoIcon /></div>
               <h3>Real-Time Streaming</h3>
               <p>
-                HLS streaming with sub-10-second latency. CloudNode uploads segments 
+                HLS streaming with sub-10-second latency. CloudNode uploads segments
                 in real-time for near-live viewing experience.
               </p>
             </div>
             <div className="landing-feature-card">
-              <div className="landing-feature-icon">🔑</div>
+              <div className="landing-feature-icon"><KeyIcon /></div>
               <h3>Simple Setup</h3>
               <p>
                 Install CloudNode on any device with a USB camera. Enter API key.
@@ -158,7 +167,7 @@ function LandingPage() {
               </p>
             </div>
             <div className="landing-feature-card landing-feature-highlight">
-              <div className="landing-feature-icon">{"</>"}</div>
+              <div className="landing-feature-icon"><CodeIcon /></div>
               <h3>MCP Integration</h3>
               <p>
                 Give AI tools direct visual access to your cameras via the
