@@ -1,0 +1,111 @@
+{
+  "marketing_image": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "SourceBox Sentry Landing Hero",
+      "campaign": "landing_hero_v2",
+      "brand_name": "SourceBox Sentry",
+      "usage_context": "website landing page hero — right-side visual, replacing CameraGridPreview mockup"
+    },
+    "subject": {
+      "type": "scene",
+      "name": "Quiet home study at dusk — private security camera setup",
+      "physical_properties": {
+        "scene_type": "domestic study / home office, warm wood surfaces, golden-hour evening light"
+      }
+    },
+    "props": {
+      "foreground": [
+        {
+          "type": "small_usb_webcam",
+          "count": 1,
+          "position": "clipped_to_top_of_monitor",
+          "notes": "compact black USB webcam clipped onto the top edge of a desktop monitor with a tiny green LED indicator dot visible. NO logos, NO branding text on the camera. Slightly out of focus to emphasize depth."
+        }
+      ],
+      "midground": [
+        {
+          "type": "monitor_with_dashboard",
+          "count": 1,
+          "position": "center",
+          "notes": "modern computer monitor on a wooden desk. Screen shows a dark security dashboard with a 2x2 grid of small camera feed thumbnails. Dashboard uses green (#22c55e) and subtle purple (#a855f7) accent colors on a near-black background (#0a0a0f). The dashboard glow casts a soft green tint onto the desk surface. NO readable text on screen — just suggested dashboard shapes and colored accents."
+        },
+        {
+          "type": "small_potted_plant",
+          "count": 1,
+          "position": "left_of_monitor",
+          "notes": "small green leafy plant in a matte ceramic pot, soft organic shape, adds warmth"
+        },
+        {
+          "type": "ceramic_coffee_mug",
+          "count": 1,
+          "position": "right_of_monitor",
+          "notes": "matte ceramic mug, warm earth color, with subtle steam — communicates end-of-day calm"
+        }
+      ],
+      "background": [
+        {
+          "type": "large_window_with_dusk_light",
+          "count": 1,
+          "position": "back_right",
+          "notes": "large window with warm golden-hour light streaming through. Soft, diffused, acts as natural rim light on the monitor edge. Sky beyond shows a subtle dusk gradient (deep teal fading to warm orange)."
+        },
+        {
+          "type": "wooden_bookshelf",
+          "count": 1,
+          "position": "back_left",
+          "notes": "tall wooden bookshelf with books and decorative objects, blurred via shallow depth of field. NO readable text on book spines."
+        }
+      ]
+    },
+    "environment": {
+      "surface": {
+        "material": "wood",
+        "reflection_strength": 0.15,
+        "notes": "warm walnut/oak desk with visible grain texture"
+      },
+      "background": {
+        "color": "deep teal-blacks transitioning to warm amber from the window",
+        "texture": "soft, natural, lived-in",
+        "effect": "bokeh_soft"
+      },
+      "atmosphere": {
+        "mood": "private, calm, end-of-day, home, safe, premium, quietly technical",
+        "keywords": ["dusk", "private", "homey", "warm", "controlled", "tech-meets-home", "cinematic", "moody"]
+      }
+    },
+    "camera": {
+      "angle": "three_quarter_front",
+      "framing": "medium_wide",
+      "focal_length_mm": 35,
+      "depth_of_field": "shallow",
+      "notes": "3/4 angle from slightly above and to the left of the desk, looking across the scene toward the window. Monitor + camera in sharpest focus; foreground and bookshelf fall off into bokeh."
+    },
+    "lighting": {
+      "key_light_direction": "back_right",
+      "key_light_intensity": "medium",
+      "fill_light_direction": "front",
+      "fill_light_intensity": "low",
+      "rim_light": true,
+      "color_temperature": "warm",
+      "notes": "Primary: warm golden window light from back-right, creating a soft rim on the monitor edge and webcam. Secondary: subtle green tint from the dashboard screen casting onto the desk and nearby objects, creating a brand-aligned color spill. No harsh shadows. Overall exposure on the moody/dim side — like a high-end product photograph at dusk."
+    },
+    "brand": {
+      "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
+      "must_match_assets": [],
+      "forbidden_changes": [
+        "do_not_show_text_or_logos_in_image",
+        "do_not_show_recognizable_human_faces",
+        "do_not_show_real_branded_camera_models_like_Ring_Nest_Wyze_Logitech",
+        "do_not_show_visible_brand_names_anywhere"
+      ]
+    },
+    "controls": {
+      "lock_subject_geometry": false,
+      "allow_background_variation": false,
+      "allow_prop_relayout": "small_only",
+      "leave_negative_space": "none — full image is composed",
+      "notes": "Photorealistic, cinematic, premium product-photography aesthetic. Aspect ratio 4:3. Should evoke 'your space, your stack, your data' without being too on-the-nose."
+    }
+  }
+}

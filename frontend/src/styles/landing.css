@@ -196,6 +196,27 @@
   color: var(--text-muted);
 }
 
+/* Hero image — replaces the previous CameraGridPreview mockup with
+   a real cinematic photo of the product in context (USB cam on
+   monitor, dashboard glowing green/purple in a dusk-lit study).
+   Generated via Nano Banana Pro using a JSON prompting spec at
+   .claude/image-specs/landing-hero.json. */
+.landing-hero-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 16px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 10px 30px rgba(34, 197, 94, 0.10),
+    0 0 0 1px var(--border-color);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.landing-hero-image:hover {
+  transform: translateY(-4px);
+}
+
 /* Dashboard Preview */
 .dashboard-preview {
   background: var(--bg-secondary);

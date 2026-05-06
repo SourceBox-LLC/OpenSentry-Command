@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react"
 import { Link, useLocation } from "react-router-dom"
-import CameraGridPreview from "../components/CameraGridPreview.jsx"
 
 function LandingPage() {
   const [os, setOs] = useState('linux')
@@ -83,7 +82,18 @@ function LandingPage() {
             </div>
           </div>
           <div className="landing-hero-visual">
-            <CameraGridPreview />
+            <picture>
+              <source srcSet="/images/landing-hero.webp" type="image/webp" />
+              <img
+                src="/images/landing-hero.jpg"
+                alt="A private home study at dusk — USB webcam clipped to a monitor showing the SourceBox Sentry dashboard with green and purple camera tiles, on a warm wooden desk with a plant and steaming mug, soft golden window light"
+                className="landing-hero-image"
+                width="1600"
+                height="1200"
+                loading="eager"
+                fetchpriority="high"
+              />
+            </picture>
           </div>
         </div>
       </section>
