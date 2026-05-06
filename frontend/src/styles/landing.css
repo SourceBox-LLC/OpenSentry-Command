@@ -2186,6 +2186,18 @@
     grid-template-columns: 1fr;
     gap: 2rem;
   }
+
+  /* Grid items default to min-width: auto, which is the intrinsic size of
+     their content. The .landing-mcp-right column embeds a fake terminal
+     code block with `white-space: pre` lines longer than the viewport;
+     without min-width: 0 the grid item refuses to shrink below content
+     width and pushes 5–30 px past the container edge. min-width: 0 lets
+     the column shrink to fit; the inner pre still h-scrolls inside its
+     own box, which is the correct behavior for a code sample. */
+  .landing-mcp-left,
+  .landing-mcp-right {
+    min-width: 0;
+  }
 }
 
 /* ── Privacy section ──────────────────────────────────────────────
