@@ -1,0 +1,99 @@
+{
+  "marketing_image": {
+    "meta": {
+      "spec_version": "1.0.0",
+      "title": "Security Page Hero — your hardware, your data",
+      "campaign": "security_hero_v1",
+      "brand_name": "SourceBox Sentry",
+      "usage_context": "wide cinematic banner at the top of the /security page, between the page title/subtitle and the 'At a glance' bulleted TL;DR. Visual anchor that says 'your hardware, your loop, your data' before the page's text-heavy proof points."
+    },
+    "subject": {
+      "type": "product_still_life",
+      "name": "USB security camera connected via USB cable to a compact local CloudNode device, both on a wooden surface — a 'private security loop' captured in two physical objects",
+      "physical_properties": {
+        "scene_type": "macro / product still-life on a warm wooden desk surface, intimate scale, intentional composition like a quiet 'evidence shot' rather than a marketing render"
+      }
+    },
+    "props": {
+      "foreground": [
+        {
+          "type": "small_usb_webcam",
+          "count": 1,
+          "position": "left_third",
+          "notes": "Compact black USB webcam standing on its base, clipped lens facing slightly toward camera (3/4 view). Small green LED on the front face is illuminated. NO logos, NO branded camera models. About 30-40% of the frame's height."
+        },
+        {
+          "type": "usb_cable",
+          "count": 1,
+          "position": "spanning_middle",
+          "notes": "Black USB cable with a gentle curve connecting the webcam to the CloudNode device on the right. The cable is the visual 'tether' between the two hardware objects — emphasises 'local loop.'"
+        }
+      ],
+      "midground": [
+        {
+          "type": "compact_cloudnode_device",
+          "count": 1,
+          "position": "right_third",
+          "notes": "Small black single-board / mini-PC, generic shape, deck-of-cards size. Front face shows two small green LED indicators (one for power, one for 'armed'). Two USB ports visible on its side (one occupied by the cable from the camera). NO logos, NO branding text."
+        }
+      ],
+      "background": [
+        {
+          "type": "dim_room_with_subtle_bokeh",
+          "count": 1,
+          "position": "deep_background",
+          "notes": "Out-of-focus dim interior fading to deep teal-black. A few faint purple bokeh orbs in the far back hint at a distant computer monitor (the dashboard) without being a visible subject. Strong vignetting toward the corners."
+        }
+      ]
+    },
+    "environment": {
+      "surface": {
+        "material": "wood",
+        "reflection_strength": 0.15,
+        "notes": "warm walnut desk with subtle visible grain, slightly worn / lived-in — not a shiny showroom surface"
+      },
+      "background": {
+        "color": "deep teal-black with faint purple bokeh accents",
+        "texture": "atmospheric, vignetted",
+        "effect": "bokeh_strong"
+      },
+      "atmosphere": {
+        "mood": "quiet, serious, on-prem, locked-down, your-loop-your-data, evidence-shot",
+        "keywords": ["local", "private", "encrypted_feel", "tethered", "self-contained", "sober", "moody", "credible"]
+      }
+    },
+    "camera": {
+      "angle": "three_quarter_front_low_table_height",
+      "framing": "medium_close",
+      "focal_length_mm": 50,
+      "depth_of_field": "shallow",
+      "notes": "Camera roughly at table height, looking across the surface at a slight 3/4 angle so both hardware objects are in clear view and the USB cable creates a visual line between them. Subject (camera + cable + cloudnode) all in focus; background falls off into bokeh. A single spec highlight on each device's front edge gives them physical weight."
+    },
+    "lighting": {
+      "key_light_direction": "back_right",
+      "key_light_intensity": "low",
+      "fill_light_direction": "front",
+      "fill_light_intensity": "very_low",
+      "rim_light": true,
+      "color_temperature": "neutral",
+      "notes": "Single moody key light from back-right, just enough to define the silhouette of both objects and bring out the wood grain. The brightest visible elements in the frame are the small green LEDs on each device — the 'active' signal. Subtle purple cast from the background bokeh tints the right side. Overall low-key exposure — looks like a dim room at evening, not a brightly-lit studio."
+    },
+    "brand": {
+      "primary_colors": ["#22c55e", "#a855f7", "#0a0a0f"],
+      "must_match_assets": [],
+      "forbidden_changes": [
+        "do_not_show_text_or_logos_in_image",
+        "do_not_show_recognizable_human_faces_or_hands",
+        "do_not_show_real_branded_camera_models_or_branded_hardware (no Logitech, Ring, Raspberry Pi, Intel NUC, Apple, etc.)",
+        "do_not_show_visible_brand_names_anywhere",
+        "do_not_make_the_scene_look_like_a_'happy_marketing_shot' — it should read as a sober still-life, closer to documentary than advertising"
+      ]
+    },
+    "controls": {
+      "lock_subject_geometry": false,
+      "allow_background_variation": false,
+      "leave_negative_space": "balanced — wide cinematic banner; no overlay text required",
+      "notes": "Photorealistic, cinematic, premium product-photography aesthetic. Aspect ratio 21:9 wide cinematic banner. Should evoke 'your hardware, your data, your loop — locally tethered, no cloud in the middle' without any explanatory text."
+    }
+  }
+}

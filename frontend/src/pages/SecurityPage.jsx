@@ -25,6 +25,25 @@ function SecurityPage() {
         </div>
       </div>
 
+      <div className="landing-container">
+        <div className="security-banner" aria-hidden="true">
+          <picture>
+            <source srcSet="/images/security-hero.webp" type="image/webp" />
+            <img
+              src="/images/security-hero.jpg"
+              alt=""
+              className="security-banner-image"
+              width="2240"
+              height="960"
+              loading="lazy"
+            />
+          </picture>
+          <div className="security-banner-caption">
+            Your camera. Your CloudNode. Your loop. The cable is the longest journey your video takes.
+          </div>
+        </div>
+      </div>
+
       <div className="landing-container security-body">
 
         {/* ── TL;DR ──────────────────────────────────────────────── */}
