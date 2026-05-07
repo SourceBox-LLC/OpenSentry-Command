@@ -531,3 +531,47 @@ async function _downloadFile(
 async function _downloadCsv(endpoint, getToken, fallbackFilename) {
   return _downloadFile(endpoint, getToken, fallbackFilename, "text/csv")
 }
+
+// ── Sentinel ─────────────────────────────────────────────────────────
+// Slice 1 of the Sentinel rollout: config + run history persistence.
+// The agent itself isn't yet wired up, so getSentinelRuns() returns
+// an empty list for new orgs.  See plans/ for the 7-slice roadmap.
+
+// GET — always returns 200, even for non-Pro-Plus orgs.  Look at
+// `plan_gated` in the response to decide whether to render in
+// read-only mode with an upgrade banner.
+export async function getSentinelConfig(getToken) {
+  return fetchWithAuth("/api/sentinel/config", getToken)
+}
+
+// PATCH — partial update.  Only fields present in the patch are
+// touched.  Returns 402 for non-Pro-Plus orgs; the optimistic-update
+// caller is responsible for rolling back local state on failure.
+export async function updateSentinelConfig(getToken, patch) {
+  return fetchWithAuth("/api/sentinel/config", getToken, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  })
+}
+
+// Paginated run history with small inline stats.  Filters: trigger
+// (motion|incident_opened|manual|scheduled), since (ISO datetime).
+export async function getSentinelRuns(
+  getToken,
+  { limit = 50, offset = 0, trigger, since } = {},
+) {
+  const qs = new URLSearchParams()
+  qs.set("limit", String(limit))
+  qs.set("offset", String(offset))
+  if (trigger) qs.set("trigger", trigger)
+  if (since) qs.set("since", since)
+  return fetchWithAuth(`/api/sentinel/runs?${qs}`, getToken)
+}
+
+// Single run detail with full tool trace (for the run-detail drawer).
+export async function getSentinelRun(getToken, runId) {
+  return fetchWithAuth(
+    `/api/sentinel/runs/${encodeURIComponent(runId)}`,
+    getToken,
+  )
+}

@@ -1,45 +1,46 @@
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Link } from "react-router-dom"
+import { useAuth } from "@clerk/clerk-react"
+import {
+  getSentinelConfig,
+  updateSentinelConfig,
+  getSentinelRuns,
+  getSentinelRun,
+  getCameras,
+} from "../services/api"
+import { useToasts } from "../hooks/useToasts.jsx"
 
-// SentinelPage v3 — service control UI rebuilt as a tabbed dashboard.
-// Three tabs (Overview / Configure / History) with a compact persistent
-// header strip on top. Front-end only — every control is wired to React
-// local state and a "PREVIEW" banner at the top makes that explicit.
+// SentinelPage v3 (slice 1) — service control UI wired to the real
+// backend.  Three tabs (Overview / Configure / History), compact
+// persistent header on top.  Configuration persists per-org via
+// /api/sentinel/config.  Run history reads /api/sentinel/runs;
+// initially empty for every org because the agent itself isn't yet
+// wired up — slice 3 will start producing rows.
 //
-// v3 rationale: v2 was a single long scroll where 7 visually-identical
-// cards competed for attention and the live signal (recent runs, armed
-// status) sat below all the configuration. The tabbed layout puts each
-// concern in one focused screen and promotes the live activity feed
-// to the centerpiece on the default Overview tab.
+// State load order on mount: getSentinelConfig (always fires —
+// returns plan_gated flag for non-Pro-Plus orgs), getCameras (real
+// cameras for the scope panel), getSentinelRuns (small page).
+// All three settle independently so the UI streams in instead of
+// blocking on the slowest.
 
 // ── data ──────────────────────────────────────────────────────────────
 
 const NOTIFICATION_TRIGGERS = [
   {
-    key: "motion",
+    key: "motion_enabled",
+    configField: "motion_enabled",
     label: "Motion detected",
     description:
       "Wake Sentinel when a camera reports motion. Uses your existing per-camera motion threshold — there's no separate Sentinel threshold to keep in sync.",
-    defaultOn: true,
     extras: ["cooldown"],
   },
   {
-    key: "incident_opened",
+    key: "incident_opened_enabled",
+    configField: "incident_opened_enabled",
     label: "Incident opened by a human",
     description:
       "When someone files an incident manually, Sentinel auto-collects supporting evidence from the relevant cameras — like a guard helping document a report.",
-    defaultOn: true,
   },
-]
-
-const MOCK_CAMERAS = [
-  { id: "cam_porch", name: "Front Porch", location: "Outdoor", scopeDefault: true },
-  { id: "cam_drive", name: "Driveway", location: "Outdoor", scopeDefault: true },
-  { id: "cam_backyard", name: "Backyard", location: "Outdoor", scopeDefault: true },
-  { id: "cam_side", name: "Side Gate", location: "Outdoor", scopeDefault: true },
-  { id: "cam_garage", name: "Garage (interior)", location: "Indoor", scopeDefault: true },
-  { id: "cam_living", name: "Living Room", location: "Indoor", scopeDefault: false },
-  { id: "cam_kitchen", name: "Kitchen", location: "Indoor", scopeDefault: false },
 ]
 
 const DAY_CHIPS = [
@@ -50,31 +51,6 @@ const DAY_CHIPS = [
   { key: "fri", label: "Fri" },
   { key: "sat", label: "Sat" },
   { key: "sun", label: "Sun" },
-]
-
-const MOCK_RUNS = [
-  { id: "r12", at: "3 min ago", atFull: "2026-05-07 03:42", trigger: "motion", camera: "Front Porch", tools: 4, outcome: "incident", severity: "low", incidentId: 423, summary: "A delivery driver dropped a small package on the porch. The driver did not enter the property. No threat detected, but the package delivery is logged for owner reference." },
-  { id: "r11", at: "12 min ago", atFull: "2026-05-07 03:33", trigger: "motion", camera: "Driveway", tools: 6, outcome: "incident", severity: "medium", incidentId: 422, summary: "An unfamiliar dark-colored sedan pulled into the driveway and remained stationary for ~3 minutes. The driver did not exit the vehicle. The vehicle then reversed and left. License plate not legible from camera angle. Recommend owner review the attached snapshot." },
-  { id: "r10", at: "47 min ago", atFull: "2026-05-07 02:58", trigger: "scheduled", camera: "All cameras", tools: 9, outcome: "no_action", summary: "Hourly sweep — captured snapshots from all 5 cameras in scope. Nothing of concern. All cameras reporting nominally." },
-  { id: "r09", at: "2 hr ago", atFull: "2026-05-07 01:45", trigger: "manual", camera: "Backyard", tools: 3, outcome: "no_action", summary: "Operator-initiated check of Backyard camera. Scene clear; deck chairs and patio table in expected positions. No movement detected in the snapshot." },
-  { id: "r08", at: "4 hr ago", atFull: "2026-05-06 23:45", trigger: "motion", camera: "Side Gate", tools: 5, outcome: "incident", severity: "low", incidentId: 421, summary: "A neighborhood cat passed through the side gate area. Confirmed via watch_camera burst (4 frames over 2 seconds). No threat." },
-  { id: "r07", at: "6 hr ago", atFull: "2026-05-06 21:45", trigger: "motion", camera: "Driveway", tools: 5, outcome: "no_action", summary: "Brief motion event triggered by car headlights from the street reflecting off the driveway. No vehicles or people on property. False positive — recommend tightening the per-camera motion threshold for Driveway." },
-  { id: "r06", at: "Yesterday", atFull: "2026-05-06 14:22", trigger: "motion", camera: "Driveway", tools: 8, outcome: "incident", severity: "high", incidentId: 418, summary: "Two unfamiliar individuals approached the front door from the driveway. They lingered near the porch for ~90 seconds, examining the property. One individual photographed the front door area. They left in an unmarked white van. License partially captured. Owner should review attached evidence and consider notifying local authorities if needed." },
-  { id: "r05", at: "Yesterday", atFull: "2026-05-06 09:15", trigger: "motion", camera: "Front Porch", tools: 4, outcome: "incident", severity: "low", incidentId: 417, summary: "Mail carrier delivered mail to the porch mailbox. Routine delivery — recognized uniform and timing matches typical mail schedule." },
-  { id: "r04", at: "2 days ago", atFull: "2026-05-05 02:00", trigger: "scheduled", camera: "All cameras", tools: 7, outcome: "no_action", summary: "Scheduled overnight sweep. All cameras reporting nominally. No motion events detected during the sweep window." },
-  { id: "r03", at: "3 days ago", atFull: "2026-05-04 16:30", trigger: "incident_opened", camera: "operator filing", tools: 2, outcome: "no_action", summary: "Operator manually filed an incident regarding suspicious activity reported by a neighbor. Sentinel reviewed footage from the relevant time window across Front Porch and Driveway cameras. No supporting visual evidence found." },
-  { id: "r02", at: "4 days ago", atFull: "2026-05-03 11:45", trigger: "motion", camera: "Driveway", tools: 6, outcome: "incident", severity: "low", incidentId: 410, summary: "Lawn care service arrived. Routine landscaping — recognized vehicle and worker patterns from prior visits." },
-  { id: "r01", at: "5 days ago", atFull: "2026-05-02 22:10", trigger: "motion", camera: "Backyard", tools: 4, outcome: "error", summary: "Run errored — view_camera tool returned a 504 timeout from the Backyard CloudNode. The node had recovered by the time of the next motion event. No action required; incident not filed." },
-]
-
-// Mocked tool-call traces for the run-detail drawer. Keeping these
-// inline rather than synthesised on demand so the demo content reads
-// like a real agent reasoning trace, not a placeholder.
-const MOCK_TOOL_TRACE = [
-  { tool: "list_cameras", args: {}, result: "5 cameras in scope · all reporting nominally" },
-  { tool: "view_camera", args: { camera_id: "cam_porch" }, result: "JPEG snapshot retrieved · 1280×720" },
-  { tool: "create_incident", args: { camera_id: "cam_porch", severity: "low", title: "Package delivery on Front Porch" }, result: "Incident #423 created" },
-  { tool: "attach_snapshot", args: { incident_id: 423, camera_id: "cam_porch" }, result: "Snapshot attached · 4.2 KB JPEG" },
 ]
 
 // ── helpers ───────────────────────────────────────────────────────────
@@ -103,15 +79,6 @@ function ToggleSwitch({ active, onClick, disabled, ariaLabel }) {
   )
 }
 
-function formatLastCheck(seconds) {
-  if (seconds < 60) return `${seconds}s ago`
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  if (m < 60) return s ? `${m}m ${s}s ago` : `${m}m ago`
-  const h = Math.floor(m / 60)
-  return `${h}h ${m % 60}m ago`
-}
-
 function isHourActive(hour, startStr, endStr) {
   const startH = parseInt(startStr.split(":")[0])
   const endH = parseInt(endStr.split(":")[0])
@@ -119,114 +86,232 @@ function isHourActive(hour, startStr, endStr) {
   return hour >= startH || hour < endH
 }
 
+// Cameras absent from camera_scope default to true (in scope) — see
+// SentinelConfig docstring on the backend for the rationale.
+function isCameraInScope(scope, cameraId) {
+  if (!scope || typeof scope !== "object") return true
+  return scope[cameraId] !== false
+}
+
+function formatRunTimestamp(iso) {
+  if (!iso) return ""
+  try {
+    const d = new Date(iso)
+    const now = new Date()
+    const diffMs = now - d
+    const diffMin = Math.floor(diffMs / 60000)
+    const diffHr = Math.floor(diffMs / 3600000)
+    const diffDay = Math.floor(diffMs / 86400000)
+    if (diffMin < 1) return "just now"
+    if (diffMin < 60) return `${diffMin} min ago`
+    if (diffHr < 24) return `${diffHr} hr ago`
+    if (diffDay === 1) return "Yesterday"
+    if (diffDay < 7) return `${diffDay} days ago`
+    return d.toLocaleDateString()
+  } catch {
+    return iso
+  }
+}
+
+function outcomeDotClass(run) {
+  if (run.outcome === "incident") return `sentinel-timeline-dot-incident sentinel-severity-${run.severity || "low"}`
+  if (run.outcome === "error") return "sentinel-timeline-dot-error"
+  return "sentinel-timeline-dot-noop"
+}
+
 // ── main ──────────────────────────────────────────────────────────────
 
 function SentinelPage() {
+  const { getToken } = useAuth()
+  const { showToast } = useToasts()
+
   // ── tab nav ─────────────────────────────────────────────
   const [tab, setTab] = useState("overview")
 
-  // ── master state ────────────────────────────────────────
-  const [enabled, setEnabled] = useState(true)
-
-  // ── triggers ────────────────────────────────────────────
-  const [triggers, setTriggers] = useState(() =>
-    Object.fromEntries(NOTIFICATION_TRIGGERS.map(t => [t.key, t.defaultOn])),
-  )
-  const [motionCooldownMin, setMotionCooldownMin] = useState(5)
-
-  // ── schedule ────────────────────────────────────────────
-  const [scheduleMode, setScheduleMode] = useState("always")
-  const [scheduleStart, setScheduleStart] = useState("22:00")
-  const [scheduleEnd, setScheduleEnd] = useState("06:00")
-  const [activeDays, setActiveDays] = useState(() =>
-    Object.fromEntries(DAY_CHIPS.map(d => [d.key, true])),
-  )
-  const [showCron, setShowCron] = useState(false)
-  const [cron, setCron] = useState("0 */1 * * *")
-
-  // ── camera scope ────────────────────────────────────────
-  const [scope, setScope] = useState(() =>
-    Object.fromEntries(MOCK_CAMERAS.map(c => [c.id, c.scopeDefault])),
-  )
+  // ── server-loaded state ─────────────────────────────────
+  const [config, setConfig] = useState(null)
+  const [planGated, setPlanGated] = useState(false)
+  const [planCurrent, setPlanCurrent] = useState("")
+  const [cameras, setCameras] = useState([])
+  const [runs, setRuns] = useState([])
+  const [runStats, setRunStats] = useState({ runs_today: 0, runs_total: 0, incidents_filed: 0 })
+  const [loadingConfig, setLoadingConfig] = useState(true)
+  const [loadingRuns, setLoadingRuns] = useState(true)
 
   // ── history filters ─────────────────────────────────────
   const [historyFilter, setHistoryFilter] = useState("all")
   const [historySearch, setHistorySearch] = useState("")
 
+  // ── advanced cron toggle ────────────────────────────────
+  const [showCron, setShowCron] = useState(false)
+
   // ── run detail drawer ───────────────────────────────────
   const [selectedRunId, setSelectedRunId] = useState(null)
+  const [selectedRun, setSelectedRun] = useState(null)
+  const [loadingRun, setLoadingRun] = useState(false)
 
-  // ── manual run modal ────────────────────────────────────
-  const [showRunModal, setShowRunModal] = useState(false)
-  const [manualPrompt, setManualPrompt] = useState("")
-  const [running, setRunning] = useState(false)
-
-  // ── live last-check tick (mocked, gives the page a pulse) ─
-  const [lastCheckSec, setLastCheckSec] = useState(12)
+  // ── load config + cameras + runs on mount ───────────────
   useEffect(() => {
-    const tickId = setInterval(() => setLastCheckSec(s => s + 1), 1000)
-    // every ~45s the agent does a heartbeat check; reset
-    const heartbeatId = setInterval(() => setLastCheckSec(0), 45000)
+    let cancelled = false
+
+    getSentinelConfig(getToken)
+      .then(res => {
+        if (cancelled) return
+        setConfig(res.config)
+        setPlanGated(!!res.plan_gated)
+        setPlanCurrent(res.plan_current || "")
+      })
+      .catch(err => {
+        if (cancelled) return
+        showToast(err.message || "Couldn't load Sentinel config", "error")
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingConfig(false)
+      })
+
+    getCameras(getToken)
+      .then(res => {
+        if (cancelled) return
+        // /api/cameras returns { cameras: [...] }
+        setCameras(Array.isArray(res?.cameras) ? res.cameras : [])
+      })
+      .catch(() => {
+        // Non-fatal — scope panel renders an empty state
+      })
+
+    getSentinelRuns(getToken, { limit: 50 })
+      .then(res => {
+        if (cancelled) return
+        setRuns(Array.isArray(res?.runs) ? res.runs : [])
+        setRunStats(res?.stats || { runs_today: 0, runs_total: 0, incidents_filed: 0 })
+      })
+      .catch(err => {
+        if (cancelled) return
+        showToast(err.message || "Couldn't load run history", "error")
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRuns(false)
+      })
+
     return () => {
-      clearInterval(tickId)
-      clearInterval(heartbeatId)
+      cancelled = true
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── load run detail when a row is clicked ───────────────
+  useEffect(() => {
+    if (!selectedRunId) {
+      setSelectedRun(null)
+      return
+    }
+    let cancelled = false
+    setLoadingRun(true)
+    getSentinelRun(getToken, selectedRunId)
+      .then(res => { if (!cancelled) setSelectedRun(res) })
+      .catch(err => {
+        if (cancelled) return
+        showToast(err.message || "Couldn't load run detail", "error")
+        setSelectedRunId(null)
+      })
+      .finally(() => { if (!cancelled) setLoadingRun(false) })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRunId])
+
+  // ── optimistic update + rollback ────────────────────────
+  const patchConfig = useCallback((patch) => {
+    if (planGated) return  // toggles disabled in this state anyway
+    const previous = config
+    setConfig(prev => ({ ...prev, ...patch }))
+    updateSentinelConfig(getToken, patch)
+      .then(res => {
+        // Server may have normalised values (e.g. active_days filtering)
+        // — accept its version of truth as the new state.
+        if (res?.config) setConfig(res.config)
+      })
+      .catch(err => {
+        setConfig(previous)
+        showToast(err.message || "Couldn't save", "error")
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, planGated])
+
   // ── derived ─────────────────────────────────────────────
-  const enabledScopeCount = useMemo(
-    () => Object.values(scope).filter(Boolean).length,
-    [scope],
-  )
-  const enabledTriggerCount = useMemo(
-    () => Object.values(triggers).filter(Boolean).length,
-    [triggers],
-  )
-  const selectedRun = useMemo(
-    () => MOCK_RUNS.find(r => r.id === selectedRunId) || null,
-    [selectedRunId],
-  )
+  const enabledTriggerCount = useMemo(() => {
+    if (!config) return 0
+    let n = 0
+    for (const t of NOTIFICATION_TRIGGERS) {
+      if (config[t.configField]) n++
+    }
+    return n
+  }, [config])
+
+  const enabledScopeCount = useMemo(() => {
+    if (!config || !cameras.length) return 0
+    return cameras.filter(c => isCameraInScope(config.camera_scope, c.camera_id)).length
+  }, [config, cameras])
+
+  const lastRun = runs[0] || null
+  const masterEnabled = config?.enabled ?? false
+  const interactive = !planGated && !loadingConfig
 
   // ── handlers ────────────────────────────────────────────
-  function toggleTrigger(key) {
-    setTriggers(prev => ({ ...prev, [key]: !prev[key] }))
+  function toggleTrigger(field) {
+    if (!config) return
+    patchConfig({ [field]: !config[field] })
   }
-  function toggleScope(id) {
-    setScope(prev => ({ ...prev, [id]: !prev[id] }))
+
+  function toggleScope(cameraId) {
+    if (!config) return
+    const next = { ...(config.camera_scope || {}) }
+    next[cameraId] = !isCameraInScope(config.camera_scope, cameraId)
+    patchConfig({ camera_scope: next })
   }
-  function toggleDay(key) {
-    setActiveDays(prev => ({ ...prev, [key]: !prev[key] }))
+
+  function toggleDay(dayKey) {
+    if (!config) return
+    const current = Array.isArray(config.active_days) ? config.active_days : []
+    const next = current.includes(dayKey)
+      ? current.filter(d => d !== dayKey)
+      : [...current, dayKey]
+    patchConfig({ active_days: next })
   }
-  function runNow() {
-    setRunning(true)
-    setTimeout(() => {
-      setRunning(false)
-      setShowRunModal(false)
-      setManualPrompt("")
-    }, 1800)
+
+  // ── render ──────────────────────────────────────────────
+  if (loadingConfig) {
+    return (
+      <div className="sentinel-page-v3">
+        <div className="sentinel-loading-state">Loading Sentinel…</div>
+      </div>
+    )
   }
 
   return (
     <div className="sentinel-page-v3">
-      {/* ── preview banner ─────────────────────────────── */}
-      <div className="sentinel-preview-banner">
-        <span className="sentinel-preview-pill">PREVIEW</span>
-        <span className="sentinel-preview-text">
-          The Sentinel control UI ships before the agent itself. Controls are
-          wired to local state only — your changes won't persist until the
-          backend lands. <Link to="/docs#sentinel" className="sentinel-preview-link">What's coming →</Link>
-        </span>
-      </div>
+      {/* ── plan-gate banner (non-Pro-Plus only) ────────── */}
+      {planGated && (
+        <div className="sentinel-plan-banner">
+          <span className="sentinel-plan-banner-pill">PRO PLUS</span>
+          <span className="sentinel-plan-banner-text">
+            Sentinel is a Pro Plus feature. Your current plan: <strong>{planCurrent}</strong>.
+            You can preview the configuration UI; changes won't save until you upgrade.
+          </span>
+          <Link to="/pricing" className="sentinel-plan-banner-cta">
+            Upgrade to Pro Plus →
+          </Link>
+        </div>
+      )}
 
       {/* ── compact persistent header ──────────────────── */}
       <CompactHeader
-        enabled={enabled}
-        onToggle={() => setEnabled(v => !v)}
+        enabled={masterEnabled}
+        onToggle={() => patchConfig({ enabled: !masterEnabled })}
         triggerCount={enabledTriggerCount}
         scopeCount={enabledScopeCount}
-        totalCameras={MOCK_CAMERAS.length}
-        lastRun={MOCK_RUNS[0]}
-        onRunNow={() => setShowRunModal(true)}
+        totalCameras={cameras.length}
+        lastRun={lastRun}
+        interactive={interactive}
       />
 
       {/* ── tabs ───────────────────────────────────────── */}
@@ -253,37 +338,31 @@ function SentinelPage() {
       <div className="sentinel-tab-panel">
         {tab === "overview" && (
           <OverviewTab
-            enabled={enabled}
+            enabled={masterEnabled}
             scopeCount={enabledScopeCount}
-            lastCheckSec={lastCheckSec}
+            runs={runs}
+            runStats={runStats}
+            loadingRuns={loadingRuns}
             onSelectRun={setSelectedRunId}
           />
         )}
         {tab === "configure" && (
           <ConfigureTab
-            enabled={enabled}
-            triggers={triggers}
+            config={config}
+            interactive={interactive}
+            cameras={cameras}
+            patchConfig={patchConfig}
             toggleTrigger={toggleTrigger}
-            motionCooldownMin={motionCooldownMin}
-            setMotionCooldownMin={setMotionCooldownMin}
-            scheduleMode={scheduleMode}
-            setScheduleMode={setScheduleMode}
-            scheduleStart={scheduleStart}
-            setScheduleStart={setScheduleStart}
-            scheduleEnd={scheduleEnd}
-            setScheduleEnd={setScheduleEnd}
-            activeDays={activeDays}
+            toggleScope={toggleScope}
             toggleDay={toggleDay}
             showCron={showCron}
             setShowCron={setShowCron}
-            cron={cron}
-            setCron={setCron}
-            scope={scope}
-            toggleScope={toggleScope}
           />
         )}
         {tab === "history" && (
           <HistoryTab
+            runs={runs}
+            loadingRuns={loadingRuns}
             filter={historyFilter}
             setFilter={setHistoryFilter}
             search={historySearch}
@@ -294,18 +373,11 @@ function SentinelPage() {
       </div>
 
       {/* ── run detail drawer ──────────────────────────── */}
-      {selectedRun && (
-        <RunDetailDrawer run={selectedRun} onClose={() => setSelectedRunId(null)} />
-      )}
-
-      {/* ── manual run modal ───────────────────────────── */}
-      {showRunModal && (
-        <ManualRunModal
-          prompt={manualPrompt}
-          setPrompt={setManualPrompt}
-          running={running}
-          onRun={runNow}
-          onClose={() => !running && setShowRunModal(false)}
+      {selectedRunId && (
+        <RunDetailDrawer
+          run={selectedRun}
+          loading={loadingRun}
+          onClose={() => setSelectedRunId(null)}
         />
       )}
     </div>
@@ -314,12 +386,17 @@ function SentinelPage() {
 
 // ── components ────────────────────────────────────────────────────────
 
-function CompactHeader({ enabled, onToggle, triggerCount, scopeCount, totalCameras, lastRun, onRunNow }) {
-  const lastRunLine = lastRun.outcome === "incident"
-    ? `${lastRun.at} — motion on ${lastRun.camera} → opened incident #${lastRun.incidentId} (${lastRun.severity})`
-    : lastRun.outcome === "error"
-      ? `${lastRun.at} — ${lastRun.trigger} on ${lastRun.camera} → run errored`
-      : `${lastRun.at} — ${lastRun.trigger} on ${lastRun.camera} → no action`
+function CompactHeader({ enabled, onToggle, triggerCount, scopeCount, totalCameras, lastRun, interactive }) {
+  let lastRunLine
+  if (!lastRun) {
+    lastRunLine = "No runs yet — Sentinel hasn't responded to any triggers."
+  } else if (lastRun.outcome === "incident") {
+    lastRunLine = `${formatRunTimestamp(lastRun.triggered_at)} — ${lastRun.trigger_type.replace(/_/g, " ")} on ${lastRun.camera_id || "all cameras"} → opened incident #${lastRun.incident_id} (${lastRun.severity})`
+  } else if (lastRun.outcome === "error") {
+    lastRunLine = `${formatRunTimestamp(lastRun.triggered_at)} — ${lastRun.trigger_type.replace(/_/g, " ")} on ${lastRun.camera_id || "all cameras"} → run errored`
+  } else {
+    lastRunLine = `${formatRunTimestamp(lastRun.triggered_at)} — ${lastRun.trigger_type.replace(/_/g, " ")} on ${lastRun.camera_id || "all cameras"} → no action`
+  }
 
   return (
     <header className="sentinel-compact-header">
@@ -344,12 +421,18 @@ function CompactHeader({ enabled, onToggle, triggerCount, scopeCount, totalCamer
         </div>
       </div>
       <div className="sentinel-compact-right">
-        <button type="button" className="sentinel-run-now-btn" onClick={onRunNow}>
+        <button
+          type="button"
+          className="sentinel-run-now-btn"
+          disabled
+          title="Manual run lands with the Sentinel agent (coming soon)"
+        >
           <span aria-hidden="true">▶</span> Run now
         </button>
         <ToggleSwitch
           active={enabled}
           onClick={onToggle}
+          disabled={!interactive}
           ariaLabel={enabled ? "Pause Sentinel" : "Resume Sentinel"}
         />
       </div>
@@ -359,13 +442,11 @@ function CompactHeader({ enabled, onToggle, triggerCount, scopeCount, totalCamer
 
 // ── overview tab ─────────────────────────────────────────────────────
 
-function OverviewTab({ enabled, scopeCount, lastCheckSec, onSelectRun }) {
-  const recentRuns = MOCK_RUNS.slice(0, 8)
-  const todayRuns = MOCK_RUNS.filter(r => r.at.includes("min") || r.at.includes("hr")).length
-  const monthRuns = 142
+function OverviewTab({ enabled, scopeCount, runs, runStats, loadingRuns, onSelectRun }) {
+  const recentRuns = runs.slice(0, 8)
   const monthCap = 300
-  const monthIncidents = 38
-  const usagePct = (monthRuns / monthCap) * 100
+  const monthRuns = runStats.runs_total || 0
+  const usagePct = monthCap > 0 ? Math.min(100, (monthRuns / monthCap) * 100) : 0
 
   return (
     <div className="sentinel-overview">
@@ -389,7 +470,7 @@ function OverviewTab({ enabled, scopeCount, lastCheckSec, onSelectRun }) {
               </h2>
               <p className="sentinel-armed-sub">
                 {enabled
-                  ? <>Listening for triggers. Last health-check <strong>{formatLastCheck(lastCheckSec)}</strong>.</>
+                  ? "Listening for triggers. The agent itself ships in a follow-up — runs will appear here once it's wired up."
                   : "No triggers will fire until you re-enable Sentinel from the header."}
               </p>
             </div>
@@ -399,70 +480,87 @@ function OverviewTab({ enabled, scopeCount, lastCheckSec, onSelectRun }) {
           <div className="sentinel-panel">
             <div className="sentinel-panel-header">
               <h3>Recent activity</h3>
-              <span className="sentinel-panel-meta">{recentRuns.length} most recent runs</span>
+              {recentRuns.length > 0 && (
+                <span className="sentinel-panel-meta">{recentRuns.length} most recent runs</span>
+              )}
             </div>
-            <ol className="sentinel-timeline">
-              {recentRuns.map((r, i) => (
-                <li
-                  key={r.id}
-                  className="sentinel-timeline-row"
-                  onClick={() => onSelectRun(r.id)}
-                >
-                  <div className="sentinel-timeline-when">{r.at}</div>
-                  <div className="sentinel-timeline-line">
-                    <span
-                      className={`sentinel-timeline-dot ${outcomeDotClass(r)}`}
-                      aria-hidden="true"
-                    />
-                    {i < recentRuns.length - 1 && (
-                      <span className="sentinel-timeline-connector" aria-hidden="true" />
-                    )}
-                  </div>
-                  <div className="sentinel-timeline-content">
-                    <div className="sentinel-timeline-row1">
-                      <span className={`sentinel-trigger-pill sentinel-trigger-pill-${r.trigger}`}>
-                        {r.trigger.replace(/_/g, " ")}
-                      </span>
-                      <span className="sentinel-timeline-camera">{r.camera}</span>
-                      <span className="sentinel-timeline-tools">{r.tools} tool{r.tools === 1 ? "" : "s"}</span>
+            {loadingRuns ? (
+              <div className="sentinel-empty-state">Loading…</div>
+            ) : recentRuns.length === 0 ? (
+              <div className="sentinel-empty-state">
+                <p className="sentinel-empty-state-strong">Sentinel hasn't run yet.</p>
+                <p className="sentinel-empty-state-sub">
+                  Once a configured trigger fires, runs will appear here in chronological order.
+                </p>
+              </div>
+            ) : (
+              <ol className="sentinel-timeline">
+                {recentRuns.map((r, i) => (
+                  <li
+                    key={r.id}
+                    className="sentinel-timeline-row"
+                    onClick={() => onSelectRun(r.id)}
+                  >
+                    <div className="sentinel-timeline-when">{formatRunTimestamp(r.triggered_at)}</div>
+                    <div className="sentinel-timeline-line">
+                      <span
+                        className={`sentinel-timeline-dot ${outcomeDotClass(r)}`}
+                        aria-hidden="true"
+                      />
+                      {i < recentRuns.length - 1 && (
+                        <span className="sentinel-timeline-connector" aria-hidden="true" />
+                      )}
                     </div>
-                    <div className="sentinel-timeline-row2">
-                      {r.outcome === "incident" && (
-                        <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${r.severity}`}>
-                          incident · {r.severity}
+                    <div className="sentinel-timeline-content">
+                      <div className="sentinel-timeline-row1">
+                        <span className={`sentinel-trigger-pill sentinel-trigger-pill-${r.trigger_type}`}>
+                          {r.trigger_type.replace(/_/g, " ")}
                         </span>
-                      )}
-                      {r.outcome === "no_action" && (
-                        <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">
-                          no action
-                        </span>
-                      )}
-                      {r.outcome === "error" && (
-                        <span className="sentinel-outcome-chip sentinel-outcome-chip-error">
-                          errored
-                        </span>
-                      )}
-                      <span className="sentinel-timeline-summary">{r.summary.slice(0, 90)}{r.summary.length > 90 ? "…" : ""}</span>
+                        <span className="sentinel-timeline-camera">{r.camera_id || "all cameras"}</span>
+                        <span className="sentinel-timeline-tools">{r.tool_call_count} tool{r.tool_call_count === 1 ? "" : "s"}</span>
+                      </div>
+                      <div className="sentinel-timeline-row2">
+                        {r.outcome === "incident" && (
+                          <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${r.severity || "low"}`}>
+                            incident · {r.severity || "low"}
+                          </span>
+                        )}
+                        {r.outcome === "no_action" && (
+                          <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">
+                            no action
+                          </span>
+                        )}
+                        {r.outcome === "error" && (
+                          <span className="sentinel-outcome-chip sentinel-outcome-chip-error">
+                            errored
+                          </span>
+                        )}
+                        {r.summary && (
+                          <span className="sentinel-timeline-summary">
+                            {r.summary.slice(0, 90)}{r.summary.length > 90 ? "…" : ""}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ol>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
 
         {/* side column: stats + allowance */}
         <aside className="sentinel-overview-side">
           <div className="sentinel-stat-card">
-            <div className="sentinel-stat-card-value">{todayRuns}</div>
+            <div className="sentinel-stat-card-value">{runStats.runs_today || 0}</div>
             <div className="sentinel-stat-card-label">runs today</div>
           </div>
           <div className="sentinel-stat-card">
-            <div className="sentinel-stat-card-value">{monthRuns}</div>
-            <div className="sentinel-stat-card-label">runs this month</div>
+            <div className="sentinel-stat-card-value">{runStats.runs_total || 0}</div>
+            <div className="sentinel-stat-card-label">runs total</div>
           </div>
           <div className="sentinel-stat-card sentinel-stat-card-incidents">
-            <div className="sentinel-stat-card-value">{monthIncidents}</div>
+            <div className="sentinel-stat-card-value">{runStats.incidents_filed || 0}</div>
             <div className="sentinel-stat-card-label">incidents filed</div>
           </div>
 
@@ -478,10 +576,10 @@ function OverviewTab({ enabled, scopeCount, lastCheckSec, onSelectRun }) {
               />
             </div>
             <div className="sentinel-allowance-widget-text">
-              <strong>{monthRuns}</strong> of {monthCap} runs · {Math.round(100 - usagePct)}% remaining
+              <strong>{monthRuns}</strong> of {monthCap} runs · {Math.max(0, monthCap - monthRuns)} remaining
             </div>
             <p className="sentinel-allowance-widget-help">
-              Included with your plan — no per-run charge. Resets on the 1st.
+              Included with your plan — no per-run charge. Cap enforcement lands with the agent.
             </p>
           </div>
         </aside>
@@ -490,24 +588,16 @@ function OverviewTab({ enabled, scopeCount, lastCheckSec, onSelectRun }) {
   )
 }
 
-function outcomeDotClass(run) {
-  if (run.outcome === "incident") return `sentinel-timeline-dot-incident sentinel-severity-${run.severity}`
-  if (run.outcome === "error") return "sentinel-timeline-dot-error"
-  return "sentinel-timeline-dot-noop"
-}
-
 // ── configure tab ────────────────────────────────────────────────────
 
-function ConfigureTab(props) {
-  const {
-    enabled, triggers, toggleTrigger,
-    motionCooldownMin, setMotionCooldownMin,
-    scheduleMode, setScheduleMode,
-    scheduleStart, setScheduleStart, scheduleEnd, setScheduleEnd,
-    activeDays, toggleDay,
-    showCron, setShowCron, cron, setCron,
-    scope, toggleScope,
-  } = props
+function ConfigureTab({ config, interactive, cameras, patchConfig, toggleTrigger, toggleScope, toggleDay, showCron, setShowCron }) {
+  if (!config) return null
+
+  const motionEnabled = !!config.motion_enabled
+  const scheduleMode = config.schedule_mode || "always"
+  const scheduleStart = config.schedule_start || "22:00"
+  const scheduleEnd = config.schedule_end || "06:00"
+  const activeDays = Array.isArray(config.active_days) ? config.active_days : []
 
   return (
     <div className="sentinel-configure">
@@ -532,12 +622,12 @@ function ConfigureTab(props) {
                   <span className="sentinel-trigger-desc">{t.description}</span>
                 </div>
                 <ToggleSwitch
-                  active={triggers[t.key]}
-                  onClick={() => toggleTrigger(t.key)}
-                  disabled={!enabled}
+                  active={!!config[t.configField]}
+                  onClick={() => toggleTrigger(t.configField)}
+                  disabled={!interactive || !config.enabled}
                 />
               </label>
-              {t.key === "motion" && triggers.motion && enabled && (
+              {t.configField === "motion_enabled" && motionEnabled && config.enabled && (
                 <div className="sentinel-trigger-extras">
                   <div className="sentinel-trigger-extra">
                     <label htmlFor="motion-cooldown">Per-camera cooldown</label>
@@ -547,8 +637,14 @@ function ConfigureTab(props) {
                         type="number"
                         min="1"
                         max="60"
-                        value={motionCooldownMin}
-                        onChange={e => setMotionCooldownMin(parseInt(e.target.value) || 1)}
+                        value={config.motion_cooldown_min ?? 5}
+                        disabled={!interactive}
+                        onChange={e => {
+                          const n = parseInt(e.target.value)
+                          if (!isNaN(n) && n >= 1 && n <= 60) {
+                            patchConfig({ motion_cooldown_min: n })
+                          }
+                        }}
                       />
                       <span>minutes</span>
                     </div>
@@ -592,7 +688,8 @@ function ConfigureTab(props) {
                 name="schedule-mode"
                 value={opt.v}
                 checked={scheduleMode === opt.v}
-                onChange={() => setScheduleMode(opt.v)}
+                disabled={!interactive}
+                onChange={() => patchConfig({ schedule_mode: opt.v })}
               />
               <div className="sentinel-schedule-radio-text">
                 <span className="sentinel-schedule-radio-label">{opt.label}</span>
@@ -610,7 +707,8 @@ function ConfigureTab(props) {
                 <input
                   type="time"
                   value={scheduleStart}
-                  onChange={e => setScheduleStart(e.target.value)}
+                  disabled={!interactive}
+                  onChange={e => patchConfig({ schedule_start: e.target.value })}
                 />
               </div>
               <div className="sentinel-schedule-time">
@@ -618,7 +716,8 @@ function ConfigureTab(props) {
                 <input
                   type="time"
                   value={scheduleEnd}
-                  onChange={e => setScheduleEnd(e.target.value)}
+                  disabled={!interactive}
+                  onChange={e => patchConfig({ schedule_end: e.target.value })}
                 />
               </div>
               <div className="sentinel-schedule-tz">Times in your org's timezone.</div>
@@ -630,7 +729,8 @@ function ConfigureTab(props) {
                   <button
                     key={d.key}
                     type="button"
-                    className={`sentinel-day-chip ${activeDays[d.key] ? "active" : ""}`}
+                    className={`sentinel-day-chip ${activeDays.includes(d.key) ? "active" : ""}`}
+                    disabled={!interactive}
                     onClick={() => toggleDay(d.key)}
                   >
                     {d.label}
@@ -663,20 +763,10 @@ function ConfigureTab(props) {
             </div>
             {showCron && (
               <div className="sentinel-schedule-cron">
-                <label htmlFor="sentinel-cron-input">Cron expression</label>
-                <input
-                  id="sentinel-cron-input"
-                  type="text"
-                  value={cron}
-                  onChange={e => setCron(e.target.value)}
-                  placeholder="0 */1 * * *"
-                />
                 <p className="sentinel-help-text">
-                  Five-field cron. Used for scheduled "wake-up" sweeps that run regardless
-                  of triggers — e.g. every hour, take a snapshot of every camera and
-                  report any change. The window above still gates the cron — Sentinel
-                  won't fire even on a cron tick if the current time is outside the active
-                  window.
+                  Cron-driven wake-up sweeps land in a follow-up release. The
+                  per-window schedule above governs trigger response in the
+                  meantime.
                 </p>
               </div>
             )}
@@ -695,21 +785,31 @@ function ConfigureTab(props) {
           the frames. Useful for keeping privacy-sensitive cameras (a bedroom,
           a child's room) off the agent's desk.
         </p>
-        <div className="sentinel-scope-grid">
-          {MOCK_CAMERAS.map(c => (
-            <label key={c.id} className="sentinel-scope-row">
-              <div className="sentinel-scope-row-info">
-                <span className="sentinel-scope-row-name">{c.name}</span>
-                <span className="sentinel-scope-row-loc">{c.location}</span>
-              </div>
-              <ToggleSwitch
-                active={scope[c.id]}
-                onClick={() => toggleScope(c.id)}
-                disabled={!props.enabled}
-              />
-            </label>
-          ))}
-        </div>
+        {cameras.length === 0 ? (
+          <div className="sentinel-empty-state">
+            <p className="sentinel-empty-state-strong">No cameras yet.</p>
+            <p className="sentinel-empty-state-sub">
+              Connect a CloudNode and your cameras will appear here.{" "}
+              <Link to="/settings">Settings → Add Node</Link> to get started.
+            </p>
+          </div>
+        ) : (
+          <div className="sentinel-scope-grid">
+            {cameras.map(c => (
+              <label key={c.camera_id} className="sentinel-scope-row">
+                <div className="sentinel-scope-row-info">
+                  <span className="sentinel-scope-row-name">{c.name || c.camera_id}</span>
+                  <span className="sentinel-scope-row-loc">{c.status || "unknown"}</span>
+                </div>
+                <ToggleSwitch
+                  active={isCameraInScope(config.camera_scope, c.camera_id)}
+                  onClick={() => toggleScope(c.camera_id)}
+                  disabled={!interactive || !config.enabled}
+                />
+              </label>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   )
@@ -719,7 +819,7 @@ function WeeklyScheduleGrid({ mode, start, end, activeDays }) {
   const isCellActive = (dayKey, hour) => {
     if (mode === "always") return true
     if (mode === "off") return false
-    if (!activeDays[dayKey]) return false
+    if (!activeDays.includes(dayKey)) return false
     return isHourActive(hour, start, end)
   }
   const totalActiveHours = useMemo(() => {
@@ -771,17 +871,31 @@ function WeeklyScheduleGrid({ mode, start, end, activeDays }) {
 
 // ── history tab ─────────────────────────────────────────────────────
 
-function HistoryTab({ filter, setFilter, search, setSearch, onSelectRun }) {
+function HistoryTab({ runs, loadingRuns, filter, setFilter, search, setSearch, onSelectRun }) {
   const filtered = useMemo(() => {
-    let r = MOCK_RUNS
-    if (filter === "today") r = r.filter(x => x.at.includes("min") || x.at.includes("hr"))
-    if (filter === "7d") r = r.filter(x => !x.at.includes("days") || parseInt(x.at) <= 7)
+    let r = runs
+    const now = Date.now()
+    if (filter === "today") {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      r = r.filter(x => new Date(x.triggered_at) >= start)
+    } else if (filter === "7d") {
+      const cutoff = now - 7 * 86400000
+      r = r.filter(x => new Date(x.triggered_at).getTime() >= cutoff)
+    } else if (filter === "30d") {
+      const cutoff = now - 30 * 86400000
+      r = r.filter(x => new Date(x.triggered_at).getTime() >= cutoff)
+    }
     if (search.trim()) {
       const q = search.toLowerCase()
-      r = r.filter(x => x.camera.toLowerCase().includes(q) || x.trigger.toLowerCase().includes(q) || x.summary.toLowerCase().includes(q))
+      r = r.filter(x =>
+        (x.camera_id || "").toLowerCase().includes(q) ||
+        (x.trigger_type || "").toLowerCase().includes(q) ||
+        (x.summary || "").toLowerCase().includes(q),
+      )
     }
     return r
-  }, [filter, search])
+  }, [runs, filter, search])
 
   return (
     <div className="sentinel-history">
@@ -811,194 +925,183 @@ function HistoryTab({ filter, setFilter, search, setSearch, onSelectRun }) {
           ))}
         </div>
       </div>
-      <div className="sentinel-history-table-wrap">
-        <table className="sentinel-history-table">
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Trigger</th>
-              <th>Camera</th>
-              <th>Tools</th>
-              <th>Outcome</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(r => (
-              <tr key={r.id} onClick={() => onSelectRun(r.id)}>
-                <td className="sentinel-history-when">{r.at}</td>
-                <td>
-                  <span className={`sentinel-trigger-pill sentinel-trigger-pill-${r.trigger}`}>
-                    {r.trigger.replace(/_/g, " ")}
-                  </span>
-                </td>
-                <td className="sentinel-history-camera">{r.camera}</td>
-                <td className="sentinel-history-tools">{r.tools}</td>
-                <td>
-                  {r.outcome === "incident" && (
-                    <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${r.severity}`}>
-                      incident · {r.severity}
-                    </span>
-                  )}
-                  {r.outcome === "no_action" && (
-                    <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">no action</span>
-                  )}
-                  {r.outcome === "error" && (
-                    <span className="sentinel-outcome-chip sentinel-outcome-chip-error">errored</span>
-                  )}
-                </td>
-                <td className="sentinel-history-link-cell">
-                  <span className="sentinel-history-link">view →</span>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
+
+      {loadingRuns ? (
+        <div className="sentinel-empty-state">Loading…</div>
+      ) : runs.length === 0 ? (
+        <div className="sentinel-empty-state">
+          <p className="sentinel-empty-state-strong">Sentinel hasn't run yet.</p>
+          <p className="sentinel-empty-state-sub">
+            Once a configured trigger fires, runs will appear here. The agent
+            itself is rolling out incrementally — runs will start landing in a
+            follow-up release.
+          </p>
+        </div>
+      ) : (
+        <div className="sentinel-history-table-wrap">
+          <table className="sentinel-history-table">
+            <thead>
               <tr>
-                <td colSpan="6" className="sentinel-history-empty">
-                  No runs match your filters.
-                </td>
+                <th>When</th>
+                <th>Trigger</th>
+                <th>Camera</th>
+                <th>Tools</th>
+                <th>Outcome</th>
+                <th></th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filtered.map(r => (
+                <tr key={r.id} onClick={() => onSelectRun(r.id)}>
+                  <td className="sentinel-history-when">{formatRunTimestamp(r.triggered_at)}</td>
+                  <td>
+                    <span className={`sentinel-trigger-pill sentinel-trigger-pill-${r.trigger_type}`}>
+                      {r.trigger_type.replace(/_/g, " ")}
+                    </span>
+                  </td>
+                  <td className="sentinel-history-camera">{r.camera_id || "all cameras"}</td>
+                  <td className="sentinel-history-tools">{r.tool_call_count}</td>
+                  <td>
+                    {r.outcome === "incident" && (
+                      <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${r.severity || "low"}`}>
+                        incident · {r.severity || "low"}
+                      </span>
+                    )}
+                    {r.outcome === "no_action" && (
+                      <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">no action</span>
+                    )}
+                    {r.outcome === "error" && (
+                      <span className="sentinel-outcome-chip sentinel-outcome-chip-error">errored</span>
+                    )}
+                  </td>
+                  <td className="sentinel-history-link-cell">
+                    <span className="sentinel-history-link">view →</span>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="sentinel-history-empty">
+                    No runs match your filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
 
 // ── run detail drawer ────────────────────────────────────────────────
 
-function RunDetailDrawer({ run, onClose }) {
+function RunDetailDrawer({ run, loading, onClose }) {
   return (
     <div className="sentinel-drawer-backdrop" onClick={onClose}>
       <aside className="sentinel-drawer" onClick={e => e.stopPropagation()}>
-        <div className="sentinel-drawer-header">
-          <div>
-            <div className="sentinel-drawer-eyebrow">Run · {run.id}</div>
-            <h2 className="sentinel-drawer-title">{run.camera}</h2>
-            <div className="sentinel-drawer-meta">
-              {run.atFull} · trigger:{" "}
-              <span className={`sentinel-trigger-pill sentinel-trigger-pill-${run.trigger}`}>
-                {run.trigger.replace(/_/g, " ")}
-              </span>
+        {loading || !run ? (
+          <div className="sentinel-drawer-header">
+            <div>
+              <div className="sentinel-drawer-eyebrow">Loading…</div>
+              <h2 className="sentinel-drawer-title">&nbsp;</h2>
             </div>
+            <button
+              type="button"
+              className="sentinel-drawer-close"
+              onClick={onClose}
+              aria-label="Close drawer"
+            >×</button>
           </div>
-          <button
-            type="button"
-            className="sentinel-drawer-close"
-            onClick={onClose}
-            aria-label="Close drawer"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="sentinel-drawer-body">
-          <section className="sentinel-drawer-section">
-            <h3>Outcome</h3>
-            <div className="sentinel-drawer-outcome">
-              {run.outcome === "incident" && (
-                <>
-                  <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${run.severity}`}>
-                    incident · {run.severity}
+        ) : (
+          <>
+            <div className="sentinel-drawer-header">
+              <div>
+                <div className="sentinel-drawer-eyebrow">Run · {run.id.slice(0, 8)}</div>
+                <h2 className="sentinel-drawer-title">{run.camera_id || "All cameras"}</h2>
+                <div className="sentinel-drawer-meta">
+                  {new Date(run.triggered_at).toLocaleString()} · trigger:{" "}
+                  <span className={`sentinel-trigger-pill sentinel-trigger-pill-${run.trigger_type}`}>
+                    {run.trigger_type.replace(/_/g, " ")}
                   </span>
-                  <Link to={`/incidents/${run.incidentId}`} className="sentinel-drawer-link">
-                    View incident #{run.incidentId} →
-                  </Link>
-                </>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="sentinel-drawer-close"
+                onClick={onClose}
+                aria-label="Close drawer"
+              >×</button>
+            </div>
+
+            <div className="sentinel-drawer-body">
+              <section className="sentinel-drawer-section">
+                <h3>Outcome</h3>
+                <div className="sentinel-drawer-outcome">
+                  {run.outcome === "incident" && (
+                    <>
+                      <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${run.severity || "low"}`}>
+                        incident · {run.severity || "low"}
+                      </span>
+                      {run.incident_id && (
+                        <Link to={`/incidents/${run.incident_id}`} className="sentinel-drawer-link">
+                          View incident #{run.incident_id} →
+                        </Link>
+                      )}
+                    </>
+                  )}
+                  {run.outcome === "no_action" && (
+                    <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">
+                      no action — agent investigated and decided not to file an incident
+                    </span>
+                  )}
+                  {run.outcome === "error" && (
+                    <span className="sentinel-outcome-chip sentinel-outcome-chip-error">
+                      errored — see reasoning for details
+                    </span>
+                  )}
+                </div>
+              </section>
+
+              {run.summary && (
+                <section className="sentinel-drawer-section">
+                  <h3>Agent reasoning</h3>
+                  <p className="sentinel-drawer-reasoning">{run.summary}</p>
+                </section>
               )}
-              {run.outcome === "no_action" && (
-                <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">
-                  no action — agent investigated and decided not to file an incident
-                </span>
-              )}
-              {run.outcome === "error" && (
-                <span className="sentinel-outcome-chip sentinel-outcome-chip-error">
-                  errored — see reasoning for details
-                </span>
+
+              {Array.isArray(run.tool_trace) && run.tool_trace.length > 0 && (
+                <section className="sentinel-drawer-section">
+                  <h3>Tools called <span className="sentinel-drawer-section-meta">{run.tool_trace.length} of {run.tool_call_count}</span></h3>
+                  <ol className="sentinel-tool-trace">
+                    {run.tool_trace.map((t, i) => (
+                      <li key={i} className="sentinel-tool-trace-row">
+                        <span className="sentinel-tool-trace-num">{i + 1}</span>
+                        <div className="sentinel-tool-trace-content">
+                          <code className="sentinel-tool-trace-name">{t.tool}</code>
+                          <div className="sentinel-tool-trace-args">
+                            {t.args && Object.keys(t.args).length > 0
+                              ? Object.entries(t.args).map(([k, v]) => (
+                                  <span key={k} className="sentinel-tool-trace-arg">
+                                    <span className="sentinel-tool-trace-arg-key">{k}:</span>{" "}
+                                    <span className="sentinel-tool-trace-arg-val">{String(v)}</span>
+                                  </span>
+                                ))
+                              : <span className="sentinel-tool-trace-args-empty">no arguments</span>}
+                          </div>
+                          {t.result && (
+                            <div className="sentinel-tool-trace-result">{t.result}</div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
               )}
             </div>
-          </section>
-
-          <section className="sentinel-drawer-section">
-            <h3>Agent reasoning</h3>
-            <p className="sentinel-drawer-reasoning">{run.summary}</p>
-          </section>
-
-          <section className="sentinel-drawer-section">
-            <h3>Tools called <span className="sentinel-drawer-section-meta">{MOCK_TOOL_TRACE.length} of {run.tools}</span></h3>
-            <ol className="sentinel-tool-trace">
-              {MOCK_TOOL_TRACE.slice(0, run.tools).map((t, i) => (
-                <li key={i} className="sentinel-tool-trace-row">
-                  <span className="sentinel-tool-trace-num">{i + 1}</span>
-                  <div className="sentinel-tool-trace-content">
-                    <code className="sentinel-tool-trace-name">{t.tool}</code>
-                    <div className="sentinel-tool-trace-args">
-                      {Object.keys(t.args).length === 0
-                        ? <span className="sentinel-tool-trace-args-empty">no arguments</span>
-                        : Object.entries(t.args).map(([k, v]) => (
-                          <span key={k} className="sentinel-tool-trace-arg">
-                            <span className="sentinel-tool-trace-arg-key">{k}:</span>{" "}
-                            <span className="sentinel-tool-trace-arg-val">{String(v)}</span>
-                          </span>
-                        ))}
-                    </div>
-                    <div className="sentinel-tool-trace-result">{t.result}</div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section className="sentinel-drawer-actions">
-            <button type="button" className="sentinel-drawer-btn-ghost">Re-run</button>
-            <button type="button" className="sentinel-drawer-btn-ghost">Mark as false positive</button>
-          </section>
-        </div>
+          </>
+        )}
       </aside>
-    </div>
-  )
-}
-
-// ── manual run modal ─────────────────────────────────────────────────
-
-function ManualRunModal({ prompt, setPrompt, running, onRun, onClose }) {
-  return (
-    <div className="sentinel-modal-backdrop" onClick={onClose}>
-      <div className="sentinel-modal" onClick={e => e.stopPropagation()}>
-        <h3>Run Sentinel now</h3>
-        <p className="sentinel-modal-desc">
-          Trigger a one-off agent run with a custom prompt. Same tools, same
-          camera scope, same incident-creation rules — just kicked off
-          manually instead of by a notification.
-        </p>
-        <textarea
-          className="sentinel-modal-input"
-          placeholder="e.g. Check every camera for anything unusual; pay extra attention to the driveway."
-          value={prompt}
-          onChange={e => setPrompt(e.target.value)}
-          rows={4}
-          disabled={running}
-        />
-        <div className="sentinel-modal-actions">
-          <button
-            type="button"
-            className="sentinel-modal-btn-ghost"
-            onClick={onClose}
-            disabled={running}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="sentinel-modal-btn-primary"
-            onClick={onRun}
-            disabled={running || !prompt.trim()}
-          >
-            {running ? "Running…" : "Run"}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

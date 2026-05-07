@@ -7990,6 +7990,118 @@ body {
     padding: 1.25rem 1.5rem 4rem;
 }
 
+/* Loading + empty states (slice 1 — most orgs land on the page with
+   an empty run history because the agent service isn't yet wired up,
+   and may briefly see "Loading…" while config + cameras + runs
+   stream in independently). */
+.sentinel-loading-state {
+    padding: 4rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.sentinel-empty-state {
+    padding: 2.25rem 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.sentinel-empty-state-strong {
+    margin: 0 0 0.4rem;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.sentinel-empty-state-sub {
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    max-width: 440px;
+    margin: 0 auto;
+}
+
+.sentinel-empty-state a {
+    color: var(--accent-purple);
+    text-decoration: none;
+}
+
+.sentinel-empty-state a:hover {
+    text-decoration: underline;
+}
+
+/* Plan-gate banner — only shown to non-Pro-Plus orgs. The page still
+   renders fully behind it; toggles are disabled and PATCH attempts
+   return 402 (which our optimistic-update handler rolls back). */
+.sentinel-plan-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 1rem;
+    background: linear-gradient(90deg,
+        rgba(168, 85, 247, 0.10) 0%,
+        rgba(59, 130, 246, 0.08) 100%);
+    border: 1px solid rgba(168, 85, 247, 0.35);
+    border-radius: 10px;
+    flex-wrap: wrap;
+}
+
+.sentinel-plan-banner-pill {
+    padding: 0.22rem 0.6rem;
+    background: rgba(168, 85, 247, 0.25);
+    color: #c084fc;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    flex-shrink: 0;
+}
+
+.sentinel-plan-banner-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    flex: 1;
+    min-width: 240px;
+}
+
+.sentinel-plan-banner-text strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.sentinel-plan-banner-cta {
+    flex-shrink: 0;
+    padding: 0.45rem 0.95rem;
+    background: var(--accent-purple);
+    color: #ffffff;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: filter 0.15s;
+}
+
+.sentinel-plan-banner-cta:hover {
+    filter: brightness(1.1);
+}
+
+/* Disabled "Run now" button (slice 1: still mocked, slice 4 wires
+   real dispatch). Shows a tooltip via the title attribute. */
+.sentinel-run-now-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    border-color: var(--border-color);
+}
+
+.sentinel-run-now-btn:disabled span {
+    color: var(--text-muted);
+}
+
 /* ── preview banner ─────────────────────────────────────────────── */
 .sentinel-preview-banner {
     display: flex;

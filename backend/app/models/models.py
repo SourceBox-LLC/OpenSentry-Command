@@ -939,3 +939,214 @@ class EmailSuppression(Base):
         }
 
 
+# ── Sentinel ──────────────────────────────────────────────────────────
+# Per-org configuration + run history for the autonomous "Sentinel"
+# security agent.  This is slice 1 of the Sentinel rollout (UI-only
+# persistence) — the agent itself is not yet wired up, so SentinelRun
+# rows will only exist once slice 3 lands.  See plans/ for the
+# 7-slice roadmap.
+class SentinelConfig(Base):
+    """Per-org configuration for the Sentinel agent.
+
+    One row per org, lazily upserted on first GET via
+    `_ensure_config_row()` in app/api/sentinel.py.  All boolean +
+    string columns carry sane defaults so a fresh row is immediately
+    usable without a separate setup step.
+
+    JSON columns (`active_days`, `camera_scope`) are stored as
+    serialised TEXT to match the rest of the codebase's pattern (see
+    `Notification.meta_json`, `McpApiKey.scope_tools`).
+    """
+
+    __tablename__ = "sentinel_config"
+
+    id = Column(Integer, primary_key=True)
+    org_id = Column(String(100), unique=True, nullable=False, index=True)
+
+    # Master kill-switch for the whole agent.  When false, no triggers
+    # fire regardless of the per-trigger toggles below.
+    enabled = Column(Boolean, default=True, nullable=False)
+
+    # Per-trigger subscription toggles.  Sentinel is intentionally
+    # narrow — only security-relevant events fire it.  Infrastructure
+    # events (camera_offline, node_offline, disk_low) and admin events
+    # (member changes, MCP key audit) deliberately go elsewhere.
+    motion_enabled = Column(Boolean, default=True, nullable=False)
+    incident_opened_enabled = Column(Boolean, default=True, nullable=False)
+
+    # Per-camera cooldown in minutes — limits how often Sentinel runs
+    # for the same camera.  Independent of the email-digest cooldown.
+    motion_cooldown_min = Column(Integer, default=5, nullable=False)
+
+    # Schedule mode + window.  schedule_mode is one of:
+    #   "always"     — run on every configured trigger, 24/7
+    #   "scheduled"  — only respond during the schedule_start..end window
+    #   "off"        — never run, regardless of triggers
+    # Times are HH:MM in the org's timezone.  active_days is a JSON
+    # list of {mon,tue,wed,thu,fri,sat,sun} keys.
+    schedule_mode = Column(String(20), default="always", nullable=False)
+    schedule_start = Column(String(5), default="22:00", nullable=False)
+    schedule_end = Column(String(5), default="06:00", nullable=False)
+    active_days = Column(Text, nullable=True)  # JSON list, see helpers below
+
+    # Per-camera scope.  JSON object {"<camera_id>": true|false, ...}
+    # — true means Sentinel may investigate that camera.  Cameras
+    # absent from the dict default to true (everything in scope) so
+    # existing cameras don't silently disappear from the agent's
+    # purview when a new camera is added.
+    camera_scope = Column(Text, nullable=True)  # JSON object
+
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=UTC).replace(tzinfo=None),
+    )
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(tz=UTC).replace(tzinfo=None),
+    )
+
+    # ── JSON helpers (mirror McpApiKey.get_scope_tools pattern) ───
+    def get_active_days(self) -> list[str]:
+        if not self.active_days:
+            return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        import json as _json
+        try:
+            val = _json.loads(self.active_days)
+            if isinstance(val, list):
+                return [str(v) for v in val]
+        except (ValueError, TypeError):
+            pass
+        return ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+    def set_active_days(self, days: list[str]) -> None:
+        import json as _json
+        self.active_days = _json.dumps(list(days))
+
+    def get_camera_scope(self) -> dict:
+        if not self.camera_scope:
+            return {}
+        import json as _json
+        try:
+            val = _json.loads(self.camera_scope)
+            if isinstance(val, dict):
+                return {str(k): bool(v) for k, v in val.items()}
+        except (ValueError, TypeError):
+            pass
+        return {}
+
+    def set_camera_scope(self, scope: dict) -> None:
+        import json as _json
+        self.camera_scope = _json.dumps({str(k): bool(v) for k, v in scope.items()})
+
+    def to_dict(self) -> dict:
+        return {
+            "enabled": self.enabled,
+            "motion_enabled": self.motion_enabled,
+            "incident_opened_enabled": self.incident_opened_enabled,
+            "motion_cooldown_min": self.motion_cooldown_min,
+            "schedule_mode": self.schedule_mode,
+            "schedule_start": self.schedule_start,
+            "schedule_end": self.schedule_end,
+            "active_days": self.get_active_days(),
+            "camera_scope": self.get_camera_scope(),
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SentinelRun(Base):
+    """One row per Sentinel agent run.
+
+    Slice 1: rows are not yet produced (no agent service exists).
+    Slice 3: the agent posts back to a new internal endpoint that
+    inserts rows here.  Slice 7: the run-detail drawer shows real
+    `tool_trace` instead of the placeholder.
+
+    `incident_id` intentionally not a FK constraint — incidents are
+    tracked in their own table and we don't want a cascade rule to
+    entangle the two on delete.
+    """
+
+    __tablename__ = "sentinel_runs"
+
+    # Use string UUID hex for the id so the agent can synthesize one
+    # client-side and the DB doesn't need to round-trip an
+    # auto-increment back.
+    id = Column(String(32), primary_key=True)
+    org_id = Column(String(100), nullable=False, index=True)
+
+    triggered_at = Column(
+        DateTime,
+        default=lambda: datetime.now(tz=UTC).replace(tzinfo=None),
+        nullable=False,
+        index=True,
+    )
+
+    # One of: motion | incident_opened | manual | scheduled
+    trigger_type = Column(String(40), nullable=False)
+    # Camera the trigger was for; nullable for scheduled sweeps that
+    # cover all cameras at once.
+    camera_id = Column(String(100), nullable=True, index=True)
+
+    tool_call_count = Column(Integer, default=0, nullable=False)
+    # Outcome: incident | no_action | error
+    outcome = Column(String(20), nullable=False)
+    # Severity if outcome=incident: low | medium | high (else NULL)
+    severity = Column(String(20), nullable=True)
+    # Foreign reference to the filed incident (no FK constraint —
+    # see class docstring).
+    incident_id = Column(Integer, nullable=True)
+
+    # Human-readable agent reasoning summary (the body of what the
+    # agent concluded).  Truncated server-side to ~2KB at write time
+    # in slice 3 to keep rows small.
+    summary = Column(Text, default="")
+    # JSON list of tool-call entries: [{"tool", "args", "result"}, ...]
+    # Truncated server-side to last 50 entries at write time.
+    tool_trace = Column(Text, nullable=True)
+
+    # Composite index for the hot path: list runs for an org ordered
+    # by recency.  `sync_schema` doesn't add indexes after the fact,
+    # so this MUST be defined on the model the first time the table
+    # is created.
+    __table_args__ = (
+        Index("ix_sentinel_runs_org_triggered", "org_id", "triggered_at"),
+    )
+
+    def get_tool_trace(self) -> list[dict]:
+        if not self.tool_trace:
+            return []
+        import json as _json
+        try:
+            val = _json.loads(self.tool_trace)
+            if isinstance(val, list):
+                return val
+        except (ValueError, TypeError):
+            pass
+        return []
+
+    def set_tool_trace(self, trace: list[dict]) -> None:
+        # Truncate to last 50 entries to keep row sizes bounded once
+        # the agent starts producing real traces.
+        import json as _json
+        trimmed = list(trace)[-50:]
+        self.tool_trace = _json.dumps(trimmed)
+
+    def to_dict(self, include_trace: bool = False) -> dict:
+        d = {
+            "id": self.id,
+            "triggered_at": self.triggered_at.isoformat() if self.triggered_at else None,
+            "trigger_type": self.trigger_type,
+            "camera_id": self.camera_id,
+            "tool_call_count": self.tool_call_count,
+            "outcome": self.outcome,
+            "severity": self.severity,
+            "incident_id": self.incident_id,
+            "summary": self.summary or "",
+        }
+        if include_trace:
+            d["tool_trace"] = self.get_tool_trace()
+        return d
+
+

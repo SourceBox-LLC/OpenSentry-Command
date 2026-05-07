@@ -36,6 +36,7 @@ from app.api import (
     motion,
     nodes,
     notifications,
+    sentinel,
     webhooks,
     well_known,
     ws,
@@ -453,6 +454,9 @@ app.include_router(mcp_activity.router)
 app.include_router(incidents.router)
 app.include_router(motion.router)
 app.include_router(notifications.router)
+# Sentinel agent — config + run history.  Slice 1 of the 7-slice
+# rollout: persistence only, the agent itself isn't yet wired up.
+app.include_router(sentinel.router)
 # GDPR Article 20 export endpoint.  Article 17 erasure is served
 # by the existing /api/settings/danger/full-reset endpoint, which
 # now routes through app.core.gdpr.delete_org_data so both paths
