@@ -34,7 +34,7 @@ function AppSidebar({ open, onClose }) {
       ...(hasAdminFeature ? {} : { locked: true, badge: "PRO", badgeClass: "nav-pro-badge" }),
     },
     { to: "/mcp", label: "MCP" },
-    { to: "/sentinel", label: "Sentinel", badge: "SOON", badgeClass: "nav-soon-badge" },
+    { to: "/sentinel", label: "Sentinel" },
     { to: "/docs", label: "Help" },
     { to: "/pricing", label: "Pricing" },
   ].filter(Boolean)

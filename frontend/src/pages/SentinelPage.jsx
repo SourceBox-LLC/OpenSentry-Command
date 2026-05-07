@@ -546,7 +546,7 @@ function OverviewTab({ enabled, scopeCount, runs, runStats, loadingRuns, onSelec
               </h2>
               <p className="sentinel-armed-sub">
                 {enabled
-                  ? "Listening for triggers. The agent itself ships in a follow-up — runs will appear here once it's wired up."
+                  ? "Listening for triggers. Runs land in the activity feed below as they happen."
                   : "No triggers will fire until you re-enable Sentinel from the header."}
               </p>
             </div>
@@ -652,7 +652,7 @@ function OverviewTab({ enabled, scopeCount, runs, runStats, loadingRuns, onSelec
               <strong>{monthRuns}</strong> of {monthCap} runs · {Math.max(0, monthCap - monthRuns)} remaining
             </div>
             <p className="sentinel-allowance-widget-help">
-              Included with your plan — no per-run charge. Cap enforcement lands with the agent.
+              Included with your plan — no per-run charge. 300 runs / month, enforced at dispatch.
             </p>
           </div>
         </aside>
@@ -1005,9 +1005,9 @@ function HistoryTab({ runs, loadingRuns, filter, setFilter, search, setSearch, o
         <div className="sentinel-empty-state">
           <p className="sentinel-empty-state-strong">Sentinel hasn't run yet.</p>
           <p className="sentinel-empty-state-sub">
-            Once a configured trigger fires, runs will appear here. The agent
-            itself is rolling out incrementally — runs will start landing in a
-            follow-up release.
+            Once a configured trigger fires — motion on a camera, an incident
+            opened, or a manual "Run now" — the agent investigates and the run
+            appears here.
           </p>
         </div>
       ) : (
