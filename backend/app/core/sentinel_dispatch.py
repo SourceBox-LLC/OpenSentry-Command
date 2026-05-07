@@ -27,13 +27,18 @@ if/when we offer multiple Pro Plus tiers.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import threading
 import uuid
 from datetime import UTC, datetime
 from typing import Optional
 
+import httpx
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.models import SentinelConfig, SentinelRun, Setting
 
 logger = logging.getLogger(__name__)
@@ -225,6 +230,8 @@ def maybe_dispatch_for_notification(
             "sentinel: dispatched pending run id=%s org=%s trigger=%s camera=%s",
             run.id, org_id, trigger_type, camera_id,
         )
+        # Wake the agent so it picks up this run.
+        _fire_wakeup_webhook()
         return run
     except Exception:  # noqa: BLE001
         # Dispatch failure must NOT cascade into the notification path.
@@ -284,4 +291,92 @@ def dispatch_manual_run(
         "sentinel: manual run id=%s org=%s camera=%s prompt_len=%d",
         run.id, org_id, camera_id, len(prompt or ""),
     )
+    # Wake the agent so it picks up this run.
+    _fire_wakeup_webhook()
     return run
+
+
+# ── Wakeup webhook firing ────────────────────────────────────────────
+# After a pending run is created we POST a fire-and-forget request to
+# SENTINEL_AGENT_WEBHOOK_URL.  The body is opaque (`{}`) — the agent
+# re-fetches pending runs via the API.  We HMAC-sign the body with
+# SENTINEL_AGENT_KEY so a leaked URL alone can't trigger the agent.
+#
+# Fire-and-forget runs in a background thread so the request handler
+# that triggered the dispatch (motion ingestion, manual run, etc.) is
+# not blocked on the agent's network round-trip.  A 5-second timeout
+# keeps the thread short-lived; if Fly's auto-stop is mid-spin-up and
+# the webhook times out, the run will get picked up by the NEXT
+# wakeup that fires (the agent always drains, not just the run that
+# triggered the wakeup).
+
+_WAKEUP_PAYLOAD = b"{}"
+
+
+def _compute_signature(body: bytes, secret: str) -> str:
+    return "sha256=" + hmac.new(
+        secret.encode("utf-8"), body, hashlib.sha256,
+    ).hexdigest()
+
+
+def _fire_wakeup_webhook_blocking() -> None:
+    """Run inside a thread.  Hits the agent webhook with a short
+    timeout; logs and returns (any failure is non-fatal here).
+    """
+    url = settings.SENTINEL_AGENT_WEBHOOK_URL
+    secret = settings.SENTINEL_AGENT_KEY
+    if not url:
+        return  # no agent configured — pending run sits until polled
+    if not secret:
+        logger.warning(
+            "sentinel wakeup: SENTINEL_AGENT_WEBHOOK_URL set but "
+            "SENTINEL_AGENT_KEY is empty — skipping webhook"
+        )
+        return
+
+    try:
+        signature = _compute_signature(_WAKEUP_PAYLOAD, secret)
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.post(
+                url,
+                content=_WAKEUP_PAYLOAD,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Sentinel-Signature": signature,
+                },
+            )
+            if resp.status_code >= 400:
+                logger.warning(
+                    "sentinel wakeup: %s returned %d — pending run will be "
+                    "picked up by the next wakeup",
+                    url, resp.status_code,
+                )
+            else:
+                logger.debug("sentinel wakeup: pinged %s status=%d", url, resp.status_code)
+    except Exception as exc:  # noqa: BLE001
+        # Common case: the agent's machine is auto-stopped and Fly is
+        # cold-starting it; the request returns before the boot
+        # finishes.  That's fine — the next dispatch will fire another
+        # wakeup, and the agent will drain everything when it's up.
+        logger.info(
+            "sentinel wakeup: %s unreachable (%s) — pending run will be "
+            "picked up by the next wakeup or a manual drain",
+            url, type(exc).__name__,
+        )
+
+
+def _fire_wakeup_webhook() -> None:
+    """Fire-and-forget the wakeup webhook in a background thread.
+
+    Runs in a daemon thread so it doesn't block app shutdown if the
+    agent endpoint hangs.  We don't reuse asyncio.create_task because
+    the dispatch may be called from synchronous code paths (e.g.
+    _claim_motion_cooldown_or_silence is sync), and re-entering the
+    event loop from there is fragile.  A thread is the simplest
+    fire-and-forget primitive that works in both contexts.
+    """
+    threading.Thread(
+        target=_fire_wakeup_webhook_blocking,
+        name="sentinel-wakeup-fire",
+        daemon=True,
+    ).start()

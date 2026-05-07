@@ -150,5 +150,21 @@ class Config:
     # auth — the agent is org-agnostic at the auth layer.
     SENTINEL_AGENT_KEY: str = os.getenv("SENTINEL_AGENT_KEY", "")
 
+    # Wakeup webhook URL for the Sentinel agent.  When set, every
+    # pending run dispatch (notification-triggered OR manual) fires a
+    # fire-and-forget POST here so the agent's serverless Fly machine
+    # wakes up, drains pending runs, and goes back to sleep.
+    #
+    # The body is opaque (currently `{}` — agent re-fetches pending
+    # runs via the API), but the request is HMAC-signed over the
+    # body using SENTINEL_AGENT_KEY so a leaked URL alone can't
+    # trigger the agent.
+    #
+    # Leave blank in environments where the agent isn't deployed yet
+    # — dispatch still creates pending rows, they just sit there
+    # until either (a) a future agent picks them up or (b) the
+    # operator triggers a drain manually.
+    SENTINEL_AGENT_WEBHOOK_URL: str = os.getenv("SENTINEL_AGENT_WEBHOOK_URL", "")
+
 
 settings = Config()
