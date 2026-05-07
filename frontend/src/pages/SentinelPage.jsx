@@ -54,20 +54,22 @@ const DAY_CHIPS = [
   { key: "sun", label: "Sun" },
 ]
 
-// Mock run history — 12 realistic runs spanning ~1 week.
-// Outcomes mix incident-filed / no-action / one error so the
-// table reads like a real ops surface.
+// Mock run history — 12 realistic runs spanning ~1 week. Triggers
+// match the trimmed (security-only) trigger list: motion (subscribed)
+// and incident_opened (subscribed); plus manual (operator clicked Run
+// now) and scheduled (cron sweep). Outcomes mix incident-filed /
+// no-action / one error so the table reads like a real ops surface.
 const MOCK_RUNS = [
   { id: "r12", at: "3 min ago", trigger: "motion", camera: "Front Porch", tools: 4, outcome: "incident", severity: "low", incidentId: 423 },
   { id: "r11", at: "12 min ago", trigger: "motion", camera: "Driveway", tools: 6, outcome: "incident", severity: "medium", incidentId: 422 },
   { id: "r10", at: "47 min ago", trigger: "scheduled", camera: "All cameras", tools: 9, outcome: "no_action" },
   { id: "r09", at: "2 hr ago", trigger: "manual", camera: "Backyard", tools: 3, outcome: "no_action" },
   { id: "r08", at: "4 hr ago", trigger: "motion", camera: "Side Gate", tools: 5, outcome: "incident", severity: "low", incidentId: 421 },
-  { id: "r07", at: "6 hr ago", trigger: "node_offline", camera: "Garage CloudNode", tools: 2, outcome: "no_action" },
+  { id: "r07", at: "6 hr ago", trigger: "motion", camera: "Driveway", tools: 5, outcome: "no_action" },
   { id: "r06", at: "Yesterday", trigger: "motion", camera: "Driveway", tools: 8, outcome: "incident", severity: "high", incidentId: 418 },
   { id: "r05", at: "Yesterday", trigger: "motion", camera: "Front Porch", tools: 4, outcome: "incident", severity: "low", incidentId: 417 },
-  { id: "r04", at: "2 days ago", trigger: "cloudnode_disk_low", camera: "Garage CloudNode", tools: 1, outcome: "no_action" },
-  { id: "r03", at: "3 days ago", trigger: "incident_opened", camera: "manual filing", tools: 2, outcome: "no_action" },
+  { id: "r04", at: "2 days ago", trigger: "scheduled", camera: "All cameras", tools: 7, outcome: "no_action" },
+  { id: "r03", at: "3 days ago", trigger: "incident_opened", camera: "operator filing", tools: 2, outcome: "no_action" },
   { id: "r02", at: "4 days ago", trigger: "motion", camera: "Driveway", tools: 6, outcome: "incident", severity: "low", incidentId: 410 },
   { id: "r01", at: "5 days ago", trigger: "motion", camera: "Backyard", tools: 4, outcome: "error" },
 ]
@@ -502,39 +504,37 @@ function SentinelPage() {
         </div>
       </section>
 
-      {/* ── usage footer ───────────────────────────────────── */}
+      {/* ── monthly allowance ──────────────────────────────── */}
       <section className="settings-section sentinel-section sentinel-usage-section">
         <div className="sentinel-section-header">
-          <h2>Usage this month</h2>
+          <h2>Monthly allowance</h2>
           <p className="section-description">
-            Sentinel runs cost LLM tokens. Track consumption here; if a noisy
-            camera is driving the bill, tune the trigger cooldown or move it
-            out of scope.
+            Sentinel is included with your <strong>Pro Plus</strong> plan — there's
+            no per-run charge. The 300-run monthly cap exists to keep a runaway
+            agent loop or a misconfigured trigger from quietly burning through
+            backend resources. If you're regularly hitting it, narrow your
+            camera scope or raise the per-camera cooldown.
           </p>
         </div>
-        <div className="sentinel-usage-grid">
+        <div className="sentinel-usage-grid sentinel-usage-grid-3">
           <div className="sentinel-usage-stat">
             <span className="sentinel-usage-value">142</span>
-            <span className="sentinel-usage-label">runs</span>
+            <span className="sentinel-usage-label">runs used</span>
           </div>
           <div className="sentinel-usage-stat">
-            <span className="sentinel-usage-value">1.2M</span>
-            <span className="sentinel-usage-label">tokens consumed</span>
+            <span className="sentinel-usage-value">158</span>
+            <span className="sentinel-usage-label">runs remaining</span>
           </div>
           <div className="sentinel-usage-stat">
-            <span className="sentinel-usage-value">$8.40</span>
-            <span className="sentinel-usage-label">est. cost</span>
-          </div>
-          <div className="sentinel-usage-stat">
-            <span className="sentinel-usage-value">$25</span>
-            <span className="sentinel-usage-label">monthly budget</span>
+            <span className="sentinel-usage-value">4.2</span>
+            <span className="sentinel-usage-label">avg tools / run</span>
           </div>
         </div>
         <div className="sentinel-usage-meter">
-          <div className="sentinel-usage-meter-fill" style={{ width: "33.6%" }} />
+          <div className="sentinel-usage-meter-fill" style={{ width: "47.3%" }} />
         </div>
         <p className="sentinel-usage-meter-text">
-          $8.40 of $25 used (33.6%) — on track for ~$25 this month.
+          142 of 300 runs used (47%). Resets on the 1st of next month.
         </p>
       </section>
 

@@ -8662,6 +8662,15 @@ body {
     margin-bottom: 1rem;
 }
 
+/* 3-column variant for the trimmed allowance section. The original
+   4-column version included an "est. cost" tile that no longer makes
+   sense now that Sentinel is bundled with Pro Plus rather than billed
+   per-run; switching to a 3-up layout keeps the cards a comfortable
+   width instead of stretching to fill. */
+.sentinel-usage-grid.sentinel-usage-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
 .sentinel-usage-stat {
     display: flex;
     flex-direction: column;
