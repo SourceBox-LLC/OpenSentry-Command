@@ -170,6 +170,16 @@ MOTION_DIGEST_INTERVAL_SECONDS = int(
     os.getenv("MOTION_DIGEST_INTERVAL_SECONDS", "60")
 )
 
+# Stranded-run reaper sweep cadence.  The threshold itself is
+# STRANDED_RUN_AGE_MINUTES (defined in app/core/sentinel_dispatch.py)
+# — this is just how often we check.  5 min is plenty: a run that
+# crashed at minute 0 is found at minute ≤ 25 (threshold + sweep
+# interval), which is good enough for a UI-fixup loop.  Tunable
+# down for ops or up for quieter environments.
+SENTINEL_REAPER_INTERVAL_SECONDS = int(
+    os.getenv("SENTINEL_REAPER_INTERVAL_SECONDS", "300")
+)
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -200,6 +210,11 @@ async def lifespan(app):
     # accumulated additional motion events during the cooldown window.
     # See _motion_digest_loop below for the full lifecycle.
     motion_digest_task = asyncio.create_task(_motion_digest_loop())
+    # Sentinel stranded-run reaper — sweeps SentinelRun rows stuck in
+    # `running` past the agent's wall-clock budget and marks them
+    # errored.  See _sentinel_reaper_loop below + reap_stranded_runs
+    # in app/core/sentinel_dispatch.py.
+    sentinel_reaper_task = asyncio.create_task(_sentinel_reaper_loop())
     print(
         f"[App] SourceBox Sentry Command Center started "
         f"(log retention: {LOG_RETENTION_DAYS}d, "
@@ -214,6 +229,7 @@ async def lifespan(app):
     email_worker_task.cancel()
     disk_check_task.cancel()
     motion_digest_task.cancel()
+    sentinel_reaper_task.cancel()
     print("[System] Shutdown complete")
 
 
@@ -1108,6 +1124,51 @@ async def _offline_sweep_loop():
                 db.close()
         except Exception:
             logger.exception("[OfflineSweep] Sweep failed")
+
+
+async def _sentinel_reaper_loop():
+    """Background task — mark long-stranded `running` SentinelRun rows
+    as errored.
+
+    The Sentinel agent's wall-clock-timeout cleanup wrapper (in
+    ``SourceBox Sentinel/app/processor.py::process_with_timeout``)
+    handles the common case: when the 540 s budget fires it
+    best-effort POSTs ``/complete`` with ``outcome=error``.  But if
+    the agent process crashed (OOM, panic, container kill, network
+    partition long enough that the cleanup POST itself failed)
+    BEFORE that wrapper ran, the row is stuck at ``outcome='running'``
+    forever — list_pending only returns ``pending``, ``/start``
+    doesn't re-claim ``running``, and the dashboard shows a
+    perpetually-spinning indicator.
+
+    This loop is the last-line backstop: every
+    ``SENTINEL_REAPER_INTERVAL_SECONDS`` (5 min default) we sweep
+    SentinelRun for rows in ``running`` state with
+    ``started_at < now - STRANDED_RUN_AGE_MINUTES`` (20 min default)
+    and stamp them ``error`` with a clear summary.
+
+    Forward-compatible with the ``/complete`` error → real outcome
+    upgrade path: if the agent later succeeds for a reaped run,
+    its real outcome lands instead of being trapped behind the
+    reaper's defensive ``error`` stamp.
+    """
+    from app.core.sentinel_dispatch import reap_stranded_runs
+    while True:
+        await asyncio.sleep(SENTINEL_REAPER_INTERVAL_SECONDS)
+        try:
+            db = SessionLocal()
+            try:
+                summary = reap_stranded_runs(db)
+                if summary.get("reaped", 0) > 0:
+                    logger.info(
+                        "[SentinelReaper] Reaped %d stranded run(s): %s",
+                        summary["reaped"],
+                        ",".join(summary.get("ids", [])),
+                    )
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("[SentinelReaper] Sweep failed")
 
 
 # ── Pre-auth rate limit for the /mcp/ ASGI mount ──────────────────────

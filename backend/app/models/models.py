@@ -1148,11 +1148,57 @@ class SentinelRun(Base):
         return []
 
     def set_tool_trace(self, trace: list[dict]) -> None:
-        # Truncate to last 50 entries to keep row sizes bounded once
-        # the agent starts producing real traces.
+        """Truncate trace to keep row sizes bounded.
+
+        Two layers of cap:
+
+        1. **Last 50 entries** — protects against a runaway agent that
+           emits hundreds of tool calls before terminating.
+        2. **Per-entry size limits** — protects against a single tool
+           result that's huge (e.g. a leaked agent posting a multi-MB
+           blob in `result`).  Without this, 50 × N-MB entries would
+           bloat the SentinelRun row to N × 50 MB.
+
+        Per-entry caps mirror what the Sentinel agent already does
+        in `agent.py:_sanitize_args` + the 800-char result truncation
+        in the trace builder, so a well-behaved agent's output is
+        unchanged; this is purely a server-side belt for misbehaving
+        clients.
+        """
         import json as _json
-        trimmed = list(trace)[-50:]
-        self.tool_trace = _json.dumps(trimmed)
+
+        def _cap_str(value, limit: int) -> str:
+            if not isinstance(value, str):
+                value = str(value)
+            return value if len(value) <= limit else value[:limit] + "…"
+
+        sanitized: list[dict] = []
+        for entry in list(trace)[-50:]:
+            if not isinstance(entry, dict):
+                continue
+            tool_name = _cap_str(entry.get("tool", ""), 200)
+            result_text = _cap_str(entry.get("result", ""), 1000)
+            raw_args = entry.get("args", {})
+            if not isinstance(raw_args, dict):
+                raw_args = {}
+            try:
+                args_json = _json.dumps(raw_args, default=str)
+            except (TypeError, ValueError):
+                args_json = "{}"
+            if len(args_json) > 1500:
+                args_json = args_json[:1500] + "…"
+                # Re-emit as a string blob — the JSON would no longer
+                # parse if we stuffed it back as a dict, and the trace
+                # consumer (UI run drawer) treats `args` as opaque.
+                args_payload: object = {"_truncated": args_json}
+            else:
+                args_payload = raw_args
+            sanitized.append({
+                "tool": tool_name,
+                "args": args_payload,
+                "result": result_text,
+            })
+        self.tool_trace = _json.dumps(sanitized)
 
     def to_dict(self, include_trace: bool = False) -> dict:
         d = {

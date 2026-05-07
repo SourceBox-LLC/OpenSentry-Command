@@ -46,7 +46,7 @@ from app.core.sentinel_dispatch import (
     dispatch_manual_run,
     runs_used_this_month,
 )
-from app.models.models import Incident, SentinelConfig, SentinelRun
+from app.models.models import Incident, SentinelConfig, SentinelRun, Setting
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sentinel", tags=["sentinel"])
@@ -260,9 +260,13 @@ async def list_runs(
     if since:
         try:
             since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
-            # Strip tz to match the naive datetimes stored in the column.
+            # If the client sent a tz-aware timestamp, convert to UTC
+            # FIRST and then strip tz to match the naive UTC datetimes
+            # stored in the column.  Previously the tz was just dropped,
+            # so e.g. '2026-05-07T15:00-05:00' was queried as 15:00 UTC
+            # instead of 20:00 UTC — off by the offset.
             if since_dt.tzinfo is not None:
-                since_dt = since_dt.replace(tzinfo=None)
+                since_dt = since_dt.astimezone(UTC).replace(tzinfo=None)
             q = q.filter(SentinelRun.triggered_at >= since_dt)
         except ValueError as exc:
             raise HTTPException(400, "invalid `since` — expected ISO datetime") from exc
@@ -275,9 +279,24 @@ async def list_runs(
         .all()
     )
 
-    # Small inline stats.
-    today_start = datetime.now(tz=UTC).replace(
-        hour=0, minute=0, second=0, microsecond=0, tzinfo=None
+    # "Today" = midnight in the org's configured timezone, converted
+    # back to UTC for comparison against the naive UTC `triggered_at`
+    # column.  Previously used UTC midnight regardless of the org's
+    # tz, which made "runs today" show the wrong window for any
+    # non-UTC org (an EU user at 06:00 local would miss the six
+    # hours of runs that landed between 23:00 UTC and 05:00 UTC
+    # before the UTC day rolled).
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    tz_name = Setting.get(db, user.org_id, "timezone", "UTC") or "UTC"
+    try:
+        org_tz = ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        org_tz = ZoneInfo("UTC")
+    now_local = datetime.now(tz=org_tz)
+    today_start = (
+        now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        .astimezone(UTC)
+        .replace(tzinfo=None)
     )
     runs_today = (
         base.filter(SentinelRun.triggered_at >= today_start).count()

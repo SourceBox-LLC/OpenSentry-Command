@@ -104,6 +104,18 @@ _CACHE_MAX_CAMERAS = 500
 # them via GET /segment/{filename}.
 #
 # {camera_id: {filename: (bytes_data, monotonic_timestamp)}}
+#
+# **Multi-tenant safety**: keyed by `camera_id` alone (not by
+# `(org_id, camera_id)`).  This is safe because `Camera.camera_id`
+# has a DB-level `unique=True` constraint (`models.py:25`) — no two
+# cameras across the entire system can share an id, so the keyspace
+# is implicitly org-namespaced.  Every read path also performs an
+# org-scoped Camera lookup before touching the cache (e.g.
+# `attach_clip` at `mcp/server.py:_resolve_via_agent_key` →
+# `Camera.filter_by(org_id=, camera_id=)`), so even if uniqueness
+# were ever weakened to a per-org scope, an attacker would have to
+# create a Camera row with the colliding id in their own org first
+# (which is a separate org-scoped insert path that we do gate).
 _segment_cache: dict[str, dict[str, tuple[bytes, float]]] = {}
 
 # Track playlist update count per camera — used to throttle cache eviction sweeps.

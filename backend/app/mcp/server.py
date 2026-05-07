@@ -324,6 +324,14 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
             db.close()
             raise ToolError("Unauthorized: invalid or revoked API key")
 
+        # Stamp the activity-tracker context AS SOON AS the org is
+        # known.  If a later check (plan, rate-limit) raises, the
+        # @tracked decorator's exception path still logs the right
+        # org_id + key_name in McpActivityLog — without this, failed
+        # auth events end up with org_id="" and forensics suffers.
+        _ctx_org_id.set(mcp_key.org_id)
+        _ctx_key_name.set(mcp_key.name)
+
         # Look up org plan and enforce access + rate limit. Uses the
         # resolver so orgs whose subscription webhook never landed
         # still get checked against the live Clerk subscription state.
@@ -361,10 +369,6 @@ def _resolve_org(headers: dict | None) -> tuple[str, Session]:
         mcp_key.last_used_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
 
-        # Set context vars for the activity tracker
-        _ctx_org_id.set(mcp_key.org_id)
-        _ctx_key_name.set(mcp_key.name)
-
         return mcp_key.org_id, db
     except ToolError:
         raise
@@ -396,6 +400,15 @@ def _resolve_via_agent_key(headers: dict, _agent_key: str) -> tuple[str, Session
         raise ToolError(
             "Unauthorized: agent key requires X-Agent-Org-Override header"
         )
+
+    # Stamp the activity-tracker context AS SOON AS the override org
+    # is known (and the bearer has already matched the agent key, so
+    # `<sentinel-agent>` is the right key_name regardless of which
+    # downstream check passes or fails).  Lets failed-auth events
+    # for plan / config / rate-limit gates land in McpActivityLog
+    # with the right org_id rather than "".
+    _ctx_org_id.set(override_org)
+    _ctx_key_name.set("<sentinel-agent>")
 
     db = SessionLocal()
     try:
@@ -447,11 +460,6 @@ def _resolve_via_agent_key(headers: dict, _agent_key: str) -> tuple[str, Session
                 "Sentinel agent daily cap reached for this org — check the "
                 "agent's run log for a stuck loop."
             )
-
-        # Activity-tracker context — key_name is the audit handle that
-        # surfaces in the MCP activity log.
-        _ctx_org_id.set(override_org)
-        _ctx_key_name.set("<sentinel-agent>")
 
         return override_org, db
     except ToolError:

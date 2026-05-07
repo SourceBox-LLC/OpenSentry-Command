@@ -49,6 +49,18 @@ logger = logging.getLogger(__name__)
 # for the rationale. Hard-coded until slice 5 introduces per-plan caps.
 MONTHLY_RUN_CAP = 300
 
+# Stranded-run reaper threshold.  The agent's wall-clock budget is
+# 540 s (9 min) and the strand-cleanup wrapper marks the in-flight
+# run as `error` on TimeoutError.  But if the agent process crashes
+# (OOM, panic, container kill) before the wrapper fires, the run
+# sits in `running` forever — list_pending only returns `pending`
+# rows and start() doesn't re-claim `running` ones.  The reaper
+# closes that gap by marking anything in `running` for >> the
+# wall-clock budget as errored, so the UI shows it as terminal
+# instead of perpetually-running.  20 min gives the wrapper a
+# generous 11 min buffer past its budget.
+STRANDED_RUN_AGE_MINUTES = 20
+
 
 # Notification kinds that map to a Sentinel trigger.  Keys are
 # notification kind strings; values are the SentinelConfig boolean
@@ -256,6 +268,69 @@ def _can_dispatch_for_kind(
         return False, "monthly_cap_reached"
 
     return True, "ok"
+
+
+def reap_stranded_runs(db: Session) -> dict:
+    """Mark long-stranded `running` rows as errored.
+
+    Background-task entry point.  Finds SentinelRun rows where:
+      - `outcome == 'running'`, AND
+      - `started_at < now - STRANDED_RUN_AGE_MINUTES`
+
+    ...and stamps them as `outcome='error'` with a clear summary.
+    Belt-and-suspenders for cases the agent's own strand-cleanup
+    wrapper can't handle:
+
+      - Agent process crashed mid-run (OOM, panic, container kill)
+        before `process_with_timeout`'s except-TimeoutError block
+        fired
+      - Agent machine was force-stopped (Fly preemption, network
+        partition long enough that the cleanup POST itself failed)
+      - The run was claimed via /start, then the wakeup HTTP
+        connection dropped before the agent finished
+
+    Without this loop those runs sit at `outcome='running'` forever
+    — list_pending only returns `pending`, start() doesn't re-claim
+    `running`, and the UI shows a perpetually-spinning indicator.
+
+    Forward-compatible with the /complete error → real upgrade path
+    (sentinel.py:post_run_complete): if the agent later actually
+    completes the run after the reaper stamped it errored, the real
+    outcome (`incident` / `no_action`) replaces the reaper's `error`.
+
+    Returns ``{"reaped": <count>}`` for the caller's log line.
+    Cross-org by design — the reaper is a system-level sweep.
+    """
+    cutoff = datetime.now(tz=UTC).replace(tzinfo=None) - timedelta(
+        minutes=STRANDED_RUN_AGE_MINUTES
+    )
+    stranded = (
+        db.query(SentinelRun)
+        .filter(
+            SentinelRun.outcome == "running",
+            SentinelRun.started_at != None,  # noqa: E711 — SQLAlchemy IS NOT NULL
+            SentinelRun.started_at < cutoff,
+        )
+        .all()
+    )
+    if not stranded:
+        return {"reaped": 0}
+
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
+    for row in stranded:
+        row.outcome = "error"
+        row.summary = (
+            f"Stranded — agent never completed within "
+            f"{STRANDED_RUN_AGE_MINUTES} min.  Reaped automatically."
+        )
+        row.completed_at = now
+    db.commit()
+
+    logger.warning(
+        "sentinel: reaper marked %d stranded run(s) as error",
+        len(stranded),
+    )
+    return {"reaped": len(stranded), "ids": [r.id for r in stranded]}
 
 
 def _commit_run_with_cap_check(
