@@ -1090,13 +1090,34 @@ class SentinelRun(Base):
     camera_id = Column(String(100), nullable=True, index=True)
 
     tool_call_count = Column(Integer, default=0, nullable=False)
-    # Outcome: incident | no_action | error
+    # Unified state field.  Values:
+    #   pending   — created by the dispatcher (notification hook /
+    #               manual run / scheduled cron); not yet picked up
+    #               by the agent.
+    #   running   — agent has claimed the run and is working on it.
+    #               (Optional intermediate state; the agent may jump
+    #               straight to a terminal outcome.)
+    #   incident  — terminal: agent filed an incident.
+    #   no_action — terminal: agent decided not to file.
+    #   error     — terminal: agent errored mid-run.
+    # Slice 1 used this column only for terminal outcomes; slice 2
+    # widens it to cover the pending-run state machine.
     outcome = Column(String(20), nullable=False)
     # Severity if outcome=incident: low | medium | high (else NULL)
     severity = Column(String(20), nullable=True)
     # Foreign reference to the filed incident (no FK constraint —
     # see class docstring).
     incident_id = Column(Integer, nullable=True)
+
+    # When the agent picked up the run (entered running state) and
+    # when it finished.  Both nullable for pending runs.
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    # Operator-provided prompt for trigger_type=manual runs (the text
+    # the user typed in the "Run now" modal).  NULL for automated
+    # triggers (motion / incident_opened / scheduled).
+    manual_prompt = Column(Text, nullable=True)
 
     # Human-readable agent reasoning summary (the body of what the
     # agent concluded).  Truncated server-side to ~2KB at write time
@@ -1143,10 +1164,18 @@ class SentinelRun(Base):
             "outcome": self.outcome,
             "severity": self.severity,
             "incident_id": self.incident_id,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "manual_prompt": self.manual_prompt,
             "summary": self.summary or "",
         }
         if include_trace:
             d["tool_trace"] = self.get_tool_trace()
         return d
+
+    @property
+    def is_terminal(self) -> bool:
+        """True when the run has reached a final outcome."""
+        return self.outcome in ("incident", "no_action", "error")
 
 

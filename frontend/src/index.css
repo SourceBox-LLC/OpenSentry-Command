@@ -8401,6 +8401,22 @@ body {
     color: #f87171;
 }
 
+/* Pending = run created, not yet picked up by the agent. Slow blue
+   pulse so the operator can tell it's actively in the queue without
+   competing with the active-armed pulse on the hero. */
+.sentinel-outcome-chip-pending {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+/* Running = agent has claimed the run and is investigating.  Same
+   accent as pending but slightly brighter — visually adjacent so
+   pending → running feels like the same lane. */
+.sentinel-outcome-chip-running {
+    background: rgba(59, 130, 246, 0.22);
+    color: #93c5fd;
+}
+
 /* ── overview tab ───────────────────────────────────────────────── */
 .sentinel-overview-grid {
     display: grid;
@@ -8601,6 +8617,35 @@ body {
 .sentinel-timeline-dot-error {
     background: #ef4444;
     box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.6);
+}
+
+@keyframes sentinel-pending-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.6), 0 0 6px rgba(59, 130, 246, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0), 0 0 12px rgba(59, 130, 246, 0.7);
+    }
+}
+
+.sentinel-timeline-dot-pending {
+    background: #3b82f6;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.6), 0 0 6px rgba(59, 130, 246, 0.4);
+    animation: sentinel-pending-pulse 2.4s ease-in-out infinite;
+}
+
+.sentinel-timeline-dot-running {
+    background: #60a5fa;
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.7), 0 0 10px rgba(96, 165, 250, 0.55);
+    animation: sentinel-pending-pulse 1.6s ease-in-out infinite;
+}
+
+/* Muted summary text for pending/running placeholder lines in the
+   timeline ("Waiting for the agent to pick this up"). Italic to
+   set it apart from real summaries the agent will fill in. */
+.sentinel-timeline-summary-muted {
+    font-style: italic;
+    opacity: 0.75;
 }
 
 .sentinel-timeline-connector {

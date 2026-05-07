@@ -575,3 +575,17 @@ export async function getSentinelRun(getToken, runId) {
     getToken,
   )
 }
+
+// Operator-initiated agent run.  Creates a pending sentinel_runs row;
+// the agent (when it ships) picks it up and posts back via /complete.
+// Pro Plus only — 402 otherwise.  Cap-enforced — 429 if the org is
+// at the monthly limit.
+export async function dispatchSentinelManualRun(getToken, { prompt, cameraId } = {}) {
+  return fetchWithAuth("/api/sentinel/runs/manual", getToken, {
+    method: "POST",
+    body: JSON.stringify({
+      prompt: prompt || "",
+      camera_id: cameraId || null,
+    }),
+  })
+}

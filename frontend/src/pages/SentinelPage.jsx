@@ -7,6 +7,7 @@ import {
   getSentinelRuns,
   getSentinelRun,
   getCameras,
+  dispatchSentinelManualRun,
 } from "../services/api"
 import { useToasts } from "../hooks/useToasts.jsx"
 
@@ -116,7 +117,28 @@ function formatRunTimestamp(iso) {
 function outcomeDotClass(run) {
   if (run.outcome === "incident") return `sentinel-timeline-dot-incident sentinel-severity-${run.severity || "low"}`
   if (run.outcome === "error") return "sentinel-timeline-dot-error"
+  if (run.outcome === "pending") return "sentinel-timeline-dot-pending"
+  if (run.outcome === "running") return "sentinel-timeline-dot-running"
   return "sentinel-timeline-dot-noop"
+}
+
+function isPendingOrRunning(run) {
+  return run.outcome === "pending" || run.outcome === "running"
+}
+
+// Returns the display label and chip class for the run's outcome.
+function outcomeChip(run) {
+  if (run.outcome === "incident") {
+    return {
+      label: `incident · ${run.severity || "low"}`,
+      cls: `sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${run.severity || "low"}`,
+    }
+  }
+  if (run.outcome === "no_action") return { label: "no action", cls: "sentinel-outcome-chip sentinel-outcome-chip-noop" }
+  if (run.outcome === "error") return { label: "errored", cls: "sentinel-outcome-chip sentinel-outcome-chip-error" }
+  if (run.outcome === "pending") return { label: "pending", cls: "sentinel-outcome-chip sentinel-outcome-chip-pending" }
+  if (run.outcome === "running") return { label: "running", cls: "sentinel-outcome-chip sentinel-outcome-chip-running" }
+  return { label: run.outcome || "—", cls: "sentinel-outcome-chip sentinel-outcome-chip-noop" }
 }
 
 // ── main ──────────────────────────────────────────────────────────────
@@ -144,6 +166,11 @@ function SentinelPage() {
 
   // ── advanced cron toggle ────────────────────────────────
   const [showCron, setShowCron] = useState(false)
+
+  // ── manual run modal ───────────────────────────────────
+  const [showRunModal, setShowRunModal] = useState(false)
+  const [manualPrompt, setManualPrompt] = useState("")
+  const [running, setRunning] = useState(false)
 
   // ── run detail drawer ───────────────────────────────────
   const [selectedRunId, setSelectedRunId] = useState(null)
@@ -278,6 +305,39 @@ function SentinelPage() {
     patchConfig({ active_days: next })
   }
 
+  // Manual run dispatch — creates a pending sentinel_runs row.  The
+  // agent (slice 3) picks it up and updates the row to a terminal
+  // outcome.  Until then the row stays pending; UI shows the pending
+  // state and the operator can poke the row via the drawer.
+  function runNow() {
+    if (running) return
+    setRunning(true)
+    dispatchSentinelManualRun(getToken, { prompt: manualPrompt })
+      .then(newRun => {
+        // Prepend the new run so it shows up at the top of the timeline
+        // immediately.  The agent will update it later.
+        setRuns(prev => [newRun, ...prev])
+        setRunStats(prev => ({
+          ...prev,
+          runs_today: (prev.runs_today || 0) + 1,
+          runs_total: (prev.runs_total || 0) + 1,
+          pending: (prev.pending || 0) + 1,
+          remaining_this_month: Math.max(0, (prev.remaining_this_month ?? 300) - 1),
+        }))
+        showToast("Sentinel queued — agent will pick it up", "success")
+        setShowRunModal(false)
+        setManualPrompt("")
+      })
+      .catch(err => {
+        if (err?.code === "monthly_cap_reached") {
+          showToast("Monthly cap reached — try again next month", "error")
+        } else {
+          showToast(err.message || "Couldn't dispatch run", "error")
+        }
+      })
+      .finally(() => setRunning(false))
+  }
+
   // ── render ──────────────────────────────────────────────
   if (loadingConfig) {
     return (
@@ -312,6 +372,7 @@ function SentinelPage() {
         totalCameras={cameras.length}
         lastRun={lastRun}
         interactive={interactive}
+        onRunNow={() => setShowRunModal(true)}
       />
 
       {/* ── tabs ───────────────────────────────────────── */}
@@ -380,13 +441,24 @@ function SentinelPage() {
           onClose={() => setSelectedRunId(null)}
         />
       )}
+
+      {/* ── manual run modal ──────────────────────────── */}
+      {showRunModal && (
+        <ManualRunModal
+          prompt={manualPrompt}
+          setPrompt={setManualPrompt}
+          running={running}
+          onRun={runNow}
+          onClose={() => !running && setShowRunModal(false)}
+        />
+      )}
     </div>
   )
 }
 
 // ── components ────────────────────────────────────────────────────────
 
-function CompactHeader({ enabled, onToggle, triggerCount, scopeCount, totalCameras, lastRun, interactive }) {
+function CompactHeader({ enabled, onToggle, triggerCount, scopeCount, totalCameras, lastRun, interactive, onRunNow }) {
   let lastRunLine
   if (!lastRun) {
     lastRunLine = "No runs yet — Sentinel hasn't responded to any triggers."
@@ -424,8 +496,12 @@ function CompactHeader({ enabled, onToggle, triggerCount, scopeCount, totalCamer
         <button
           type="button"
           className="sentinel-run-now-btn"
-          disabled
-          title="Manual run lands with the Sentinel agent (coming soon)"
+          disabled={!interactive}
+          onClick={onRunNow}
+          title={interactive
+            ? "Queue a one-off agent run with a custom prompt"
+            : "Available on Pro Plus"
+          }
         >
           <span aria-hidden="true">▶</span> Run now
         </button>
@@ -520,26 +596,23 @@ function OverviewTab({ enabled, scopeCount, runs, runStats, loadingRuns, onSelec
                         <span className="sentinel-timeline-tools">{r.tool_call_count} tool{r.tool_call_count === 1 ? "" : "s"}</span>
                       </div>
                       <div className="sentinel-timeline-row2">
-                        {r.outcome === "incident" && (
-                          <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${r.severity || "low"}`}>
-                            incident · {r.severity || "low"}
-                          </span>
-                        )}
-                        {r.outcome === "no_action" && (
-                          <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">
-                            no action
-                          </span>
-                        )}
-                        {r.outcome === "error" && (
-                          <span className="sentinel-outcome-chip sentinel-outcome-chip-error">
-                            errored
-                          </span>
-                        )}
-                        {r.summary && (
-                          <span className="sentinel-timeline-summary">
-                            {r.summary.slice(0, 90)}{r.summary.length > 90 ? "…" : ""}
-                          </span>
-                        )}
+                        {(() => {
+                          const chip = outcomeChip(r)
+                          return <span className={chip.cls}>{chip.label}</span>
+                        })()}
+                        {r.summary
+                          ? (
+                            <span className="sentinel-timeline-summary">
+                              {r.summary.slice(0, 90)}{r.summary.length > 90 ? "…" : ""}
+                            </span>
+                          )
+                          : isPendingOrRunning(r) && (
+                            <span className="sentinel-timeline-summary sentinel-timeline-summary-muted">
+                              {r.outcome === "running"
+                                ? "Agent is investigating…"
+                                : "Waiting for the agent to pick this up"}
+                            </span>
+                          )}
                       </div>
                     </div>
                   </li>
@@ -962,17 +1035,10 @@ function HistoryTab({ runs, loadingRuns, filter, setFilter, search, setSearch, o
                   <td className="sentinel-history-camera">{r.camera_id || "all cameras"}</td>
                   <td className="sentinel-history-tools">{r.tool_call_count}</td>
                   <td>
-                    {r.outcome === "incident" && (
-                      <span className={`sentinel-outcome-chip sentinel-outcome-chip-incident sentinel-severity-${r.severity || "low"}`}>
-                        incident · {r.severity || "low"}
-                      </span>
-                    )}
-                    {r.outcome === "no_action" && (
-                      <span className="sentinel-outcome-chip sentinel-outcome-chip-noop">no action</span>
-                    )}
-                    {r.outcome === "error" && (
-                      <span className="sentinel-outcome-chip sentinel-outcome-chip-error">errored</span>
-                    )}
+                    {(() => {
+                      const chip = outcomeChip(r)
+                      return <span className={chip.cls}>{chip.label}</span>
+                    })()}
                   </td>
                   <td className="sentinel-history-link-cell">
                     <span className="sentinel-history-link">view →</span>
@@ -1060,8 +1126,25 @@ function RunDetailDrawer({ run, loading, onClose }) {
                       errored — see reasoning for details
                     </span>
                   )}
+                  {run.outcome === "pending" && (
+                    <span className="sentinel-outcome-chip sentinel-outcome-chip-pending">
+                      pending — waiting for the agent to pick this up
+                    </span>
+                  )}
+                  {run.outcome === "running" && (
+                    <span className="sentinel-outcome-chip sentinel-outcome-chip-running">
+                      running — agent is investigating
+                    </span>
+                  )}
                 </div>
               </section>
+
+              {run.manual_prompt && (
+                <section className="sentinel-drawer-section">
+                  <h3>Operator prompt</h3>
+                  <p className="sentinel-drawer-reasoning">{run.manual_prompt}</p>
+                </section>
+              )}
 
               {run.summary && (
                 <section className="sentinel-drawer-section">
@@ -1102,6 +1185,50 @@ function RunDetailDrawer({ run, loading, onClose }) {
           </>
         )}
       </aside>
+    </div>
+  )
+}
+
+// ── manual run modal ─────────────────────────────────────────────────
+
+function ManualRunModal({ prompt, setPrompt, running, onRun, onClose }) {
+  return (
+    <div className="sentinel-modal-backdrop" onClick={onClose}>
+      <div className="sentinel-modal" onClick={e => e.stopPropagation()}>
+        <h3>Queue a Sentinel run</h3>
+        <p className="sentinel-modal-desc">
+          Creates a pending run with your prompt. The agent will pick it up,
+          investigate, and update the run with what it found. Same tools,
+          same camera scope, same incident-creation rules — just kicked off
+          manually instead of by a notification.
+        </p>
+        <textarea
+          className="sentinel-modal-input"
+          placeholder="e.g. Check every camera for anything unusual; pay extra attention to the driveway."
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          rows={4}
+          disabled={running}
+        />
+        <div className="sentinel-modal-actions">
+          <button
+            type="button"
+            className="sentinel-modal-btn-ghost"
+            onClick={onClose}
+            disabled={running}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="sentinel-modal-btn-primary"
+            onClick={onRun}
+            disabled={running || !prompt.trim()}
+          >
+            {running ? "Queuing…" : "Queue run"}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

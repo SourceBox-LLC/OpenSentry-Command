@@ -594,6 +594,23 @@ def create_notification(
                 kind,
             )
 
+        # Sentinel agent dispatch — see app/core/sentinel_dispatch.py.
+        # The dispatcher gates on Sentinel config (enabled, trigger
+        # toggles, camera scope, schedule window, monthly cap) and
+        # creates a pending sentinel_runs row when the gate clears.
+        # Best-effort and self-contained: a dispatch failure never
+        # blocks the underlying notification from being delivered.
+        try:
+            from app.core.sentinel_dispatch import maybe_dispatch_for_notification
+            maybe_dispatch_for_notification(
+                session, org_id=org_id, kind=kind, camera_id=camera_id,
+            )
+        except Exception:
+            logger.exception(
+                "[Notifications] sentinel dispatch failed for kind=%s",
+                kind,
+            )
+
         return notif
     except Exception:
         logger.exception("[Notifications] Failed to create notification")

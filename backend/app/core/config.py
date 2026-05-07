@@ -138,5 +138,17 @@ class Config:
         """
         return bool(cls.RESEND_API_KEY and cls.EMAIL_FROM_ADDRESS)
 
+    # ── Sentinel agent service-to-service auth ────────────────────────
+    # The Sentinel agent (separate Fly app, ships in slice 3) calls
+    # back to /api/sentinel/runs/{id}/complete to update pending runs
+    # with their final outcome + tool trace.  Authenticated via this
+    # shared secret in the X-Sentinel-Agent-Key header.
+    #
+    # Set via Fly secret in production; left blank in local dev so the
+    # endpoint hard-rejects everything until a key is configured.
+    # Org scope comes from the run row itself (the URL path), not the
+    # auth — the agent is org-agnostic at the auth layer.
+    SENTINEL_AGENT_KEY: str = os.getenv("SENTINEL_AGENT_KEY", "")
+
 
 settings = Config()

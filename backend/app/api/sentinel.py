@@ -31,14 +31,20 @@ import logging
 from datetime import UTC, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.auth import AuthUser, require_admin, require_view
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.plans import effective_plan_for_caps, get_plan_display_name
+from app.core.sentinel_dispatch import (
+    MONTHLY_RUN_CAP,
+    dispatch_manual_run,
+    runs_used_this_month,
+)
 from app.models.models import SentinelConfig, SentinelRun
 
 logger = logging.getLogger(__name__)
@@ -100,6 +106,33 @@ def _validate_hhmm(value: str, field_name: str) -> None:
         raise HTTPException(400, f"{field_name} must be HH:MM") from exc
     if not (0 <= h <= 23 and 0 <= m <= 59):
         raise HTTPException(400, f"{field_name} out of range")
+
+
+# ── Service-to-service auth (Sentinel agent → Command Center) ───────
+# Agent posts run completions back via this header.  Defined BEFORE
+# any route uses it via Depends() so module-load order works out.
+async def require_sentinel_agent(
+    x_sentinel_agent_key: Optional[str] = Header(None, alias="X-Sentinel-Agent-Key"),
+) -> None:
+    """Verify the inbound request carries the shared SENTINEL_AGENT_KEY
+    secret.  Used only for service-to-service callbacks from the
+    Sentinel agent into Command Center (run-completion + pending-run
+    polling).
+
+    Org scope is established by the run row's org_id, not by this
+    auth — the agent is org-agnostic at the auth layer.  Each run
+    record is org-scoped server-side, so a leaked agent key can only
+    update runs that already exist (it can't fabricate a run for a
+    different org).
+
+    Hard-rejects every request when the key isn't configured (empty
+    string), which is the desired behaviour in environments where
+    the agent isn't deployed.
+    """
+    if not settings.SENTINEL_AGENT_KEY:
+        raise HTTPException(401, "agent auth not configured")
+    if not x_sentinel_agent_key or x_sentinel_agent_key != settings.SENTINEL_AGENT_KEY:
+        raise HTTPException(401, "invalid agent key")
 
 
 # ── GET /api/sentinel/config ────────────────────────────────────────
@@ -235,8 +268,7 @@ async def list_runs(
         .all()
     )
 
-    # Small inline stats — avoids a separate /usage endpoint while
-    # the cap framework isn't built yet (slice 5).
+    # Small inline stats.
     today_start = datetime.now(tz=UTC).replace(
         hour=0, minute=0, second=0, microsecond=0, tzinfo=None
     )
@@ -245,6 +277,8 @@ async def list_runs(
     )
 
     incident_count = base.filter(SentinelRun.outcome == "incident").count()
+    pending_count = base.filter(SentinelRun.outcome.in_(("pending", "running"))).count()
+    runs_month = runs_used_this_month(db, user.org_id)
 
     return {
         "runs": [r.to_dict(include_trace=False) for r in rows],
@@ -252,8 +286,51 @@ async def list_runs(
         "stats": {
             "runs_today": runs_today,
             "runs_total": base.count(),
+            "runs_this_month": runs_month,
             "incidents_filed": incident_count,
+            "pending": pending_count,
+            "monthly_cap": MONTHLY_RUN_CAP,
+            "remaining_this_month": max(0, MONTHLY_RUN_CAP - runs_month),
         },
+    }
+
+
+# ── GET /api/sentinel/runs/pending (agent → CC) ─────────────────────
+# REGISTERED BEFORE /runs/{run_id} so the literal "pending" path
+# wins over the parameterised one (FastAPI matches in registration
+# order; otherwise GET /runs/pending would 404 with run_id=pending).
+@router.get("/runs/pending", dependencies=[Depends(require_sentinel_agent)])
+async def list_pending_runs(
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Polling endpoint for the Sentinel agent to discover work.
+
+    Returns up to `limit` pending runs across all orgs, oldest-first
+    (FIFO).  The agent is responsible for calling /start on each one
+    it picks up so others don't race for the same row.
+
+    Slice 3 may swap this for a webhook delivery model — both flows
+    are agent-side concerns; the run record contract stays the same.
+    """
+    rows = (
+        db.query(SentinelRun)
+        .filter(SentinelRun.outcome == "pending")
+        .order_by(SentinelRun.triggered_at.asc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "runs": [
+            {
+                **r.to_dict(include_trace=False),
+                # Agent needs the org_id to know which MCP key to use
+                # — surfaced explicitly because to_dict() doesn't
+                # include it (UI doesn't need it).
+                "org_id": r.org_id,
+            }
+            for r in rows
+        ],
     }
 
 
@@ -273,3 +350,146 @@ async def get_run(
     if row is None:
         raise HTTPException(404, "run not found")
     return row.to_dict(include_trace=True)
+
+
+# ── POST /api/sentinel/runs/manual ──────────────────────────────────
+class ManualRunBody(BaseModel):
+    prompt: str = Field("", max_length=2000)
+    camera_id: Optional[str] = None
+
+
+@router.post("/runs/manual")
+async def post_manual_run(
+    body: ManualRunBody,
+    request: Request,
+    user: AuthUser = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Operator-initiated agent run.  Creates a pending sentinel_runs
+    row that the agent picks up when it ships (slice 3); meanwhile
+    rows queue and the UI shows pending state.
+
+    Pro Plus only.  Cap-enforced.  Schedule + scope are deliberately
+    NOT enforced — the operator clicked "Run now" to override them.
+    """
+    if effective_plan_for_caps(db, user.org_id) != "pro_plus":
+        raise HTTPException(
+            status_code=402,
+            detail={"error": "plan_required", "plan": "pro_plus"},
+        )
+
+    try:
+        run = dispatch_manual_run(
+            db,
+            org_id=user.org_id,
+            prompt=body.prompt,
+            camera_id=body.camera_id,
+        )
+    except ValueError as exc:
+        if str(exc) == "monthly_cap_reached":
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "monthly_cap_reached",
+                    "cap": MONTHLY_RUN_CAP,
+                    "used": runs_used_this_month(db, user.org_id),
+                },
+            ) from exc
+        raise
+
+    write_audit(
+        db,
+        org_id=user.org_id,
+        event="sentinel_manual_run",
+        user_id=user.user_id,
+        username=user.email or user.username,
+        details=f"run_id={run.id} camera={body.camera_id or '-'} prompt_len={len(body.prompt or '')}",
+        request=request,
+    )
+    return run.to_dict(include_trace=False)
+
+
+# ── POST /api/sentinel/runs/{id}/complete (agent → CC) ──────────────
+class RunCompleteBody(BaseModel):
+    outcome: str  # incident | no_action | error
+    severity: Optional[str] = None  # low | medium | high (only when outcome=incident)
+    incident_id: Optional[int] = None
+    summary: str = Field("", max_length=8000)
+    tool_call_count: int = 0
+    tool_trace: Optional[list[dict]] = None
+
+
+_VALID_TERMINAL_OUTCOMES = {"incident", "no_action", "error"}
+
+
+@router.post("/runs/{run_id}/complete", dependencies=[Depends(require_sentinel_agent)])
+async def post_run_complete(
+    run_id: str,
+    body: RunCompleteBody,
+    db: Session = Depends(get_db),
+):
+    """Agent → Command Center callback to mark a pending/running run
+    as completed.  Idempotent: safe to call twice with the same body
+    (second call is a no-op if the run is already terminal).
+    """
+    if body.outcome not in _VALID_TERMINAL_OUTCOMES:
+        raise HTTPException(400, f"invalid outcome: {body.outcome!r}")
+    if body.outcome == "incident" and body.severity not in ("low", "medium", "high"):
+        raise HTTPException(400, "severity required for outcome=incident")
+
+    row = db.query(SentinelRun).filter_by(id=run_id).first()
+    if row is None:
+        raise HTTPException(404, "run not found")
+
+    if row.is_terminal:
+        # Idempotent no-op — agent retried.
+        return row.to_dict(include_trace=True)
+
+    now = datetime.now(tz=UTC).replace(tzinfo=None)
+    row.outcome = body.outcome
+    row.severity = body.severity if body.outcome == "incident" else None
+    row.incident_id = body.incident_id if body.outcome == "incident" else None
+    row.summary = (body.summary or "")[:8000]
+    row.tool_call_count = max(0, int(body.tool_call_count or 0))
+    if body.tool_trace is not None:
+        row.set_tool_trace(body.tool_trace)
+    if row.started_at is None:
+        # Agent went straight to terminal without an explicit start
+        # signal — best-effort backfill.
+        row.started_at = now
+    row.completed_at = now
+
+    db.commit()
+    db.refresh(row)
+    logger.info(
+        "sentinel: run completed id=%s org=%s outcome=%s severity=%s",
+        row.id, row.org_id, row.outcome, row.severity,
+    )
+    return row.to_dict(include_trace=True)
+
+
+# ── POST /api/sentinel/runs/{id}/start (agent → CC) ─────────────────
+@router.post("/runs/{run_id}/start", dependencies=[Depends(require_sentinel_agent)])
+async def post_run_start(
+    run_id: str,
+    db: Session = Depends(get_db),
+):
+    """Agent claims a pending run and transitions it to running.
+    Optional — the agent may skip this and jump straight to /complete
+    if it doesn't need a separate "I'm working on it" signal.
+    """
+    row = db.query(SentinelRun).filter_by(id=run_id).first()
+    if row is None:
+        raise HTTPException(404, "run not found")
+    if row.outcome != "pending":
+        # Already past pending — accept idempotently.
+        return row.to_dict(include_trace=False)
+    row.outcome = "running"
+    row.started_at = datetime.now(tz=UTC).replace(tzinfo=None)
+    db.commit()
+    db.refresh(row)
+    return row.to_dict(include_trace=False)
+
+
+# /runs/pending lives above (registered BEFORE /runs/{run_id} due to
+# FastAPI's in-order route matching).
