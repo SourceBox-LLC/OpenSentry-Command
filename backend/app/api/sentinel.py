@@ -27,6 +27,7 @@ Pattern notes:
     (matches email-prefs at notifications.py:1110).
 """
 
+import hmac
 import logging
 from datetime import UTC, datetime
 from typing import Optional
@@ -45,7 +46,7 @@ from app.core.sentinel_dispatch import (
     dispatch_manual_run,
     runs_used_this_month,
 )
-from app.models.models import SentinelConfig, SentinelRun
+from app.models.models import Incident, SentinelConfig, SentinelRun
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sentinel", tags=["sentinel"])
@@ -131,7 +132,13 @@ async def require_sentinel_agent(
     """
     if not settings.SENTINEL_AGENT_KEY:
         raise HTTPException(401, "agent auth not configured")
-    if not x_sentinel_agent_key or x_sentinel_agent_key != settings.SENTINEL_AGENT_KEY:
+    # Constant-time compare so a timing side-channel can't reveal
+    # prefix matches against the configured secret.  Empty header
+    # short-circuits before the compare (compare_digest on length-zero
+    # is False but raises on type mismatch in some Python builds).
+    if not x_sentinel_agent_key or not hmac.compare_digest(
+        x_sentinel_agent_key, settings.SENTINEL_AGENT_KEY
+    ):
         raise HTTPException(401, "invalid agent key")
 
 
@@ -444,6 +451,24 @@ async def post_run_complete(
     if row.is_terminal:
         # Idempotent no-op — agent retried.
         return row.to_dict(include_trace=True)
+
+    # Cross-check that the agent isn't pointing the run at an incident
+    # outside the run's org.  The agent is trusted infrastructure (single
+    # shared key) but a leaked key would let the holder write
+    # `incident_id=<some other org's id>` into a run row, which would
+    # surface as a wrong/foreign deep-link in that org's run drawer.
+    # Defence-in-depth: only accept incident IDs that belong to row.org_id.
+    if body.outcome == "incident" and body.incident_id is not None:
+        owned = (
+            db.query(Incident.id)
+            .filter_by(id=body.incident_id, org_id=row.org_id)
+            .first()
+        )
+        if owned is None:
+            raise HTTPException(
+                400,
+                "incident_id does not belong to this run's org",
+            )
 
     now = datetime.now(tz=UTC).replace(tzinfo=None)
     row.outcome = body.outcome

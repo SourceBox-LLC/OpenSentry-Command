@@ -1426,8 +1426,17 @@ async def attach_snapshot(
             data_mime="image/jpeg",
         )
         db.add(evidence)
-        # Touch parent
-        incident = db.query(Incident).filter_by(id=incident_id).first()
+        # Touch parent.  Org filter is belt-and-suspenders here — the
+        # first session at line ~1408 already verified ownership and
+        # Incident.org_id is functionally immutable in this codebase —
+        # but pinning it on the second-session lookup makes the touch
+        # silently no-op rather than mutate the wrong row in any
+        # future where org_id ever becomes mutable.
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
         if incident:
             incident.updated_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
@@ -1541,7 +1550,14 @@ def attach_clip(
             data_mime=f"video/mp2t;duration={approx_duration}",
         )
         db.add(evidence)
-        incident = db.query(Incident).filter_by(id=incident_id).first()
+        # Touch parent.  Pin org_id on the lookup as belt-and-suspenders;
+        # the first session at line ~1492 already verified ownership and
+        # Incident.org_id is functionally immutable.
+        incident = (
+            db.query(Incident)
+            .filter_by(id=incident_id, org_id=org_id)
+            .first()
+        )
         if incident:
             incident.updated_at = datetime.now(tz=UTC).replace(tzinfo=None)
         db.commit()
