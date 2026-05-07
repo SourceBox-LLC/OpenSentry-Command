@@ -7978,350 +7978,885 @@ body {
     }
 }
 
-/* ── Sentinel (coming soon) page ───────────────────────────────── */
+/* ── Sentinel control page ─────────────────────────────────────────
+   Service-management UI for the autonomous agent. Replaces the v1
+   marketing/coming-soon layout. All controls bind to local React
+   state today; the Preview banner at the top makes that clear. */
 
-.sentinel-page {
-    position: relative;
+.sentinel-control-page {
     max-width: 1100px;
     margin: 0 auto;
-    padding: 2rem 1.5rem 4rem;
-    overflow: hidden;
+    padding: 1.5rem 1.5rem 4rem;
 }
 
-.sentinel-glow {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(120px);
-    pointer-events: none;
-    z-index: 0;
-}
-
-.sentinel-glow-1 {
-    width: 500px;
-    height: 500px;
-    top: -100px;
-    left: -150px;
-    background: rgba(168, 85, 247, 0.1);
-}
-
-.sentinel-glow-2 {
-    width: 400px;
-    height: 400px;
-    top: 200px;
-    right: -100px;
-    background: rgba(59, 130, 246, 0.08);
-}
-
-.sentinel-hero {
-    text-align: center;
-    position: relative;
-    z-index: 1;
-    margin-bottom: 2.5rem;
-}
-
-.sentinel-badge-row {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 1.25rem;
-}
-
-.sentinel-badge {
-    display: inline-block;
-    font-size: 0.65rem;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    padding: 0.35rem 0.85rem;
-    border-radius: 6px;
-    background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(236, 72, 153, 0.2));
-    color: #c084fc;
-    border: 1px solid rgba(192, 132, 252, 0.3);
-    text-shadow: 0 0 8px rgba(192, 132, 252, 0.35);
-}
-
-.sentinel-soon-pill {
-    display: inline-block;
-    font-size: 0.6rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    padding: 0.3rem 0.65rem;
-    border-radius: 999px;
-    background: rgba(245, 158, 11, 0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
-.sentinel-title {
-    font-size: 2.75rem;
-    font-weight: 800;
-    line-height: 1.15;
-    color: var(--text-primary);
-    margin-bottom: 1rem;
-}
-
-.sentinel-title-accent {
-    background: linear-gradient(135deg, #c084fc 0%, #60a5fa 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.sentinel-subtitle {
-    color: var(--text-secondary);
-    font-size: 1.05rem;
-    line-height: 1.65;
-    max-width: 640px;
-    margin: 0 auto;
-}
-
-/* Sentinel hero banner — wide cinematic camera-POV image with AI
-   overlay accents (green corner brackets, purple scan line). Sits
-   between the hero text block and the status card.  Generated via
-   Nano Banana Pro from docs/image-specs/sentinel-hero.json. */
-.sentinel-banner {
-    position: relative;
-    z-index: 1;
-    margin: 0 auto 2.5rem;
-    max-width: 1100px;
-}
-
-.sentinel-banner-image {
-    width: 100%;
-    height: auto;
-    display: block;
-    border-radius: 16px;
-    box-shadow:
-        0 30px 80px rgba(0, 0, 0, 0.7),
-        0 10px 30px rgba(168, 85, 247, 0.12),
-        0 0 0 1px var(--border-color);
-}
-
-.sentinel-banner-caption {
-    margin-top: 0.85rem;
-    text-align: center;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    font-style: italic;
-    letter-spacing: 0.02em;
-}
-
-.sentinel-status-card {
-    position: relative;
-    z-index: 1;
-    max-width: 760px;
-    margin: 0 auto 3rem;
-    background: var(--bg-card);
-    border: 1px solid rgba(192, 132, 252, 0.2);
-    border-radius: 12px;
-    padding: 1.25rem 1.5rem;
+/* ── preview banner ─────────────────────────────────────────────── */
+.sentinel-preview-banner {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.5rem;
+    background: rgba(168, 85, 247, 0.08);
+    border: 1px solid rgba(168, 85, 247, 0.2);
+    border-radius: 10px;
     flex-wrap: wrap;
 }
 
-.sentinel-status-row {
+.sentinel-preview-pill {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    background: rgba(168, 85, 247, 0.2);
+    color: #c084fc;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    flex-shrink: 0;
+}
+
+.sentinel-preview-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.sentinel-preview-link {
+    color: var(--accent-purple);
+    text-decoration: none;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.sentinel-preview-link:hover {
+    text-decoration: underline;
+}
+
+/* ── status header strip ────────────────────────────────────────── */
+.sentinel-status-header {
     display: flex;
     align-items: flex-start;
-    gap: 0.85rem;
+    justify-content: space-between;
+    gap: 2rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    flex-wrap: wrap;
+}
+
+.sentinel-status-header-left {
     flex: 1;
-    min-width: 260px;
+    min-width: 280px;
+}
+
+.sentinel-status-header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1rem;
+    min-width: 200px;
+}
+
+.sentinel-status-pill-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .sentinel-status-dot {
-    width: 10px;
-    height: 10px;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: #c084fc;
-    box-shadow: 0 0 12px rgba(192, 132, 252, 0.6);
+    background: var(--text-muted);
     flex-shrink: 0;
-    margin-top: 6px;
-    animation: sentinel-pulse 2s ease-in-out infinite;
 }
 
-@keyframes sentinel-pulse {
-    0%, 100% { opacity: 1; box-shadow: 0 0 12px rgba(192, 132, 252, 0.6); }
-    50% { opacity: 0.6; box-shadow: 0 0 20px rgba(192, 132, 252, 0.9); }
+.sentinel-status-dot-active {
+    background: var(--accent-green);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
 }
 
-.sentinel-status-text {
+.sentinel-status-dot-paused {
+    background: var(--text-muted);
+}
+
+.sentinel-status-pill-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--text-secondary);
-    font-size: 0.92rem;
-    line-height: 1.6;
 }
 
-.sentinel-status-text strong {
+.sentinel-status-config-summary {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.sentinel-status-title {
+    font-size: 1.85rem;
+    font-weight: 700;
     color: var(--text-primary);
-    font-weight: 600;
+    margin: 0 0 0.4rem;
+    letter-spacing: -0.02em;
 }
 
-.sentinel-status-link {
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: #c084fc;
-    text-decoration: none;
-    white-space: nowrap;
-    padding: 0.5rem 0.9rem;
-    border-radius: 8px;
-    border: 1px solid rgba(192, 132, 252, 0.3);
-    transition: all 0.2s ease;
+.sentinel-status-subtitle {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin: 0 0 1rem;
+    line-height: 1.5;
 }
 
-.sentinel-status-link:hover {
-    background: rgba(192, 132, 252, 0.1);
-    border-color: rgba(192, 132, 252, 0.5);
+.sentinel-status-subtitle-strong {
+    color: var(--text-secondary);
+    font-weight: 500;
 }
 
-.sentinel-features {
-    position: relative;
-    z-index: 1;
-    margin-bottom: 3rem;
+.sentinel-status-stats {
+    display: flex;
+    gap: 1.75rem;
+    flex-wrap: wrap;
 }
 
-.sentinel-features-title {
+.sentinel-status-stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.sentinel-status-stat-value {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--text-primary);
-    text-align: center;
-    margin-bottom: 1.75rem;
+    line-height: 1;
 }
 
-.sentinel-features-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1.25rem;
+.sentinel-status-stat-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 0.25rem;
 }
 
-.sentinel-feature-item {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1.5rem;
-    transition: border-color 0.2s, transform 0.2s;
-}
-
-.sentinel-feature-item:hover {
-    border-color: rgba(192, 132, 252, 0.25);
-    transform: translateY(-2px);
-}
-
-/* Sentinel feature icon badge — same pattern as the landing page,
-   tinted purple to match the Sentinel page's accent palette. */
-.sentinel-feature-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    margin-bottom: 0.85rem;
-    border-radius: 12px;
-    background: linear-gradient(135deg, rgba(168, 85, 247, 0.14), rgba(168, 85, 247, 0.02));
-    border: 1px solid rgba(168, 85, 247, 0.30);
-    color: var(--accent-purple);
-    transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.sentinel-feature-icon svg {
-    width: 24px;
-    height: 24px;
-}
-
-.sentinel-feature-item:hover .sentinel-feature-icon {
-    transform: translateY(-2px);
-    border-color: rgba(168, 85, 247, 0.50);
-}
-
-.sentinel-feature-item h3 {
-    font-size: 0.95rem;
+.sentinel-run-now-btn {
+    padding: 0.5rem 1.1rem;
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    border-radius: 8px;
+    font-size: 0.85rem;
     font-weight: 600;
-    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.sentinel-run-now-btn:hover {
+    background: rgba(168, 85, 247, 0.25);
+    border-color: rgba(168, 85, 247, 0.6);
+}
+
+.sentinel-master-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: default;
+}
+
+.sentinel-master-toggle-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* ── shared section wrapper ─────────────────────────────────────── */
+.sentinel-section {
+    /* extends .settings-section — no overrides needed at the moment */
+}
+
+.sentinel-section-header {
+    margin-bottom: 1rem;
+}
+
+.sentinel-section-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.sentinel-section-header h2 {
+    font-size: 1rem;
     margin-bottom: 0.4rem;
 }
 
-.sentinel-feature-item p {
-    font-size: 0.82rem;
+/* ── triggers ───────────────────────────────────────────────────── */
+.sentinel-trigger-row {
+    display: flex;
+    flex-direction: column;
+}
+
+.sentinel-trigger-row-main {
+    cursor: pointer;
+}
+
+.sentinel-trigger-extras {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 0.85rem 1rem 1rem;
+    margin: -2px 0 4px;
+    background: rgba(168, 85, 247, 0.04);
+    border: 1px solid rgba(168, 85, 247, 0.15);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+}
+
+.sentinel-trigger-extra {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.sentinel-trigger-extra > label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sentinel-trigger-cooldown {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sentinel-trigger-cooldown input {
+    width: 70px;
+    padding: 0.4rem 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+.sentinel-trigger-cooldown span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.sentinel-trigger-extra-help {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* ── schedule ───────────────────────────────────────────────────── */
+.sentinel-schedule-radio-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.sentinel-schedule-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    padding: 0.85rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.sentinel-schedule-radio:hover {
+    border-color: rgba(168, 85, 247, 0.3);
+}
+
+.sentinel-schedule-radio.active {
+    border-color: rgba(168, 85, 247, 0.5);
+    background: rgba(168, 85, 247, 0.06);
+}
+
+.sentinel-schedule-radio input[type="radio"] {
+    margin-top: 2px;
+    accent-color: var(--accent-purple);
+}
+
+.sentinel-schedule-radio-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.sentinel-schedule-radio-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sentinel-schedule-radio-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.sentinel-schedule-window {
+    padding: 1.25rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.sentinel-schedule-window-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.sentinel-schedule-time {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.sentinel-schedule-time label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sentinel-schedule-time input {
+    padding: 0.4rem 0.6rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    color-scheme: dark;
+}
+
+.sentinel-schedule-tz {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+}
+
+.sentinel-schedule-days {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.sentinel-schedule-days-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sentinel-schedule-days-chips {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.sentinel-day-chip {
+    padding: 0.4rem 0.85rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.sentinel-day-chip:hover {
+    border-color: rgba(168, 85, 247, 0.3);
+    color: var(--text-secondary);
+}
+
+.sentinel-day-chip.active {
+    background: rgba(168, 85, 247, 0.18);
+    border-color: rgba(168, 85, 247, 0.5);
+    color: #c084fc;
+}
+
+.sentinel-schedule-cron-toggle {
+    margin-bottom: 0.5rem;
+}
+
+.sentinel-link-button {
+    background: none;
+    border: none;
+    color: var(--accent-purple);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+}
+
+.sentinel-link-button:hover {
+    text-decoration: underline;
+}
+
+.sentinel-schedule-cron {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.sentinel-schedule-cron label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sentinel-schedule-cron input {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.85rem;
+    width: 100%;
+    max-width: 300px;
+}
+
+.sentinel-help-text {
+    margin: 0.25rem 0 0;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* ── camera scope ───────────────────────────────────────────────── */
+.sentinel-scope-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+.sentinel-scope-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.sentinel-scope-row-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.sentinel-scope-row-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.sentinel-scope-row-loc {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+/* ── run history ────────────────────────────────────────────────── */
+.sentinel-history-filters {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.sentinel-history-filter-chip {
+    padding: 0.35rem 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.sentinel-history-filter-chip:hover {
+    color: var(--text-secondary);
+}
+
+.sentinel-history-filter-chip.active {
+    background: rgba(168, 85, 247, 0.18);
+    border-color: rgba(168, 85, 247, 0.4);
+    color: #c084fc;
+}
+
+.sentinel-runs-table-wrap {
+    overflow-x: auto;
+    margin: 0 -0.5rem;
+}
+
+.sentinel-runs-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+}
+
+.sentinel-runs-table thead th {
+    text-align: left;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sentinel-runs-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.sentinel-runs-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.sentinel-runs-table tbody td {
+    padding: 0.7rem 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    vertical-align: middle;
+}
+
+.sentinel-runs-when {
+    color: var(--text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.sentinel-runs-trigger {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    text-transform: lowercase;
+    font-variant-caps: all-small-caps;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.sentinel-runs-trigger-motion {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+}
+
+.sentinel-runs-trigger-manual {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+}
+
+.sentinel-runs-trigger-scheduled {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+.sentinel-runs-camera {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.sentinel-runs-tools {
+    text-align: center;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    width: 60px;
+}
+
+.sentinel-runs-outcome {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.sentinel-runs-outcome-incident {
+    background: rgba(34, 197, 94, 0.12);
+    color: var(--accent-green);
+}
+
+.sentinel-runs-outcome-incident.sentinel-severity-medium {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+}
+
+.sentinel-runs-outcome-incident.sentinel-severity-high {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.sentinel-runs-outcome-noop {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+}
+
+.sentinel-runs-outcome-error {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.sentinel-runs-link-cell {
+    text-align: right;
+    width: 110px;
+}
+
+.sentinel-runs-link {
+    font-size: 0.78rem;
+    color: var(--accent-purple);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.sentinel-runs-link:hover {
+    text-decoration: underline;
+}
+
+/* ── usage footer ───────────────────────────────────────────────── */
+.sentinel-usage-section {
+    /* hooks for future per-section overrides */
+}
+
+.sentinel-usage-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.sentinel-usage-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.85rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+}
+
+.sentinel-usage-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.sentinel-usage-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sentinel-usage-meter {
+    height: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.sentinel-usage-meter-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-green), var(--accent-purple));
+    border-radius: 999px;
+    transition: width 0.3s;
+}
+
+.sentinel-usage-meter-text {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+/* ── manual run modal ───────────────────────────────────────────── */
+.sentinel-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.sentinel-modal {
+    width: 100%;
+    max-width: 520px;
+    background: var(--bg-card);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.sentinel-modal h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.15rem;
+    color: var(--text-primary);
+}
+
+.sentinel-modal-desc {
+    margin: 0 0 1rem;
+    font-size: 0.85rem;
     color: var(--text-muted);
     line-height: 1.55;
 }
 
-.sentinel-roadmap {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-    max-width: 640px;
-    margin: 0 auto;
-    padding: 2rem 1.5rem;
-    border-top: 1px solid var(--border-color);
-}
-
-.sentinel-roadmap-title {
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 0.75rem;
-}
-
-.sentinel-roadmap-text {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.65;
-    margin-bottom: 1.5rem;
-}
-
-.sentinel-roadmap-actions {
-    display: flex;
-    justify-content: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-}
-
-.sentinel-cta {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.65rem 1.25rem;
-    border-radius: 8px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    text-decoration: none;
-    transition: all 0.2s ease;
-}
-
-.sentinel-cta-primary {
-    background: linear-gradient(135deg, #a855f7, #7c3aed);
-    color: #ffffff;
-    border: 1px solid rgba(168, 85, 247, 0.4);
-    box-shadow: 0 4px 14px rgba(168, 85, 247, 0.25);
-}
-
-.sentinel-cta-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
-}
-
-.sentinel-cta-ghost {
-    color: var(--text-secondary);
+.sentinel-modal-input {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    background: var(--bg-card);
-}
-
-.sentinel-cta-ghost:hover {
+    border-radius: 8px;
     color: var(--text-primary);
-    border-color: rgba(255, 255, 255, 0.2);
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 100px;
 }
 
+.sentinel-modal-input:focus {
+    outline: none;
+    border-color: rgba(168, 85, 247, 0.4);
+}
+
+.sentinel-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+.sentinel-modal-btn-ghost,
+.sentinel-modal-btn-primary {
+    padding: 0.55rem 1.1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+}
+
+.sentinel-modal-btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+}
+
+.sentinel-modal-btn-ghost:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.sentinel-modal-btn-primary {
+    background: var(--accent-purple);
+    color: #ffffff;
+    border-color: var(--accent-purple);
+}
+
+.sentinel-modal-btn-primary:hover {
+    filter: brightness(1.1);
+}
+
+.sentinel-modal-btn-primary:disabled,
+.sentinel-modal-btn-ghost:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── responsive ─────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-    .sentinel-title {
-        font-size: 2rem;
+    .sentinel-control-page {
+        padding: 1rem 1rem 3rem;
     }
 
-    .sentinel-features-grid {
+    .sentinel-status-header {
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .sentinel-status-header-right {
+        flex-direction: row;
+        align-items: center;
+        align-self: stretch;
+        justify-content: space-between;
+        min-width: 0;
+    }
+
+    .sentinel-status-stats {
+        gap: 1.25rem;
+    }
+
+    .sentinel-status-stat-value {
+        font-size: 1.25rem;
+    }
+
+    .sentinel-trigger-extras {
         grid-template-columns: 1fr;
     }
 
-    .sentinel-status-card {
+    .sentinel-schedule-radio-row {
+        grid-template-columns: 1fr;
+    }
+
+    .sentinel-scope-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .sentinel-section-header-row {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
+    }
+
+    .sentinel-usage-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .sentinel-modal {
+        padding: 1.25rem;
     }
 }
