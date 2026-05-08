@@ -32,6 +32,7 @@ SourceBox Sentry Command Center is the cloud hub for the SourceBox Sentry ecosys
 - **Email notifications** via Resend — opt-in per-org per-kind, with per-camera cooldown + digest mode for high-volume motion events (12 notification kinds gated by 7 setting toggles)
 - Audit logging for stream access, admin actions, and MCP tool calls
 - MCP server exposing 23 tools (16 read, 7 write) so AI clients can view cameras, file incident reports with snapshots and short video clips, and read back past investigations — with per-key scoping (all / readonly / custom allow-list)
+- **Sentinel AI agent** — webhook-driven serverless agent ([separate repo](https://github.com/SourceBox-LLC/SourceBox-Sentinel)) that auto-investigates motion events and incident_opened notifications using a vision-capable LLM ↔ MCP tool loop. Pro: 100 runs/month. Pro Plus: 500 runs/month. Per-org scoping via signed override header — one deployed agent serves every org with no cross-tenant state.
 
 ---
 
@@ -116,6 +117,8 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 **Email:** Operator-critical notifications (camera offline, CloudNode offline, AI-agent incident, MCP key audit, CloudNode disk warning, member audit, motion w/ digest) flow through `EmailOutbox` → background worker → Resend transactional API. Per-org per-kind opt-in toggles (all default ON except motion, which defaults OFF). See `app/core/email_worker.py` and the `_motion_digest_loop` background task.
 
 **Real-time:** CloudNodes maintain a WebSocket channel (`/ws/node`) used for commands, status, and motion events. The dashboard subscribes to SSE feeds for motion events (`/api/motion/events/stream`), notifications (`/api/notifications/stream`), and MCP activity (`/api/mcp/activity/stream`).
+
+**Sentinel agent:** When a motion or incident_opened notification fires for a Pro/Pro Plus org with Sentinel configured, Command Center inserts a row into a `sentinel_runs` queue and POSTs an HMAC-signed wakeup webhook to the [Sentinel agent](https://github.com/SourceBox-LLC/SourceBox-Sentinel) on Fly.io. The agent boots, drains all pending runs across all orgs (per-call org scoping via `X-Agent-Org-Override` header against `SENTINEL_AGENT_MCP_KEY`), runs the LLM↔MCP loop for each, posts results back via `/api/sentinel/runs/{id}/complete`, then auto-stops. One deployed agent serves every org; per-run isolation comes from fresh MCP client + fresh messages array per run.
 
 ---
 
@@ -269,6 +272,21 @@ Agents author incidents via the MCP write tools below; admins review them from t
 | POST | `/api/notifications/email/preferences` | Admin | Update per-org per-kind email opt-in toggles (audited) |
 | GET | `/api/notifications/email/unsubscribe?t=…` | None (token in URL) | One-click unsubscribe from email footers (signed JWT, rate-limited 60/min) |
 
+### Sentinel (AI agent config + run history)
+
+Per-org config + run lifecycle for the [Sentinel agent](https://github.com/SourceBox-LLC/SourceBox-Sentinel). Admin endpoints surface plan-gated config and recent runs to the dashboard; agent-side endpoints (`/runs/pending`, `/start`, `/complete`) are gated by the shared `SENTINEL_AGENT_KEY` header for service-to-service callbacks.
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/sentinel/config` | User | Get the org's Sentinel config + plan-gated flag + plan-aware monthly cap (always 200; non-Pro/Pro-Plus orgs get a read-only payload) |
+| PATCH | `/api/sentinel/config` | Admin (Pro+) | Partial update — toggles, schedule, scope, motion cooldown |
+| GET | `/api/sentinel/runs` | Admin | List recent runs with stats (runs today/this month/incidents filed/pending, plan-aware monthly cap) |
+| GET | `/api/sentinel/runs/{run_id}` | Admin | Single run with full tool trace |
+| POST | `/api/sentinel/runs/manual` | Admin (Pro+) | Operator "Run now" — bypasses schedule + scope, still cap-enforced |
+| GET | `/api/sentinel/runs/pending` | Sentinel Agent | Drain pending runs (FIFO across all orgs) |
+| POST | `/api/sentinel/runs/{run_id}/start` | Sentinel Agent | Claim a pending run — transitions to `running` |
+| POST | `/api/sentinel/runs/{run_id}/complete` | Sentinel Agent | Post terminal outcome (`incident` / `no_action` / `error`) + tool trace |
+
 ### MCP (for AI clients)
 
 Streamable HTTP MCP server exposing **23 tools** (16 read + 7 write). Requires a Pro or Pro Plus plan + an API key generated from the dashboard. Each key has a scope (`all` / `readonly` / `custom`) enforced server-side by a middleware layer — agents never see or can invoke tools the key isn't scoped for.
@@ -419,10 +437,12 @@ frontend/
     │   ├── LandingPage.jsx         # Public landing page
     │   ├── DashboardPage.jsx       # Camera grid, status, controls
     │   ├── SettingsPage.jsx        # Node + group + recording + danger zone
-    │   ├── McpPage.jsx             # MCP keys + scope picker + agent activity + incident list
+    │   ├── McpPage.jsx             # MCP keys + scope picker + agent activity (live SSE)
+    │   ├── IncidentsPage.jsx       # AI- and human-filed incident reports + create flow
     │   ├── AdminPage.jsx           # Stream logs, MCP activity, audit trail
     │   ├── PricingPage.jsx         # Public pricing
-    │   ├── SentinelPage.jsx        # Public marketing for the Sentinel AI
+    │   ├── SentinelPage.jsx        # Sentinel agent dashboard — config (triggers, schedule,
+    │   │                           #   cooldown, scope), run history, manual "Run now"
     │   ├── LegalPage.jsx           # Terms, privacy, etc. (`/legal/:page`)
     │   ├── DocsPage.jsx            # In-app documentation (owns `/docs`)
     │   ├── SignInPage.jsx / SignUpPage.jsx

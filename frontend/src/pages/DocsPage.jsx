@@ -16,6 +16,7 @@ import Recording from "./docs/Recording"
 import CameraGroups from "./docs/CameraGroups"
 import Notifications from "./docs/Notifications"
 import Mcp from "./docs/Mcp"
+import Sentinel from "./docs/Sentinel"
 import Plans from "./docs/Plans"
 import Architecture from "./docs/Architecture"
 import SecurityProcedures from "./docs/SecurityProcedures"
@@ -57,6 +58,10 @@ function DocsSidebar() {
         <div className="docs-sidebar-group">
           <div className="docs-sidebar-group-label">Integrations</div>
           <a href="#mcp" className="docs-sidebar-link">MCP Integration</a>
+        </div>
+        <div className="docs-sidebar-group">
+          <div className="docs-sidebar-group-label">AI Agent</div>
+          <a href="#sentinel" className="docs-sidebar-link">Sentinel</a>
         </div>
         <div className="docs-sidebar-group">
           <div className="docs-sidebar-group-label">Account & Security</div>
@@ -121,6 +126,7 @@ function DocsPage() {
             <CameraGroups />
             <Notifications />
             <Mcp />
+            <Sentinel />
             <Plans />
             <Architecture />
             <SecurityProcedures />
