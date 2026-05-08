@@ -8,6 +8,7 @@ import {
   VideoIcon,
   KeyIcon,
   CodeIcon,
+  ShieldCheckIcon,
 } from "../components/FeatureIcons.jsx"
 
 function LandingPage() {
@@ -172,6 +173,17 @@ function LandingPage() {
               <p>
                 Give AI tools direct visual access to your cameras via the
                 Model Context Protocol. See what cameras see and control everything through natural language.
+              </p>
+              <span className="landing-feature-badge">PRO</span>
+            </div>
+            <div className="landing-feature-card landing-feature-highlight">
+              <div className="landing-feature-icon"><ShieldCheckIcon /></div>
+              <h3>Sentinel AI Agent</h3>
+              <p>
+                Autonomous AI that investigates motion events on your behalf — views
+                the camera, decides whether what it sees warrants attention, and
+                files a full incident report with snapshot evidence. 100 runs/mo on
+                Pro, 500 on Pro Plus.
               </p>
               <span className="landing-feature-badge">PRO</span>
             </div>
