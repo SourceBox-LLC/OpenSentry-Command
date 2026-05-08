@@ -993,6 +993,77 @@
   color: var(--accent-green);
 }
 
+/* Scrollspy active state — applied by useScrollspy() to whichever
+   sidebar link matches the topmost-visible section in the viewport.
+   Stronger visual than :hover so the user can find their place at
+   a glance.  Left-edge accent bar makes the active group visible
+   from peripheral vision. */
+.docs-sidebar-link.active {
+  background: rgba(34, 197, 94, 0.16);
+  color: var(--accent-green);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent-green);
+}
+
+.docs-sidebar-link.active:hover {
+  background: rgba(34, 197, 94, 0.22);
+}
+
+/* Floating Back-to-top button — DocsPage only.  Fades in once the
+   page is scrolled past ~600px, fades out near the top.  Bottom-right
+   with a generous mobile-safe inset; circular, accent-green, with a
+   subtle elevation shadow that lifts on hover. */
+.docs-back-to-top {
+  position: fixed;
+  right: clamp(1rem, 4vw, 2rem);
+  bottom: clamp(1rem, 4vw, 2rem);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  background: var(--bg-card);
+  color: var(--accent-green);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.15s ease;
+  z-index: 50;
+}
+
+.docs-back-to-top.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.docs-back-to-top:hover {
+  background: rgba(34, 197, 94, 0.16);
+  box-shadow: 0 6px 22px rgba(34, 197, 94, 0.28);
+}
+
+.docs-back-to-top:focus-visible {
+  outline: 2px solid var(--accent-green);
+  outline-offset: 3px;
+}
+
+/* Anchor `#` next to docs headings — make it clearly clickable.
+   Was opacity:0 by default and revealed on h2 hover only; now
+   reveals on h2/h3 hover AND has cursor:pointer so the click-to-
+   copy affordance is discoverable.  Hover state on the anchor
+   itself shifts to the accent color. */
+.docs-anchor {
+  cursor: pointer;
+}
+
+.docs-anchor:hover {
+  color: var(--accent-green) !important;
+}
+
 .docs-concepts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
