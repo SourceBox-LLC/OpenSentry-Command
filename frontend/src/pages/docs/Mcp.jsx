@@ -200,8 +200,8 @@ function Mcp() {
       <h4>Incident reports</h4>
       <p className="docs-subtle">
         Let the agent file, investigate, and read back structured incident reports.
-        Everything written by these tools shows up in the Incidents tab of the dashboard
-        for a human to review.
+        Everything written by these tools shows up on the <strong>Incident Reports</strong> page
+        of the dashboard, alongside human-filed reports, for review.
       </p>
       <div className="docs-mcp-tools">
         <div className="docs-endpoint">

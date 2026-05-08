@@ -140,7 +140,7 @@ function ApiReference() {
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}/evidence/{"{evidence_id}"}/playlist.m3u8</span></div>
       <p>Synthetic single-segment HLS playlist for a clip evidence item, so the dashboard can reuse hls.js to play back captured video with the same JWT auth as the live player.</p>
 
-      <h3>Health & Status</h3>
+      <h3 id="api-health">Health & Status</h3>
       <p>Two unauthenticated endpoints for monitoring. Use the minimal one for load balancers; use the detailed one for status pages and on-call diagnostics.</p>
 
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/health</span></div>

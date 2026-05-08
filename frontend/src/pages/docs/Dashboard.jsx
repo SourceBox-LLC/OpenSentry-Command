@@ -57,10 +57,14 @@ function Dashboard() {
 
       <h3>AI incident reports</h3>
       <p>
-        When an AI client is connected over MCP, it can open structured incident reports
-        on your behalf. Each report has a severity, status, markdown write-up, attached
-        snapshots, video clips, and a timeline of observations — all editable from the
-        Incidents tab in the dashboard.
+        Two paths produce AI-authored incidents: an external <a href="#mcp">MCP client</a>{" "}
+        (Claude Code, Cursor, a custom agent) writing through the MCP tool surface, or
+        the built-in <a href="#sentinel">Sentinel agent</a> firing autonomously on motion
+        or incident_opened events. Each report has a severity, status, markdown
+        write-up, attached snapshots, video clips, and a timeline of observations —
+        all editable from the standalone <strong>Incident Reports</strong> page
+        (<code>/incidents</code>), where AI- and human-filed reports sit side-by-side
+        with a source filter.
       </p>
       <figure className="docs-diagram">
         <picture>
@@ -86,7 +90,7 @@ function Dashboard() {
           as they check other feeds.</li>
         <li><strong>Finalize</strong> — A markdown report is written at the end with what was
           seen, what was ruled out, and any recommended actions.</li>
-        <li><strong>Review</strong> — Humans open the Incidents tab, read the report, view the
+        <li><strong>Review</strong> — Humans open <strong>Incident Reports</strong>, read the report, view the
           evidence thumbnails, play back the captured clips, and mark each incident
           acknowledged, resolved, or dismissed.</li>
         <li><strong>Look back</strong> — Agents can also list and re-read past incidents

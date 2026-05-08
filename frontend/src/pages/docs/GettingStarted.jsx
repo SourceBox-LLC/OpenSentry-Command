@@ -55,7 +55,7 @@ function GettingStarted() {
           <h4>Incident</h4>
           <p>A structured report file opened by a human or an AI agent. Holds a
           severity, status, markdown write-up, attached snapshots and clips, and
-          a timeline of observations. Shows up in the Incidents tab.</p>
+          a timeline of observations. Shows up on the Incident Reports page.</p>
         </div>
         <div className="docs-concept">
           <h4>MCP key</h4>

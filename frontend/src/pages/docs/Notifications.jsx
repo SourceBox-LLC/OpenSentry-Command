@@ -48,7 +48,7 @@ function Notifications() {
         <li><strong>Camera offline</strong> — A camera on an online node stopped reporting segments (cable unplugged, USB error, camera held open by another app).</li>
         <li><strong>Camera recovered</strong> — A previously offline camera started reporting segments again.</li>
         <li><strong>Motion detected</strong> — A camera's FFmpeg scene-change scorer crossed the configured threshold. See <a href="#motion-detection">Motion Detection</a>.</li>
-        <li><strong>Incident opened</strong> — A human or MCP agent filed a new incident report.</li>
+        <li><strong>Incident opened</strong> — A human, an MCP-connected AI tool, or the <a href="#sentinel">Sentinel agent</a> filed a new incident report.</li>
         <li><strong>MCP API key created</strong> — An admin generated a new MCP API key (full programmatic access to cameras + nodes + incidents). Security-audit signal.</li>
         <li><strong>MCP API key revoked</strong> — An admin revoked an existing MCP key. Paired with the create event so the audit trail is symmetric.</li>
         <li><strong>CloudNode disk almost full</strong> — Your CloudNode hardware crossed 90% disk usage. Recordings will fail when the disk caps out. Customer-actionable (clean up files, expand storage).</li>
@@ -92,7 +92,7 @@ function Notifications() {
           <a href="#api-health">/api/health/detailed</a> and Sentry, not customer
           notifications.
         </li>
-        <li><strong>Incidents tab</strong> — Any notification filed as an incident appears there for triage.</li>
+        <li><strong>Incident Reports page</strong> (<code>/incidents</code>) — Any notification filed as an incident appears there for triage, alongside human-filed reports.</li>
         <li><strong>MCP tool log</strong> — Admin dashboard shows every MCP call, including ones that fired on a motion event.</li>
       </ul>
 

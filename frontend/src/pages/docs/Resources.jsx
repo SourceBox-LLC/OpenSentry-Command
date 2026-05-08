@@ -13,6 +13,11 @@ function Resources() {
           <h3>CloudNode</h3>
           <p>Source code on GitHub</p>
         </a>
+        <a href="https://github.com/SourceBox-LLC/SourceBox-Sentinel" target="_blank" rel="noopener noreferrer" className="docs-resource-card">
+          <div className="docs-resource-icon">🛡️</div>
+          <h3>Sentinel agent</h3>
+          <p>Serverless AI agent — source on GitHub</p>
+        </a>
         <a href="https://github.com/SourceBox-LLC/OpenSentry-Command/issues" target="_blank" rel="noopener noreferrer" className="docs-resource-card">
           <div className="docs-resource-icon">🐛</div>
           <h3>Report Issue</h3>
