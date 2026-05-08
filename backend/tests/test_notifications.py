@@ -1098,7 +1098,9 @@ def test_post_email_preferences_writes_audit(admin_client, db):
     )
     assert audit is not None
     assert audit.org_id == "org_test123"
-    assert "email_camera_offline=False" in (audit.details or "")
+    import json
+    parsed = json.loads(audit.details or "{}")
+    assert "email_camera_offline=False" in parsed.get("changes", [])
 
 
 def test_post_email_preferences_requires_admin(viewer_client):
@@ -1151,7 +1153,12 @@ def test_unsubscribe_endpoint_writes_audit(unauthenticated_client, db):
     )
     assert audit is not None
     assert audit.org_id == "org_test123"
-    assert "kind=node_offline" in (audit.details or "")
+    # details is a JSON-serialised dict — parse it rather than substring-
+    # matching so a key rename surfaces here as a clear failure.
+    import json
+    parsed = json.loads(audit.details or "{}")
+    assert parsed["kind"] == "node_offline"
+    assert parsed["via_link"] is True
 
 
 def test_unsubscribe_endpoint_renders_friendly_html(unauthenticated_client):

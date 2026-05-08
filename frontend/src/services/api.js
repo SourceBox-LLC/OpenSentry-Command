@@ -252,7 +252,7 @@ export async function setRecording(getToken, cameraId, recording) {
 // Audit logs (admin only)
 export async function getStreamLogs(getToken, params = {}) {
   const queryString = new URLSearchParams(
-    Object.entries(params).filter(([_, v]) => v != null)
+    Object.entries(params).filter(([_, v]) => v != null && v !== "")
   ).toString()
   return fetchWithAuth(`/api/audit/stream-logs?${queryString}`, getToken)
 }

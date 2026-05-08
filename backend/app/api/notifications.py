@@ -1131,7 +1131,7 @@ async def update_email_preferences(
             event="email_prefs_updated",
             user_id=user.user_id,
             username=user.email or user.username,
-            details=", ".join(changes),
+            details={"changes": changes},
             request=request,
         )
 
@@ -1271,7 +1271,7 @@ async def email_unsubscribe(
     try:
         write_audit(
             db, org_id=org_id, event="email_unsubscribed",
-            details=f"kind={kind} via_link=true",
+            details={"kind": kind, "via_link": True},
         )
     except Exception:
         logger.exception("[Unsubscribe] audit write failed")

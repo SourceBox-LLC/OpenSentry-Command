@@ -242,7 +242,7 @@ async def patch_config(
             event="sentinel_config_updated",
             user_id=user.user_id,
             username=user.email or user.username,
-            details=", ".join(changes),
+            details={"changes": changes},
             request=request,
         )
 
@@ -452,7 +452,11 @@ async def post_manual_run(
         event="sentinel_manual_run",
         user_id=user.user_id,
         username=user.email or user.username,
-        details=f"run_id={run.id} camera={body.camera_id or '-'} prompt_len={len(body.prompt or '')}",
+        details={
+            "run_id": run.id,
+            "camera_id": body.camera_id or None,
+            "prompt_len": len(body.prompt or ""),
+        },
         request=request,
     )
     return run.to_dict(include_trace=False)

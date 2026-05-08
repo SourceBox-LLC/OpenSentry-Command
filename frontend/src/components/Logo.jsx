@@ -10,14 +10,15 @@
 // optically — see /favicon.svg for a thicker monochrome variant
 // tuned for 16-32px tab rendering.
 
-let gradId = 0
+import { useId } from "react"
 
 export function LogoMark({ size = 32, monochrome = false, ...props }) {
   // Each instance gets a unique gradient id so multiple Marks on the
   // same page (header + footer + sign-in panel) don't share + clobber
-  // each other's <defs>.
-  gradId += 1
-  const id = `sbs-logo-grad-${gradId}`
+  // each other's <defs>.  useId() is SSR/concurrent-safe; previous
+  // module-scope counter mutated during render and could drift between
+  // server + client.
+  const id = `sbs-logo-grad-${useId()}`
 
   const strokeFill = monochrome ? "#22c55e" : `url(#${id})`
 
