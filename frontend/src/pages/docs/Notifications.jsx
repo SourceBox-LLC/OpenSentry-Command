@@ -14,7 +14,7 @@ function Notifications() {
           <source srcSet="/images/notifications-fanout.webp" type="image/webp" />
           <img
             src="/images/notifications-fanout.jpg"
-            alt="Notifications fan-out: a single platform event passes through the audience filter (admin-only vs all members), then fans out to four channels — In-app inbox (SSE, real-time), Email (Resend, with per-org opt-in, bounce suppression, and 15-minute motion cooldown), Incidents tab (when filed as incident), and MCP activity log (admin only). Motion digest behavior is surfaced near the email channel: 1 immediate + 1 summary, capped at 2 per cycle per camera."
+            alt="Notifications fan-out: a single platform event passes through the audience filter (admin-only vs all members), then fans out to five destinations — In-app inbox (SSE, real-time), Email (Resend, with per-org opt-in, bounce suppression, and 15-minute motion cooldown), the Incident Reports page at /incidents (when filed as incident), the MCP activity log (admin only), and the Sentinel agent (Pro/Pro Plus only, on motion + incident_created kinds). Motion digest behavior is surfaced near the email channel: 1 immediate + 1 summary, capped at 2 per cycle per camera. Legend in the top-right groups channels by role."
             className="docs-diagram-image"
             width="2752"
             height="1536"
@@ -22,7 +22,7 @@ function Notifications() {
           />
         </picture>
         <figcaption className="docs-diagram-caption">
-          One event, four destinations. The audience filter decides whether the event goes to admins only or to every member. The email gate adds per-org opt-in, bounce suppression, and motion-event cooldown — so the in-app inbox can be loud while email volume stays bounded.
+          One event, five destinations. The audience filter decides whether the event goes to admins only or to every member. The email gate adds per-org opt-in, bounce suppression, and motion-event cooldown — so the in-app inbox can be loud while email volume stays bounded. The Sentinel branch only fires for Pro/Pro Plus orgs that have configured the agent, on motion or incident_created kinds.
         </figcaption>
       </figure>
 
