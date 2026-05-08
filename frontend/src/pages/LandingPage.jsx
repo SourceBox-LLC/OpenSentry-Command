@@ -188,20 +188,20 @@ function LandingPage() {
             <div className="landing-privacy-copy">
               <span className="landing-privacy-eyebrow">Privacy by design</span>
               <h2 className="landing-privacy-title">
-                Your footage never leaves your network for AI.
+                Your recordings never leave your CloudNode.
               </h2>
               <p className="landing-privacy-lede">
-                Consumer cameras ship frames to cloud services so they can run
-                person, vehicle, and face detection. We don't — motion analysis
-                runs on your CloudNode using FFmpeg, and the cloud only ever
-                holds a rolling 60-second live buffer in memory. Your recordings
-                stay on hardware you own, encrypted at rest.
+                Cloud security cameras stream every frame to a vendor's servers
+                for storage and analysis. Your CloudNode is different — it sits
+                on your network, records to its own encrypted disk, and runs
+                motion analysis locally. The cloud only ever holds a rolling
+                60-second live buffer in memory.
               </p>
               <ul className="landing-privacy-points">
-                <li><strong>Motion detection runs locally.</strong> No ML API calls, no frames uploaded, no cloud vision service.</li>
+                <li><strong>Motion detection runs locally.</strong> FFmpeg threshold detection on your CloudNode. Pixel math, not ML.</li>
                 <li><strong>Recordings are encrypted at rest.</strong> AES-256-GCM with a key derived from your device's OS machine ID.</li>
                 <li><strong>No analytics, no ad networks, no data brokers.</strong> Verifiable in our source with a single grep.</li>
-                <li><strong>We don't hold your video.</strong> If law enforcement asks for footage, they have to ask you — we don't have it to hand over.</li>
+                <li><strong>We don't hold your video.</strong> Recordings live on your CloudNode, not our cloud. If law enforcement asks for footage, they have to ask you.</li>
               </ul>
               <div className="landing-privacy-ctas">
                 <Link to="/security" className="landing-privacy-cta primary">
