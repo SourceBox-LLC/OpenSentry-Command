@@ -60,26 +60,37 @@ function ApiReference() {
         <button className="docs-copy-btn" onClick={() => copyToClipboard(`curl -H "Authorization: Bearer $CLERK_JWT" ${base}/api/cameras`)}>Copy</button>
       </div>
 
-      <h3>Node Endpoints</h3>
-      <p>Used by CloudNode. Authenticate with <code>X-API-Key: {"your_api_key"}</code> header.</p>
+      <details className="docs-accordion">
+        <summary>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">Node Endpoints</span>
+          <span className="docs-accordion-count">5 endpoints</span>
+        </summary>
+        <p className="docs-accordion-intro">Used by CloudNode. Authenticate with <code>X-API-Key: {"your_api_key"}</code> header.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/nodes/register</span></div>
-      <p>Register a node and its cameras. Returns camera ID mappings.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/nodes/register</span></div>
+        <p>Register a node and its cameras. Returns camera ID mappings.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/nodes/heartbeat</span></div>
-      <p>Send periodic heartbeat with camera status updates.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/nodes/heartbeat</span></div>
+        <p>Send periodic heartbeat with camera status updates.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/push-segment</span></div>
-      <p>Push a raw HLS <code>.ts</code> segment into the Command Center's in-memory cache. Body is the binary segment, <code>filename</code> is a query param.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/push-segment</span></div>
+        <p>Push a raw HLS <code>.ts</code> segment into the Command Center's in-memory cache. Body is the binary segment, <code>filename</code> is a query param.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/playlist</span></div>
-      <p>Push the rolling HLS playlist text. The backend rewrites segment URLs to its own proxy paths and caches the result.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/playlist</span></div>
+        <p>Push the rolling HLS playlist text. The backend rewrites segment URLs to its own proxy paths and caches the result.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/codec</span></div>
-      <p>Report detected video/audio codec information.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/codec</span></div>
+        <p>Report detected video/audio codec information.</p>
+      </details>
 
-      <h3>User Endpoints</h3>
-      <p>Used by the web dashboard. Authenticate with Clerk JWT in <code>Authorization: Bearer</code> header.</p>
+      <details className="docs-accordion">
+        <summary>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">User Endpoints</span>
+          <span className="docs-accordion-count">10 endpoints</span>
+        </summary>
+        <p className="docs-accordion-intro">Used by the web dashboard. Authenticate with Clerk JWT in <code>Authorization: Bearer</code> header.</p>
 
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/cameras</span></div>
       <p>List all cameras in the organization.</p>
@@ -108,16 +119,22 @@ function ApiReference() {
       <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/cameras/{"{camera_id}"}/recording</span></div>
       <p>Manual record button — thin wrapper that flips <code>continuous_24_7</code> on the camera. The heartbeat reconciler picks it up within one tick. Body: <code>{"{recording: bool}"}</code>. Admin only.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/audit/stream-logs</span></div>
-      <p>Stream access history. Admin only. Filterable by camera and user.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/audit/stream-logs</span></div>
+        <p>Stream access history. Admin only. Filterable by camera and user.</p>
+      </details>
 
-      <h3>Incident Reports</h3>
-      <p>
-        AI-generated incident reports (written by the <a href="#sentinel">Sentinel
-        agent</a> or by direct MCP-API calls) and human-filed reports — all
-        reviewed and managed from the dashboard. Endpoints require admin
-        permission.
-      </p>
+      <details className="docs-accordion">
+        <summary>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">Incident Reports</span>
+          <span className="docs-accordion-count">7 endpoints</span>
+        </summary>
+        <p className="docs-accordion-intro">
+          AI-generated incident reports (written by the <a href="#sentinel">Sentinel
+          agent</a> or by direct MCP-API calls) and human-filed reports — all
+          reviewed and managed from the dashboard. Endpoints require admin
+          permission.
+        </p>
 
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents</span></div>
       <p>List incidents for the org (newest first). Supports <code>status</code>, <code>severity</code>, <code>camera_id</code>, <code>limit</code>, and <code>offset</code> query params.</p>
@@ -137,8 +154,9 @@ function ApiReference() {
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}/evidence/{"{evidence_id}"}</span></div>
       <p>Stream a snapshot or clip blob attached as evidence — used by the dashboard to render thumbnails and play back clips in the incident report modal.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}/evidence/{"{evidence_id}"}/playlist.m3u8</span></div>
-      <p>Synthetic single-segment HLS playlist for a clip evidence item, so the dashboard can reuse hls.js to play back captured video with the same JWT auth as the live player.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/incidents/{"{incident_id}"}/evidence/{"{evidence_id}"}/playlist.m3u8</span></div>
+        <p>Synthetic single-segment HLS playlist for a clip evidence item, so the dashboard can reuse hls.js to play back captured video with the same JWT auth as the live player.</p>
+      </details>
 
       <h3 id="api-health">Health & Status</h3>
       <p>Two unauthenticated endpoints for monitoring. Use the minimal one for load balancers; use the detailed one for status pages and on-call diagnostics.</p>
@@ -149,15 +167,20 @@ function ApiReference() {
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/health/detailed</span></div>
       <p>Verbose status — process uptime, DB ping latency in ms, HLS cache occupancy, pending viewer-usage flush queue depth, SSE subscriber counts. Overall <code>status</code> rolls up to <code>healthy</code> / <code>degraded</code> / <code>unhealthy</code>. Public on purpose so a status-page tool can poll it from off-net, but every value is a number — never an org, camera, or user identifier (pinned by a privacy regression test).</p>
 
-      <h3>Sentinel Endpoints</h3>
-      <p>
-        Per-org config and run lifecycle for the <a href="#sentinel">Sentinel
-        AI agent</a>. Admin endpoints surface plan-gated config and run
-        history to the dashboard. Agent-side endpoints are gated by the
-        shared <code>SENTINEL_AGENT_KEY</code> service-to-service header
-        rather than a user JWT — they're called by the agent process
-        itself, not by humans.
-      </p>
+      <details className="docs-accordion">
+        <summary>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">Sentinel Endpoints</span>
+          <span className="docs-accordion-count">8 endpoints</span>
+        </summary>
+        <p className="docs-accordion-intro">
+          Per-org config and run lifecycle for the <a href="#sentinel">Sentinel
+          AI agent</a>. Admin endpoints surface plan-gated config and run
+          history to the dashboard. Agent-side endpoints are gated by the
+          shared <code>SENTINEL_AGENT_KEY</code> service-to-service header
+          rather than a user JWT — they're called by the agent process
+          itself, not by humans.
+        </p>
 
       <div className="docs-endpoint"><span className="docs-endpoint-method get">GET</span><span className="docs-endpoint-path">/api/sentinel/config</span></div>
       <p>Get the org's Sentinel config plus a <code>plan_gated</code> flag and the plan-aware monthly cap (100 for Pro, 500 for Pro Plus, 0 for free / past-due-too-long). Always returns 200 — non-eligible orgs get a read-only payload so the frontend can render the upgrade banner.</p>
@@ -180,8 +203,9 @@ function ApiReference() {
       <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/sentinel/runs/{"{run_id}"}/start</span></div>
       <p>Service-to-service. Agent claims a pending run — transitions <code>pending → running</code>. Idempotent.</p>
 
-      <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/sentinel/runs/{"{run_id}"}/complete</span></div>
-      <p>Service-to-service. Agent posts the terminal outcome — <code>incident</code> (with severity + incident_id), <code>no_action</code>, or <code>error</code> — plus the full tool trace. Cross-checks that <code>incident_id</code> belongs to the run's org. Idempotent on terminal rows.</p>
+        <div className="docs-endpoint"><span className="docs-endpoint-method post">POST</span><span className="docs-endpoint-path">/api/sentinel/runs/{"{run_id}"}/complete</span></div>
+        <p>Service-to-service. Agent posts the terminal outcome — <code>incident</code> (with severity + incident_id), <code>no_action</code>, or <code>error</code> — plus the full tool trace. Cross-checks that <code>incident_id</code> belongs to the run's org. Idempotent on terminal rows.</p>
+      </details>
 
       <h3>MCP Endpoint</h3>
       <p>Streamable HTTP transport at <code>/mcp</code>. Authenticate with <code>Authorization: Bearer osc_...</code> header.</p>
