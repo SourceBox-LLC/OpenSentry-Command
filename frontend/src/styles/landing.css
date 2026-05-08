@@ -1665,11 +1665,14 @@
   font-size: 0.9rem;
 }
 
-/* MCP tool category accordion — collapsible <details> wrapping
-   each h4-grouped tool list under "Available Tools".  Uses native
-   <details>/<summary> for keyboard accessibility + zero JS;
-   custom marker (chevron span) + hidden default marker. */
-.docs-mcp-category {
+/* Generic docs accordion — collapsible <details> blocks used in
+   /docs#mcp (tool category groups), /docs#faq (Q&A pairs), and
+   /docs#troubleshooting (symptom → cause → fix triplets).  Native
+   <details>/<summary> for keyboard accessibility + zero JS; custom
+   chevron marker, default disclosure triangle hidden.
+   Hash-fragment friendly: browsers auto-open the parent <details>
+   when the URL targets an element inside it (incl. find-in-page). */
+.docs-accordion {
   margin: 0.6rem 0;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -1678,11 +1681,11 @@
   transition: border-color 0.15s ease;
 }
 
-.docs-mcp-category[open] {
+.docs-accordion[open] {
   border-color: rgba(168, 85, 247, 0.32);
 }
 
-.docs-mcp-category > summary {
+.docs-accordion > summary {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1696,19 +1699,19 @@
 }
 
 /* Hide the default disclosure triangle (Chrome / Safari / Firefox). */
-.docs-mcp-category > summary::-webkit-details-marker { display: none; }
-.docs-mcp-category > summary::marker { content: ""; }
+.docs-accordion > summary::-webkit-details-marker { display: none; }
+.docs-accordion > summary::marker { content: ""; }
 
-.docs-mcp-category > summary:hover {
+.docs-accordion > summary:hover {
   background: rgba(168, 85, 247, 0.06);
 }
 
-.docs-mcp-category > summary:focus-visible {
+.docs-accordion > summary:focus-visible {
   outline: 2px solid var(--accent-purple);
   outline-offset: -2px;
 }
 
-.docs-mcp-category-chevron {
+.docs-accordion-chevron {
   display: inline-block;
   width: 14px;
   font-size: 0.7rem;
@@ -1718,16 +1721,16 @@
   text-align: center;
 }
 
-.docs-mcp-category[open] > summary > .docs-mcp-category-chevron {
+.docs-accordion[open] > summary > .docs-accordion-chevron {
   transform: rotate(90deg);
 }
 
-.docs-mcp-category-title {
+.docs-accordion-title {
   flex: 1;
   font-size: 1.05rem;
 }
 
-.docs-mcp-category-count {
+.docs-accordion-count {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 0.72rem;
   font-weight: 500;
@@ -1738,12 +1741,19 @@
   white-space: nowrap;
 }
 
-.docs-mcp-category > .docs-mcp-tools,
-.docs-mcp-category > .docs-mcp-category-intro {
-  padding: 0 1rem 1rem;
+/* Body padding — applies to every direct child of an open accordion
+   except the summary.  Catches docs-mcp-tools, intro <p>, and the
+   bare <p>/<ol>/<ul> bodies used in FAQ + Troubleshooting. */
+.docs-accordion[open] > *:not(summary) {
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
-.docs-mcp-category > .docs-mcp-category-intro {
+.docs-accordion[open] > *:last-child:not(summary) {
+  padding-bottom: 1rem;
+}
+
+.docs-accordion-intro {
   padding-top: 0.25rem;
   margin: 0;
   color: var(--text-muted);

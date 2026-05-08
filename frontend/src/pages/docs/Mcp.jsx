@@ -110,11 +110,11 @@ function Mcp() {
         READ tools return structured data, and WRITE tools create or update state.
       </p>
 
-      <details className="docs-mcp-category" open>
+      <details className="docs-accordion" open>
         <summary>
-          <span className="docs-mcp-category-chevron" aria-hidden="true">▶</span>
-          <span className="docs-mcp-category-title">Live viewing</span>
-          <span className="docs-mcp-category-count">2 tools</span>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">Live viewing</span>
+          <span className="docs-accordion-count">2 tools</span>
         </summary>
         <div className="docs-mcp-tools">
           <div className="docs-endpoint">
@@ -131,11 +131,11 @@ function Mcp() {
         </div>
       </details>
 
-      <details className="docs-mcp-category">
+      <details className="docs-accordion">
         <summary>
-          <span className="docs-mcp-category-chevron" aria-hidden="true">▶</span>
-          <span className="docs-mcp-category-title">Cameras, nodes &amp; groups</span>
-          <span className="docs-mcp-category-count">6 tools</span>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">Cameras, nodes &amp; groups</span>
+          <span className="docs-accordion-count">6 tools</span>
         </summary>
         <div className="docs-mcp-tools">
         <div className="docs-endpoint">
@@ -176,11 +176,11 @@ function Mcp() {
         </div>
       </details>
 
-      <details className="docs-mcp-category">
+      <details className="docs-accordion">
         <summary>
-          <span className="docs-mcp-category-chevron" aria-hidden="true">▶</span>
-          <span className="docs-mcp-category-title">Settings, logs &amp; system</span>
-          <span className="docs-mcp-category-count">5 tools</span>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">Settings, logs &amp; system</span>
+          <span className="docs-accordion-count">5 tools</span>
         </summary>
         <div className="docs-mcp-tools">
         <div className="docs-endpoint">
@@ -215,13 +215,13 @@ function Mcp() {
         </div>
       </details>
 
-      <details className="docs-mcp-category">
+      <details className="docs-accordion">
         <summary>
-          <span className="docs-mcp-category-chevron" aria-hidden="true">▶</span>
-          <span className="docs-mcp-category-title">Incident reports</span>
-          <span className="docs-mcp-category-count">10 tools</span>
+          <span className="docs-accordion-chevron" aria-hidden="true">▶</span>
+          <span className="docs-accordion-title">Incident reports</span>
+          <span className="docs-accordion-count">10 tools</span>
         </summary>
-        <p className="docs-subtle docs-mcp-category-intro">
+        <p className="docs-subtle docs-accordion-intro">
           Let the agent file, investigate, and read back structured incident reports.
           Everything written by these tools shows up on the <strong>Incident Reports</strong> page
           of the dashboard, alongside human-filed reports, for review.
