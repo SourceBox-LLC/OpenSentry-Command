@@ -131,17 +131,21 @@ function App() {
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
 
-        {/* Test route (admin only) */}
-        <Route element={<Layout />}>
-          <Route
-            path="/test-hls"
-            element={
-              <RequireAdmin>
-                <TestHlsPage />
-              </RequireAdmin>
-            }
-          />
-        </Route>
+        {/* Test route (admin only, gated by VITE_ENABLE_TEST_ROUTES build flag).
+            The page contains hardcoded localhost URLs and dev-only console
+            logging — never registered in production builds. */}
+        {import.meta.env.VITE_ENABLE_TEST_ROUTES === "true" && (
+          <Route element={<Layout />}>
+            <Route
+              path="/test-hls"
+              element={
+                <RequireAdmin>
+                  <TestHlsPage />
+                </RequireAdmin>
+              }
+            />
+          </Route>
+        )}
 
         {/* Authenticated routes with Layout */}
         <Route element={<Layout />}>

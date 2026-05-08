@@ -453,7 +453,7 @@ frontend/
     │                               # HeartbeatBanner (first-heartbeat polling after
     │                               #   node creation, localStorage-backed),
     │                               # WelcomeHero (Admin / Member empty-state heroes),
-    │                               # CameraGridPreview, EmptyState, PublicLayout,
+    │                               # EmptyState, PublicLayout,
     │                               # LandingNav, LandingFooter, LoadingSpinner
     ├── hooks/                      # useNotifications, useMotionAlerts, usePlanInfo,
     │                               # useSharedToken, useToasts

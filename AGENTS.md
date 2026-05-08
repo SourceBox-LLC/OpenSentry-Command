@@ -164,7 +164,6 @@ frontend/
     ├── components/
     │   ├── HlsPlayer.jsx             # HLS.js player with Clerk JWT xhrSetup
     │   ├── CameraCard.jsx            # Live thumbnail + status + actions
-    │   ├── CameraGridPreview.jsx     # Static preview for the landing page
     │   ├── IncidentReportModal.jsx   # Markdown + evidence viewer
     │   ├── NotificationBell.jsx     # Unread badge + inbox popover (SSE-fed)
     │   ├── AddNodeModal.jsx          # Node creation flow (shows one-time API key)

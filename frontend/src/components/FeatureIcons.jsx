@@ -1,7 +1,7 @@
-// Custom line-icons for the landing page Features grid (7) and the
-// Sentinel page features grid (6). Replaces the emoji-as-icons pattern
-// — emoji read as casual / hobbyist; consistent stroked SVG glyphs in
-// soft brand-colour badges read as premium product.
+// Custom line-icons for the landing page Features grid.
+// Replaces the emoji-as-icons pattern — emoji read as casual / hobbyist;
+// consistent stroked SVG glyphs in soft brand-colour badges read as
+// premium product.
 //
 // Style: 24px viewBox, 1.75 stroke, round line caps + joins, fill: none.
 // All icons use stroke="currentColor" so the parent's CSS colour cascades
@@ -17,8 +17,6 @@ const baseProps = {
   width: 24,
   height: 24,
 }
-
-// ─── Landing page features ──────────────────────────────────────────
 
 export function CloudIcon(props) {
   return (
@@ -83,59 +81,6 @@ export function CodeIcon(props) {
     <svg {...baseProps} {...props} aria-hidden="true">
       <polyline points="16 18 22 12 16 6" />
       <polyline points="8 6 2 12 8 18" />
-    </svg>
-  )
-}
-
-// ─── Sentinel page features ─────────────────────────────────────────
-
-export function EyeIcon(props) {
-  return (
-    <svg {...baseProps} {...props} aria-hidden="true">
-      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  )
-}
-
-export function BrainIcon(props) {
-  return (
-    <svg {...baseProps} {...props} aria-hidden="true">
-      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3 2.5 2.5 0 0 1 2.46-2.04z" />
-      <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3 2.5 2.5 0 0 0-2.46-2.04z" />
-    </svg>
-  )
-}
-
-export function FileTextIcon(props) {
-  return (
-    <svg {...baseProps} {...props} aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-      <polyline points="10 9 9 9 8 9" />
-    </svg>
-  )
-}
-
-export function CrosshairIcon(props) {
-  return (
-    <svg {...baseProps} {...props} aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="22" y1="12" x2="18" y2="12" />
-      <line x1="6" y1="12" x2="2" y2="12" />
-      <line x1="12" y1="6" x2="12" y2="2" />
-      <line x1="12" y1="22" x2="12" y2="18" />
-    </svg>
-  )
-}
-
-export function LinkIcon(props) {
-  return (
-    <svg {...baseProps} {...props} aria-hidden="true">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" />
-      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" />
     </svg>
   )
 }
