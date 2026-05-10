@@ -13,6 +13,23 @@ function CloudNodeSetup() {
         backend, which serves them to viewers from an in-memory cache.
       </p>
 
+      <div className="docs-callout">
+        <strong>Don't want a Command Center account?</strong> CloudNode also runs
+        in <strong>Local-only mode</strong> — a free, LAN-only product with live
+        viewing, snapshots, recording, and recording playback in any browser at{' '}
+        <code>http://&lt;node-ip&gt;:8080/</code>. No account, no cloud, no pairing.
+        Pick "Local-only" at the wizard's first prompt; everything below applies
+        to <em>Connected mode</em> (the SaaS-paired flow). See the{' '}
+        <a
+          href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/docs/runbooks/local-mode-setup.md"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Local-mode setup runbook
+        </a>{' '}
+        for the standalone walkthrough.
+      </div>
+
       <figure className="docs-diagram">
         <picture>
           <source srcSet="/images/setup-wizard.webp" type="image/webp" />
