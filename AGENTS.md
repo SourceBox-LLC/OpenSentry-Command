@@ -210,7 +210,7 @@ MCP Client ──Bearer osc_…──→ FastMCP → ScopeMiddleware → tools
 
 ### Video streaming pipeline
 
-1. CloudNode generates HLS segments via FFmpeg (2-second `.ts` files)
+1. CloudNode generates HLS segments via FFmpeg (1-second `.ts` files by default; see `streaming.hls.segment_duration` in CloudNode's `config.yaml`)
 2. CloudNode calls `POST /api/cameras/{id}/push-segment?filename=segment_NNNNN.ts` with the raw `.ts` body and `X-Node-API-Key` header
 3. Backend stores the bytes in `_segment_cache[camera_id][filename]`, evicting the oldest once `SEGMENT_CACHE_MAX_PER_CAMERA` is exceeded
 4. CloudNode calls `POST /api/cameras/{id}/playlist` with the rolling `stream.m3u8` text
