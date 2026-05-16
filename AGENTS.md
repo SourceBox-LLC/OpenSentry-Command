@@ -65,13 +65,17 @@ Frontend config: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_API_URL`, `VITE_LOCAL_HLS`.
 backend/
 ├── app/
 │   ├── main.py                   # FastAPI app, CORS, SPA middleware, rate limiting,
-│   │                             # lifespan startup (7 background loops), MCP mount,
-│   │                             # disk-check + motion-digest loop bodies
-│   ├── templates/emails/         # 22 Jinja2 email templates — _layout.html.j2 +
-│   │                             # 7 kinds (camera offline/recovered, node offline/
-│   │                             # recovered, incident_created, MCP key created/
-│   │                             # revoked, cloudnode_disk_low, member added/role-
-│   │                             # changed/removed, motion, motion_digest) × 3 files
+│   │                             # lifespan startup (8 background loops: log-cleanup,
+│   │                             # offline-sweep, viewer-usage flush, release-cache
+│   │                             # refresh, email-worker, disk-check, motion-digest,
+│   │                             # sentinel-reaper), MCP mount, disk-check + motion-
+│   │                             # digest loop bodies
+│   ├── templates/emails/         # 46 Jinja2 email templates — _layout.html.j2 +
+│   │                             # 15 kinds (camera offline/online, node offline/
+│   │                             # online, incident_created, mcp_key_created/revoked,
+│   │                             # cloudnode_disk_low, member_added/role_changed/
+│   │                             # removed/promotion_requested, motion, motion_digest,
+│   │                             # welcome) × 3 files (subject.txt + body.txt + body.html)
 │   ├── api/
 │   │   ├── cameras.py            # Cameras, groups, settings, audit logs, danger zone
 │   │   ├── nodes.py              # CloudNode register/heartbeat/CRUD, plan info,
@@ -265,7 +269,7 @@ MCP endpoint (`POST /mcp`) validates `Authorization: Bearer osc_<hex>`:
 
 ## Data Models
 
-All 18 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation EXCEPT `ProcessedWebhook` (global webhook dedup, keyed on Svix msg_id).
+All 20 models in `backend/app/models/models.py`. Every model has `org_id` for tenant isolation EXCEPT `ProcessedWebhook` (global webhook dedup, keyed on Svix msg_id) and `EmailSuppression` (operator-global bounce / complaint list, intentionally cross-tenant so a hard-bounced address stops being mailed for every org).
 
 | Model | Key Fields | Purpose |
 |-------|------------|---------|
