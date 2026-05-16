@@ -284,13 +284,15 @@ All 20 models in `backend/app/models/models.py`. Every model has `org_id` for te
 | `Incident` | `title`, `summary`, `report` (markdown), `severity`, `status`, `camera_id`, `created_by`, `resolved_at`, `resolved_by` | AI-generated incident (`open` / `acknowledged` / `resolved` / `dismissed`) |
 | `IncidentEvidence` | `incident_id` (FK cascade), `kind` (`snapshot` / `clip` / `observation`), `text`, `camera_id`, `data` (LargeBinary), `data_mime` | Snapshot JPEG, clip (MPEG-TS bytes), or text observation — evidence travels inline with the incident |
 | `MotionEvent` | `camera_id`, `node_id`, `score` (0–100), `segment_seq`, `timestamp`, `(org_id, timestamp)` index | Motion detected by CloudNode scene-change analysis |
-| `Notification` | `kind`, `audience` (`all` / `admin`), `title`, `body`, `severity`, `link`, `camera_id`, `node_id`, `meta_json` | Unified inbox entry (13 kinds: motion, motion_digest, camera_offline / camera_online, node_offline / node_online, incident_created, mcp_key_created / mcp_key_revoked, cloudnode_disk_low, member_added / member_role_changed / member_removed) |
+| `Notification` | `kind`, `audience` (`all` / `admin`), `title`, `body`, `severity`, `link`, `camera_id`, `node_id`, `meta_json` | Unified inbox entry (15 kinds: motion, motion_digest, camera_offline / camera_online, node_offline / node_online, incident_created, mcp_key_created / mcp_key_revoked, cloudnode_disk_low, member_added / member_role_changed / member_removed / member_promotion_requested, welcome) |
 | `UserNotificationState` | `clerk_user_id` + `org_id` (unique), `last_viewed_at` | Per-user read cursor for the inbox |
 | `OrgMonthlyUsage` | `org_id` + `year_month` (unique), `viewer_seconds` | One row per org per calendar month; aggregates live-playback viewer-seconds for viewer-hour cap enforcement |
 | `EmailOutbox` | `recipient_email`, `subject`, `body_text`, `body_html`, `kind`, `notification_id` (soft FK), `status` (`pending`/`sending`/`sent`/`failed`/`suppressed`), `attempts`, `resend_message_id`, `(status, created_at)` index | Pending email send queue. Drained by `email_worker_loop` every 5s. Survives process restart. |
 | `EmailLog` | `recipient_email`, `kind`, `status`, `resend_message_id`, `error`, `timestamp`, `(org_id, timestamp)` index | Per-org email send/delivery audit. Per-tier retention via `run_log_cleanup`. |
-| `EmailSuppression` | `address` (unique, lowercased), `reason`, `source`, `created_at` | Local mirror of Resend's suppression list. Worker checks before every send. |
-| `ProcessedWebhook` | `svix_msg_id` (unique), `event_type`, `created_at` | Webhook dedup table for both Clerk and Resend (idempotency under Svix retry) |
+| `EmailSuppression` | `address` (unique, lowercased), `reason`, `source`, `created_at` | Local mirror of Resend's suppression list. Worker checks before every send. **Cross-tenant by design** (no `org_id`) — a hard-bounced address stops getting mail across every org. |
+| `ProcessedWebhook` | `svix_msg_id` (unique), `event_type`, `created_at` | Webhook dedup table for both Clerk and Resend (idempotency under Svix retry). **Cross-tenant by design** (no `org_id`). |
+| `SentinelConfig` | `org_id` (unique), `enabled`, `motion_enabled`, `incident_opened_enabled`, `motion_cooldown_min`, `schedule_mode` (`always` / `scheduled` / `off`), `schedule_start`/`end` (HH:MM), `active_days` (JSON), `camera_scope` (JSON) | Per-org Sentinel AI configuration. Lazily upserted on first GET via `_ensure_config_row()`. |
+| `SentinelRun` | `id` (UUID hex), `org_id`, `triggered_at`, `trigger_type` (`motion` / `incident_opened` / `manual` / `scheduled`), `camera_id`, `outcome` (`pending` / `running` / `incident` / `no_action` / `error`), `severity`, `incident_id` (no FK), `started_at`, `completed_at`, `tool_trace` | One row per Sentinel agent invocation. Drives the Sentinel AI dashboard's run history + the monthly-cap counter. |
 
 Validation constants (also in `models.py`):
 - `INCIDENT_STATUSES` = `("open", "acknowledged", "resolved", "dismissed")`
@@ -311,6 +313,7 @@ Validation constants (also in `models.py`):
 | `mcp_activity.py` | `/api/mcp/activity` | mcp-activity |
 | `motion.py` | `/api/motion` | motion |
 | `notifications.py` | `/api/notifications` | notifications |
+| `sentinel.py` | `/api/sentinel` | sentinel |
 | `install.py` | (none) | installation |
 | `ws.py` | (none) | ws |
 | `webhooks.py` | `/api/webhooks` | webhooks |
@@ -320,19 +323,23 @@ Validation constants (also in `models.py`):
 **cameras.py** (prefix `/api`):
 - `GET /cameras` — list cameras (view)
 - `GET /cameras/{camera_id}` — get camera (view)
-- `POST /cameras/{camera_id}/snapshot` — ask node to capture & store a snapshot locally (view)
-- `POST /cameras/{camera_id}/recording` — start/stop recording on the node (view)
+- `POST /cameras/{camera_id}/snapshot` — ask node to capture & store a snapshot locally (view, 30/min)
+- `POST /cameras/{camera_id}/recording` — manual start/stop recording on the camera; thin wrapper that flips `continuous_24_7` (admin, 30/min)
+- `PATCH /cameras/{camera_id}/recording-settings` — partial-update per-camera recording policy (`continuous_24_7`, `scheduled_recording`, `scheduled_start`, `scheduled_end`).  Per-camera since v0.1.43 — replaced the retired org-level `/settings/recording` endpoint pair (admin, 30/min)
 - `POST /cameras/{camera_id}/codec` — CloudNode reports codec after first segment (node API key, 30/min)
 - `GET /camera-groups` — list groups (view)
-- `POST /camera-groups` — create group (admin)
-- `DELETE /camera-groups/{group_id}` — delete group (admin)
-- `PUT /cameras/{camera_id}/group` — assign group (admin)
-- `GET /settings` — all settings (view)
-- `GET /settings/recording` — recording settings (view)
-- `POST /settings/recording` — update recording settings (admin)
-- `GET /audit-logs` — audit logs (admin)
-- `POST /settings/danger/wipe-logs` — permanently delete all stream + MCP + audit logs (admin + Pro/Pro Plus)
-- `POST /settings/danger/full-reset` — wipe all nodes/cameras/logs/settings for the org (admin + Pro/Pro Plus)
+- `POST /camera-groups` — create group (admin, 20/min)
+- `DELETE /camera-groups/{group_id}` — delete group; member cameras unassigned (admin, 60/min)
+- `PUT /cameras/{camera_id}/group` — assign / unassign a camera's group (admin, 60/min)
+- `GET /settings` — all org-level settings (view)
+- `POST /settings/timezone` — set the org's IANA timezone for scheduled-recording-window interpretation (admin, 30/min)
+- `GET /settings/notifications` — read inbox + email toggle prefs (view)
+- `POST /settings/notifications` — update inbox + email toggle prefs (admin, 30/min)
+- `GET /settings/motion-ingestion` — read motion-event ingestion toggle (admin)
+- `POST /settings/motion-ingestion` — toggle motion-event ingestion org-wide (admin, 30/min)
+- `GET /audit-logs` — audit logs (admin, 120/min)
+- `POST /settings/danger/wipe-logs` — permanently delete all stream + MCP + audit logs (admin + Pro/Pro Plus, 5/hour)
+- `POST /settings/danger/full-reset` — wipe all nodes/cameras/logs/settings for the org (admin + Pro/Pro Plus, 3/hour)
 
 **nodes.py** (prefix `/api/nodes`):
 - `POST /validate` — validate node_id + API key pair, used by CloudNode setup wizard (10/min)
@@ -340,10 +347,11 @@ Validation constants (also in `models.py`):
 - `POST /heartbeat` — CloudNode heartbeat (API key, 60/min)
 - `GET /` — list nodes (admin)
 - `GET /plan` — current plan, node usage, and limits (view)
-- `POST /` — create node (admin, requires active billing + plan capacity)
+- `POST /` — create node (admin, requires active billing + plan capacity, 20/hour)
 - `GET /ws-status` — which nodes are WebSocket-connected (admin)
+- `POST /self/decommission` — node-initiated factory reset (API key, 10/hour); called from CloudNode's `/wipe confirm` before the local wipe runs so a freshly-wiped box doesn't linger as a stale offline node
 - `GET /{node_id}` — get node (admin)
-- `DELETE /{node_id}` — delete node (admin; cascades cameras + flushes segment caches)
+- `DELETE /{node_id}` — delete node (admin; cascades cameras + flushes segment caches, 20/hour)
 - `POST /{node_id}/rotate-key` — rotate API key (admin, 5/min)
 
 **hls.py** (prefix `/api/cameras/{camera_id}`):
@@ -351,7 +359,7 @@ Validation constants (also in `models.py`):
 - `GET /segment/{filename}` — serve cached `.ts` segment from memory (JWT)
 - `POST /push-segment?filename=…` — CloudNode pushes `.ts` segment into cache (API key, 1200/min)
 - `POST /playlist` — update playlist (API key, 600/min)
-- `POST /motion` — HTTP fallback for motion events when WebSocket is offline (API key, 120/min)
+- `POST /motion` — motion event delivery (API key, 120/min). HTTP-only post v0.1.61; the pre-v0.1.61 WebSocket-forwarding branch had no producer and was removed.
 
 **audit.py** (prefix `/api`):
 - `GET /audit/stream-logs` — stream access logs (admin)
@@ -389,7 +397,12 @@ Validation constants (also in `models.py`):
 - `GET /` — paginated inbox, newest first; applies audience filter (view)
 - `GET /unread-count` — cheap count for the bell badge (capped at 99) (view)
 - `POST /mark-viewed` — bump `last_viewed_at` to now (view)
+- `POST /clear-all` — empty the inbox for this org (admin)
+- `POST /request-admin-promotion` — member-initiated admin-access request; fires the `member_promotion_requested` notification kind to org admins (view)
 - `GET /stream` — SSE stream for the bell; audience filter applied server-side (view)
+- `GET /email/preferences` — read the org's per-kind email toggles (view)
+- `POST /email/preferences` — update the org's per-kind email toggles (admin)
+- `GET /email/unsubscribe` — one-click unsubscribe link target.  Validates a signed JWT in the query string, flips the matching email toggle off, returns a confirmation HTML page (no auth required — auth comes from the signed token).
 
 **install.py** (no prefix, no auth):
 - `GET /install.sh` — CloudNode installer for Linux/macOS. Windows users install via the MSI from the latest CloudNode GitHub release; the legacy `/install.ps1` route was removed when the MSI shipped.
@@ -397,12 +410,23 @@ Validation constants (also in `models.py`):
 
 **ws.py** (no prefix):
 - `WS /ws/node` — WebSocket channel for CloudNode realtime (API key in query)
-  - Node → Backend: `heartbeat`, `command_result`, `event`
-  - Backend → Node: `ack`, `command`, `error`
-  - Event payloads include `motion_detected` (camera_id, score, timestamp, segment_seq)
+  - Node → Backend: `heartbeat`, `command_result`
+  - Backend → Node: `ack`, `command` (`take_snapshot`, `list_snapshots`, `list_recordings`, `wipe_data`), `error`
+  - Motion events do **not** flow over WS — they reach Command Center via `POST /api/cameras/{id}/motion`.  The pre-v0.1.61 wire format reserved an `event` / `motion_detected` frame for this path but it was never produced; the unused branch was removed in v0.1.61.
+
+**sentinel.py** (prefix `/api/sentinel`):
+- `GET /config` — read the org's Sentinel AI config + plan-aware `monthly_cap` + `plan_gated` flag (view; always 200 — non-eligible orgs get a read-only payload for the upgrade banner)
+- `PATCH /config` — partial update of Sentinel config (admin + Pro/Pro Plus; 402 otherwise)
+- `GET /runs` — list recent runs + stats (admin)
+- `GET /runs/{run_id}` — single run with full tool trace (admin)
+- `POST /runs/manual` — operator "Run now"; skips schedule + scope gates but cap-enforced (admin + Pro/Pro Plus; 429 at cap)
+- `GET /runs/pending` — service-to-service.  Agent polls this on wakeup to drain runs across all orgs (FIFO).  Auth: `X-Sentinel-Agent-Key` header.
+- `POST /runs/{run_id}/start` — service-to-service.  Agent claims a pending run (`pending → running`).  Idempotent.
+- `POST /runs/{run_id}/complete` — service-to-service.  Agent posts terminal outcome (`incident` / `no_action` / `error`) + full tool trace.  Cross-checks `incident_id` belongs to the run's org.  Idempotent on terminal rows.
 
 **webhooks.py** (prefix `/api/webhooks`):
-- `POST /clerk` — Clerk subscription events (Svix signature when `CLERK_WEBHOOK_SECRET` is set)
+- `POST /clerk` — Clerk subscription + organizationMembership events (Svix signature when `CLERK_WEBHOOK_SECRET` is set; 120/min)
+- `POST /resend` — Resend bounce / complaint / unsubscribe webhooks (Svix signature when `RESEND_WEBHOOK_SECRET` is set); writes to `EmailSuppression` so subsequent sends short-circuit before the API call
 
 **Top-level** (`main.py`):
 - `GET /api/health` — minimal liveness for load balancers: `{"status": "healthy", "version": "2.1.0"}` (no auth)
@@ -563,7 +587,7 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 
 ## Background Loops
 
-`main.py` starts SEVEN long-running tasks on lifespan startup:
+`main.py` starts EIGHT long-running tasks on lifespan startup:
 
 | Task | Cadence | What it does |
 |------|---------|--------------|
@@ -573,6 +597,7 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 | `_release_cache_refresh_loop` | Every `RELEASE_CACHE_REFRESH_INTERVAL_SECONDS` (600s) | Polls GitHub `/releases/latest` for the CloudNode repo so the heartbeat handler's `update_available` field stays fresh without blocking on GitHub per request. Cold-boot fallback is `LATEST_NODE_VERSION` env var. |
 | `_disk_check_loop` | Every `DISK_CHECK_INTERVAL_SECONDS` (300s = 5min) | Polls `/data` disk usage. When ≥95%, fires a single `logger.error()` with structured `extra` fields (Sentry-captured). 6h re-emit debounce per process. **Operator-side only** — does NOT route through customer notifications (multi-tenant violation removed 2026-05-04). |
 | `_motion_digest_loop` | Every `MOTION_DIGEST_INTERVAL_SECONDS` (60s) | Drains expired per-camera motion email cooldown anchors (Setting rows keyed `motion_email_cooldown_start:{camera_id}`). For each expired window: counts MotionEvent rows in the window, emits a `motion_digest` notification (which itself enqueues a digest email) if extras > 0, deletes the anchor regardless. Volume cap: 2 emails per cycle per camera. |
+| `_sentinel_reaper_loop` | Every `SENTINEL_REAPER_INTERVAL_SECONDS` (300s = 5min) | Sweeps `SentinelRun` rows stuck in `running` for more than `STRANDED_RUN_AGE_MINUTES` (20 min) and marks them `outcome='error'` with a "stranded — agent never finished" note. Catches the rare case where the agent's own wall-clock cleanup wrapper doesn't fire (process crash, network partition); without this the run drawer would show a permanent in-progress spinner. |
 | `email_worker_loop` (in `app/core/email_worker.py`, spawned from `main.py` lifespan) | Every `EMAIL_WORKER_INTERVAL_SECONDS` (5s) | Drains EmailOutbox `status='pending'` rows in batches of `EMAIL_WORKER_BATCH_SIZE`. Per row: check suppression list → call `email.send_email()` → mark `sent`/`failed`/`suppressed` → write EmailLog row. Reclaims rows stuck in `sending` for >60s (worker crash). Idempotency-Key on the Resend send protects against duplicate delivery on retry. |
 
 ## Key Patterns
@@ -589,7 +614,7 @@ Every SSE broadcaster (`MotionBroadcaster`, `NotificationBroadcaster`, `McpActiv
 
 **Notification broadcaster:** `notification_broadcaster` (in `notifications.py`) is a per-process pub/sub — SSE subscribers register per org + admin flag; `emit_camera_transition`, `emit_node_transition`, and motion event handlers write a `Notification` row then broadcast.
 
-**Motion broadcaster:** the motion SSE stream pushes events from either the WebSocket channel (`/ws/node`) or the HTTP fallback (`POST /api/cameras/{id}/motion`).
+**Motion broadcaster:** the motion SSE stream pushes events that arrive on `POST /api/cameras/{id}/motion`.  Motion delivery is HTTP-only since CloudNode v0.1.61; the pre-v0.1.61 WebSocket variant had no producer on the node side and was removed.
 
 **Shared Clerk token:** frontend's `useSharedToken` serialises the Clerk JWT for HLS.js's `xhrSetup` so segment fetches ride on the same auth as API calls.
 
