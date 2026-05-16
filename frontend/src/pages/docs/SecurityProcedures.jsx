@@ -40,7 +40,7 @@ function SecurityProcedures() {
         <li><strong>Identify the source</strong> — Check the user email, IP address, and timestamp in <Link to="/admin">Admin Dashboard</Link> &gt; Stream Access Logs.</li>
         <li><strong>Check MCP activity</strong> — If the access came from an MCP tool, the MCP Tool Activity section will show which API key was used.</li>
         <li><strong>Revoke access</strong> — Remove the user from your Clerk organization or revoke the MCP key, depending on the source.</li>
-        <li><strong>Enable scheduled recording</strong> — If you don't need 24/7 access, restrict streaming to specific hours from <Link to="/settings">Settings</Link>.</li>
+        <li><strong>Cut the camera off-hours</strong> — Live streaming runs whenever the CloudNode is running; there's no built-in "viewing window" today. If you only need the camera live during certain hours, the right tool is to power the CloudNode itself on a schedule (PoE switch, smart plug, systemd timer) or to physically disable the USB camera when it's not needed. (Scheduled recording controls when CloudNode writes durable footage, not who can watch the live feed.)</li>
       </ol>
 
       <h3>General Security Best Practices</h3>
