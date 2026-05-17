@@ -9,7 +9,7 @@
     &middot;
     <a href="#api-reference">API Reference</a>
     &middot;
-    <a href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode">CloudNode</a>
+    <a href="https://github.com/SourceBox-LLC/Sentinel-CameraNode">CloudNode</a>
   </p>
 </p>
 
@@ -21,7 +21,7 @@
 
 ---
 
-Sentinel Command Center is the cloud hub for the Sentinel ecosystem (Sentinel by SourceBox). It receives live HLS video streams from [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) devices on your local network, caches segments in memory, and proxies them to any browser. Authentication and multi-tenant isolation are handled by Clerk.
+Sentinel Command Center is the cloud hub for the Sentinel ecosystem (Sentinel by SourceBox). It receives live HLS video streams from [CloudNode](https://github.com/SourceBox-LLC/Sentinel-CameraNode) devices on your local network, caches segments in memory, and proxies them to any browser. Authentication and multi-tenant isolation are handled by Clerk.
 
 **What it does:**
 - Receives live HLS video from CloudNode devices and proxies it to the browser via a same-origin in-memory cache — no object store, no presigned URLs
@@ -38,7 +38,7 @@ Sentinel Command Center is the cloud hub for the Sentinel ecosystem (Sentinel by
 
 > **Looking for the product?** Sign up at the [live app](https://opensentry-command.fly.dev) — we host Sentinel by SourceBox as a SaaS, you don't run any servers. The repo is public for trust + transparency: every claim on `/security` and `/docs` points at the file that implements it.
 >
-> The Quick Start below is for **engineers who want to clone the repo and run it locally** — for code review, contributing fixes, or auditing what we run. It is **not** the install path for end users; users sign up at the link above. The CloudNode camera daemon (the piece that genuinely runs on customer hardware) is in a [separate repo](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) — its own README walks through installation.
+> The Quick Start below is for **engineers who want to clone the repo and run it locally** — for code review, contributing fixes, or auditing what we run. It is **not** the install path for end users; users sign up at the link above. The CloudNode camera daemon (the piece that genuinely runs on customer hardware) is in a [separate repo](https://github.com/SourceBox-LLC/Sentinel-CameraNode) — its own README walks through installation.
 
 ---
 
@@ -74,7 +74,7 @@ App available at `http://localhost:5173`
 
 ### 3. Connect a CloudNode
 
-Create a camera node from the Settings page, then run [CloudNode](https://github.com/SourceBox-LLC/OpenSentry-CloudNode) with those credentials. Cameras auto-register when the CloudNode first connects.
+Create a camera node from the Settings page, then run [CloudNode](https://github.com/SourceBox-LLC/Sentinel-CameraNode) with those credentials. Cameras auto-register when the CloudNode first connects.
 
 ### 4. Connect an MCP client (optional)
 
@@ -549,7 +549,7 @@ This project is **not currently accepting external code contributions**. Bug rep
 <p align="center">
   <a href="https://opensentry-command.fly.dev">Sentinel Command Center</a>
   &middot;
-  <a href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode">CloudNode</a>
+  <a href="https://github.com/SourceBox-LLC/Sentinel-CameraNode">CloudNode</a>
   &middot;
   Made by <a href="https://github.com/SourceBox-LLC">SourceBox LLC</a>
 </p>

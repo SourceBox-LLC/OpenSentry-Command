@@ -279,7 +279,7 @@ under a realistic camera load.
    - Egress bandwidth to Command Center.
    - Whether motion detection completes within the segment window.
 3. Document the result somewhere — at minimum in
-   `OpenSentry-CloudNode/README.md` under a "Performance reference"
+   `Sentinel-CameraNode/README.md` under a "Performance reference"
    section. If a Pi 4 only handles 2 cameras at 1080p, that's
    useful for users to know upfront. If it handles 8, even better.
 
