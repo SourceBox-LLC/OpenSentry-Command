@@ -67,7 +67,7 @@ function AddNodeModal({ isOpen, onClose, onCreate }) {
     macos: linuxInstallCmd,
   }
   const MSI_DOWNLOAD_URL =
-    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi'
+    'https://github.com/SourceBox-LLC/Sentinel-CameraNode/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi'
 
   const exe = os === 'windows' ? 'sourcebox-sentry-cloudnode.exe' : 'sourcebox-sentry-cloudnode'
   // Quick setup command — kept for the Windows path (after MSI install,

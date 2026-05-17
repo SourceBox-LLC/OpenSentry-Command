@@ -27,7 +27,7 @@ function Faq() {
         </summary>
         <p>
           Download <code>sourcebox-sentry-cloudnode-windows-x86_64.msi</code> from the{" "}
-          <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest" target="_blank" rel="noopener noreferrer">latest GitHub release</a>{" "}
+          <a href="https://github.com/SourceBox-LLC/Sentinel-CameraNode/releases/latest" target="_blank" rel="noopener noreferrer">latest GitHub release</a>{" "}
           and run it. The MSI is unsigned today, so SmartScreen will warn "Windows protected
           your PC" on first run — click <strong>More info → Run anyway</strong>. After install,
           click the <strong>Sentinel CloudNode</strong> shortcut from the Start menu —

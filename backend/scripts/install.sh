@@ -43,7 +43,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-REPO="SourceBox-LLC/opensentry-cloud-node"
+REPO="SourceBox-LLC/Sentinel-CameraNode"
 INSTALL_DIR="${SOURCEBOX_SENTRY_INSTALL_DIR:-$HOME/.sourcebox-sentry}"
 
 # ── Parse credential args ──────────────────────────────────────────
@@ -122,7 +122,7 @@ case "$OS" in
         echo -e "${RED}Error: Unsupported operating system: $OS${NC}"
         echo ""
         echo "For Windows, download the MSI installer from the latest release:"
-        echo "  https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest"
+        echo "  https://github.com/SourceBox-LLC/Sentinel-CameraNode/releases/latest"
         echo ""
         echo "(Run the MSI, then 'sourcebox-sentry-cloudnode setup' from an admin PowerShell.)"
         exit 1

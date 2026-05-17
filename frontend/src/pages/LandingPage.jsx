@@ -48,7 +48,7 @@ function LandingPage() {
     macos: `curl -fsSL ${base}/install.sh | bash`,
   }
   const MSI_DOWNLOAD_URL =
-    'https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi'
+    'https://github.com/SourceBox-LLC/Sentinel-CameraNode/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi'
 
   return (
     <>
@@ -292,7 +292,7 @@ function LandingPage() {
                 </li>
               </ul>
               <a 
-                href="https://github.com/SourceBox-LLC/opensentry-cloud-node"
+                href="https://github.com/SourceBox-LLC/Sentinel-CameraNode"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="landing-arch-cta landing-arch-cta-primary"
@@ -616,7 +616,7 @@ function LandingPage() {
                 </svg>
               </Link>
               <a 
-                href="https://github.com/SourceBox-LLC/opensentry-cloud-node"
+                href="https://github.com/SourceBox-LLC/Sentinel-CameraNode"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="landing-btn landing-btn-outline landing-btn-lg"

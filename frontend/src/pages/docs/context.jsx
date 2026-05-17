@@ -58,7 +58,7 @@ export function DocsProvider({ children }) {
     macos: `curl -fsSL ${base}/install.sh | bash`,
   }
   const msiDownloadUrl =
-    "https://github.com/SourceBox-LLC/opensentry-cloud-node/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi"
+    "https://github.com/SourceBox-LLC/Sentinel-CameraNode/releases/latest/download/sourcebox-sentry-cloudnode-windows-x86_64.msi"
 
   const value = {
     os,

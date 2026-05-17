@@ -516,7 +516,7 @@ Check, in order:
 1. **CloudNode heartbeat is arriving.** Visit `/settings`, find the node, confirm "Last seen" updates every ~30s. If it doesn't, the node never registered — check CloudNode logs for a `register` failure.
 2. **Segments are being pushed.** In the browser devtools Network tab, look for `GET /api/cameras/{id}/segment/...` returning `200`. If they 404, the CloudNode isn't pushing — check `POST /api/cameras/{id}/push-segment` on the CloudNode side.
 3. **The playlist is fresh.** `GET /api/cameras/{id}/stream.m3u8` — if the `#EXTINF` segment list is empty or the `segment/...` URLs are stale, the CloudNode's playlist upload stalled.
-4. **The browser can decode the codec.** Admin-only `/test-hls` (the `TestHlsPage`) shows the raw SPS-derived codec string. If it's missing, the CloudNode's libx264 / hardware encoder wrote a non-conforming SPS — update the CloudNode to the latest release (see [CloudNode releases](https://github.com/SourceBox-LLC/opensentry-cloud-node/releases)) and restart it.
+4. **The browser can decode the codec.** Admin-only `/test-hls` (the `TestHlsPage`) shows the raw SPS-derived codec string. If it's missing, the CloudNode's libx264 / hardware encoder wrote a non-conforming SPS — update the CloudNode to the latest release (see [CloudNode releases](https://github.com/SourceBox-LLC/Sentinel-CameraNode/releases)) and restart it.
 
 The companion runbook in the CloudNode repo (`docs/runbooks/video-not-showing.md`) walks through this from the node's side.
 

@@ -37,7 +37,7 @@ We don't yet operate a `security@` mailbox — the `sourceboxsentry.com` domain 
 **In scope:**
 
 - The deployed Command Center API and web application (https://sourceboxsentry.com)
-- The CloudNode binary + repository ([`SourceBox-LLC/opensentry-cloud-node`](https://github.com/SourceBox-LLC/opensentry-cloud-node))
+- The CloudNode binary + repository ([`SourceBox-LLC/Sentinel-CameraNode`](https://github.com/SourceBox-LLC/Sentinel-CameraNode))
 - Auth / authorization, including IDOR, privilege escalation, and tenant-isolation breaks
 - RCE, SSRF, XSS, CSRF, SQL injection, deserialization
 - Cryptographic weaknesses in the at-rest encryption story

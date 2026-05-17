@@ -173,7 +173,7 @@ function SecurityPage() {
           <p>
             You can read the implementation:{" "}
             <a
-              href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/src/streaming/motion_detector.rs"
+              href="https://github.com/SourceBox-LLC/Sentinel-CameraNode/blob/master/src/streaming/motion_detector.rs"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -399,8 +399,8 @@ function SecurityPage() {
             </li>
             <li>
               <strong>Sentinel:</strong> Claims in the SourceBox column are implemented in our public source —{" "}
-              <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/src/storage/database.rs" target="_blank" rel="noopener noreferrer">encryption</a>,{" "}
-              <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/src/streaming/motion_detector.rs" target="_blank" rel="noopener noreferrer">motion detection</a>, and{" "}
+              <a href="https://github.com/SourceBox-LLC/Sentinel-CameraNode/blob/master/src/storage/database.rs" target="_blank" rel="noopener noreferrer">encryption</a>,{" "}
+              <a href="https://github.com/SourceBox-LLC/Sentinel-CameraNode/blob/master/src/streaming/motion_detector.rs" target="_blank" rel="noopener noreferrer">motion detection</a>, and{" "}
               <a href="https://github.com/SourceBox-LLC/Sentinel-Command" target="_blank" rel="noopener noreferrer">Command Center</a>.
             </li>
           </ul>
@@ -599,10 +599,10 @@ function SecurityPage() {
             <li>The deployed Command Center (this site) and its API.</li>
             <li>The CloudNode binary + repository (
               <a
-                href="https://github.com/SourceBox-LLC/opensentry-cloud-node"
+                href="https://github.com/SourceBox-LLC/Sentinel-CameraNode"
                 target="_blank"
                 rel="noopener noreferrer"
-              >SourceBox-LLC/opensentry-cloud-node</a>
+              >SourceBox-LLC/Sentinel-CameraNode</a>
               ).</li>
             <li>Auth / authorization, including IDOR, privilege escalation, and tenant-isolation breaks.</li>
             <li>RCE, SSRF, XSS, CSRF, SQL injection, deserialization attacks.</li>

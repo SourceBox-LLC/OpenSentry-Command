@@ -8,7 +8,7 @@ function Resources() {
           <h3>Command Center</h3>
           <p>Source code on GitHub</p>
         </a>
-        <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node" target="_blank" rel="noopener noreferrer" className="docs-resource-card">
+        <a href="https://github.com/SourceBox-LLC/Sentinel-CameraNode" target="_blank" rel="noopener noreferrer" className="docs-resource-card">
           <div className="docs-resource-icon">📹</div>
           <h3>CloudNode</h3>
           <p>Source code on GitHub</p>

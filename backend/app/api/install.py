@@ -19,7 +19,7 @@ configuring Claude / Cursor / etc. to talk to this Command Center):
 
 Direct binary downloads:
   ``GET /downloads/{os}/{arch}`` 302-redirects to the matching asset on the
-  latest GitHub release of opensentry-cloud-node.  Gives us a stable
+  latest GitHub release of Sentinel-CameraNode.  Gives us a stable
   vendor-controlled URL to publish in docs (no GitHub URL structure leaking
   into documentation) and a single place to later add caching/mirroring.
 

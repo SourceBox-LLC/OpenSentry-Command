@@ -21,7 +21,7 @@ function CloudNodeSetup() {
         Pick "Local-only" at the wizard's first prompt; everything below applies
         to <em>Connected mode</em> (the SaaS-paired flow). See the{' '}
         <a
-          href="https://github.com/SourceBox-LLC/opensentry-cloud-node/blob/master/docs/runbooks/local-mode-setup.md"
+          href="https://github.com/SourceBox-LLC/Sentinel-CameraNode/blob/master/docs/runbooks/local-mode-setup.md"
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -127,7 +127,7 @@ Set-Service -Name SourceBoxSentryCloudNode -StartupType Automatic`}</code>
           </p>
 
           <p>
-            See the CloudNode <a href="https://github.com/SourceBox-LLC/opensentry-cloud-node#quick-start" target="_blank" rel="noopener noreferrer">README</a> for the full reference.
+            See the CloudNode <a href="https://github.com/SourceBox-LLC/Sentinel-CameraNode#quick-start" target="_blank" rel="noopener noreferrer">README</a> for the full reference.
           </p>
         </>
       )}

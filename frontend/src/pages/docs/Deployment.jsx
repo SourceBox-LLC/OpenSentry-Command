@@ -72,12 +72,12 @@ docker-compose up -d`)}>Copy</button>
       <h3>Build from source</h3>
       <p>If you prefer native install — Rust 1.70+ and FFmpeg must already be on the box:</p>
       <div className="docs-code-block">
-        <code>{`git clone https://github.com/SourceBox-LLC/opensentry-cloud-node.git
-cd opensentry-cloud-node
+        <code>{`git clone https://github.com/SourceBox-LLC/Sentinel-CameraNode.git
+cd Sentinel-CameraNode
 cargo build --release
 ./target/release/sourcebox-sentry-cloudnode setup`}</code>
-        <button className="docs-copy-btn" onClick={() => copyToClipboard(`git clone https://github.com/SourceBox-LLC/opensentry-cloud-node.git
-cd opensentry-cloud-node
+        <button className="docs-copy-btn" onClick={() => copyToClipboard(`git clone https://github.com/SourceBox-LLC/Sentinel-CameraNode.git
+cd Sentinel-CameraNode
 cargo build --release
 ./target/release/sourcebox-sentry-cloudnode setup`)}>Copy</button>
       </div>

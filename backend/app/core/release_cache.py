@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # GitHub repo that hosts CloudNode release artifacts.  Must match
 # ``REPO`` in ``scripts/install.sh`` and the constant in ``install.py``
 # so all paths agree on where binaries come from.
-CLOUDNODE_GH_REPO = "SourceBox-LLC/opensentry-cloud-node"
+CLOUDNODE_GH_REPO = "SourceBox-LLC/Sentinel-CameraNode"
 
 # 10 minutes — short enough for a fresh release to reach nodes within
 # one heartbeat-window of the next refresh tick, long enough to keep
