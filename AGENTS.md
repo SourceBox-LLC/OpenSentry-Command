@@ -429,7 +429,7 @@ Validation constants (also in `models.py`):
 - `POST /resend` — Resend bounce / complaint / unsubscribe webhooks (Svix signature when `RESEND_WEBHOOK_SECRET` is set); writes to `EmailSuppression` so subsequent sends short-circuit before the API call
 
 **Top-level** (`main.py`):
-- `GET /api/health` — minimal liveness for load balancers: `{"status": "healthy", "version": "2.1.0"}` (no auth)
+- `GET /api/health` — minimal liveness for load balancers: `{"status": "healthy", "version": "2.1.1"}` (no auth)
 - `GET /api/health/detailed` — verbose status for status-page polling and on-call diagnostics: `{status, version, uptime_seconds, started_at, time, checks: {database: {status, latency_ms}, hls_cache: {playlists_cached, segment_cameras}, viewer_usage: {pending_writes, status}, sse: {subscriber_orgs, subscriber_total}}}`. Public on purpose — every value is metric-shaped, never an org/camera/user identifier (pinned by a privacy regression test in `tests/test_health.py`).
 - FastAPI docs: `/api-docs` (Swagger), `/api-redoc` (ReDoc), OpenAPI at `/api/openapi.json`. `/docs` is the React `DocsPage`.
 
