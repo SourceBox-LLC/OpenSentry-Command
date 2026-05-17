@@ -112,11 +112,17 @@ ignore = ["B008", "UP045"]
 # Transitive constraints — pin versions forced up from what the
 # ecosystem currently resolves, without adding them as top-level deps.
 #
-# authlib: GHSA-jj8c-mmj3-mmgv (CSRF in OAuth client state caching,
-# CVSS 5.4).  Pulled in by fastmcp; we don't use authlib's OAuth
-# client so the vulnerable path isn't reachable, but clearing the
-# Dependabot alert is cheaper than arguing about it.  Remove this
-# line once fastmcp's own pin moves past 1.6.11.
+# authlib: two stacked CVEs.
+#   - GHSA-jj8c-mmj3-mmgv (CSRF in OAuth client state caching,
+#     CVSS 5.4) — first authlib bump that landed in this project.
+#   - GHSA-r95x-qfjj-fjj2 / CVE-2026-44681 (Open Redirect in
+#     OpenIDImplicitGrant / OpenIDHybridGrant when the request
+#     omits the `openid` scope; raw redirect_uri rendered as a 302
+#     before scope validation).  Fixed in authlib 1.7.1.
+# Pulled in by fastmcp; we don't use authlib's OAuth client or its
+# OIDC grants, so neither vulnerable path is reachable in our code.
+# Pin enforced for Dependabot-alert hygiene + pip-audit --strict.
+# Remove the constraint once fastmcp's own authlib pin clears 1.7.1.
 #
 # urllib3: CVE-2026-44431 + CVE-2026-44432 (both fixed in 2.7.0).
 # Pulled in transitively by httpx / requests / resend / sentry-sdk
@@ -124,6 +130,6 @@ ignore = ["B008", "UP045"]
 # and fails the deploy.  Remove this line once every direct dep we
 # carry has bumped past needing < 2.7.
 constraint-dependencies = [
-    "authlib>=1.6.11",
+    "authlib>=1.7.1",
     "urllib3>=2.7.0",
 ]
