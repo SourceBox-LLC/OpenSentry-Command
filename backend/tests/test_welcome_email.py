@@ -109,7 +109,7 @@ def test_org_created_writes_inbox_notification(
 
     welcome = welcomes[0]
     # Title carries the org name so the bell-icon panel reads
-    # naturally ("Welcome to SourceBox Sentry, Acme Surveillance").
+    # naturally ("Welcome to Sentinel, Acme Surveillance").
     assert "Acme Surveillance" in welcome.title
     # Audience is admin-only — the creator IS an admin and we don't
     # want member-tier users (added later) to retroactively get a
@@ -143,7 +143,7 @@ def test_org_created_enqueues_welcome_email(
     assert row.recipient_email == "creator@example.com"
     assert row.status == "pending"
     # Subject template renders without exploding on the org-name interpolation.
-    assert "SourceBox Sentry" in row.subject
+    assert "Sentinel" in row.subject
     # Body mentions the install one-liner — the most important
     # actionable bit of the welcome content.
     assert "install.sh" in row.body_text or "install.sh" in row.body_html

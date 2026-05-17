@@ -6,7 +6,7 @@
 
 This is the public list of third-party services that SourceBox LLC
 engages to process Customer Personal Data on behalf of customers of
-**SourceBox Sentry Command Center**.
+**Sentinel Command Center**.
 
 The list mirrors what's stated in `/security` on the Command Center
 website; if the two ever drift, treat this file as the authoritative
@@ -44,7 +44,7 @@ terminate the affected Service per Section 4.4 of the
   list governs that downstream chain.
 
 ### Stripe (via Clerk)
-- **Service provided:** Payment processing for SourceBox Sentry
+- **Service provided:** Payment processing for Sentinel
   subscriptions. Collected and processed by Clerk; SourceBox never
   receives card numbers, CVVs, or other payment-instrument data.
 - **Personal Data processed:** Card number and other payment

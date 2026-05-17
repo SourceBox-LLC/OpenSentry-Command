@@ -76,7 +76,7 @@ def _build_security_txt() -> str:
     # Order follows RFC 9116 §2.5 examples for readability.  Comments
     # at the top help human readers; scanners ignore them.
     lines = [
-        "# SourceBox Sentry -- security contact information (RFC 9116).",
+        "# Sentinel by SourceBox -- security contact information (RFC 9116).",
         "# Public report channel + acknowledgement window for security",
         "# researchers.  See the policy URL for in-scope/out-of-scope",
         "# and our coordinated-disclosure expectations.",

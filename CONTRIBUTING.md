@@ -1,10 +1,10 @@
-# Contributing to SourceBox Sentry
+# Contributing to Sentinel
 
-Thanks for your interest in SourceBox Sentry. This document explains how you can help, and what we accept.
+Thanks for your interest in Sentinel by SourceBox. This document explains how you can help, and what we accept.
 
 ## We do not currently accept external code contributions
 
-SourceBox Sentry is **source-available under AGPL-3.0**. The source is public for trust and transparency — customers can audit the implementation behind every security and privacy claim on the live site — but we do not accept pull requests from outside the core team at this time. Command Center is a SaaS we host and operate; running your own copy is allowed by the license but is not the intended use case.
+Sentinel is **source-available under AGPL-3.0**. The source is public for trust and transparency — customers can audit the implementation behind every security and privacy claim on the live site — but we do not accept pull requests from outside the core team at this time. Command Center is a SaaS we host and operate; running your own copy is allowed by the license but is not the intended use case.
 
 External pull requests opened against this repository will be automatically closed with a link back to this document. This is not personal — we keep the contribution surface narrow so we can move fast, retain clean copyright, and avoid the overhead of a Contributor License Agreement.
 
@@ -35,7 +35,7 @@ See [SECURITY.md](SECURITY.md). Do **not** file public issues for vulnerabilitie
 
 For engineers cloning the repo to read, audit, or contribute fixes locally. (End users do not run Command Center — they sign up at the live SaaS.)
 
-SourceBox Sentry has two main components:
+Sentinel has two main components:
 
 | Component | Language | Repository |
 |-----------|----------|------------|
@@ -70,8 +70,8 @@ See the [CloudNode README](https://github.com/SourceBox-LLC/OpenSentry-CloudNode
 
 ## License
 
-SourceBox Sentry Command Center is licensed under [AGPL-3.0](LICENSE). AGPL §13 obligates anyone who modifies the code and offers a network-accessible version of it to publish their changes. Read the license before redistributing or running a modified copy.
+Sentinel Command Center is licensed under [AGPL-3.0](LICENSE). AGPL §13 obligates anyone who modifies the code and offers a network-accessible version of it to publish their changes. Read the license before redistributing or running a modified copy.
 
 ---
 
-Thank you for your interest in SourceBox Sentry.
+Thank you for your interest in Sentinel by SourceBox.

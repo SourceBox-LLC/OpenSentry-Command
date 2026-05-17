@@ -52,7 +52,7 @@ Backend config is loaded from environment variables (see `backend/.env.example`)
 - `RESEND_API_KEY` — Resend transactional API key (`re_…`)
 - `RESEND_WEBHOOK_SECRET` — Svix signing secret for the `/api/webhooks/resend` bounce/complaint handler
 - `EMAIL_FROM_ADDRESS` — default `notifications@sourceboxsentry.com` (must be on a verified Resend domain)
-- `EMAIL_FROM_NAME` — default `SourceBox Sentry`
+- `EMAIL_FROM_NAME` — default `Sentinel by SourceBox`
 - `EMAIL_WORKER_INTERVAL_SECONDS` — outbox-drain tick interval (default 5)
 - `EMAIL_WORKER_BATCH_SIZE` — max rows drained per tick (default 20)
 - `EMAIL_MAX_ATTEMPTS` — retries before a row is permanently failed (default 3)

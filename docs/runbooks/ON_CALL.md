@@ -1,4 +1,4 @@
-# On-call runbook — SourceBox Sentry Command Center
+# On-call runbook — Sentinel Command Center
 
 > **Audience:** humans responding to a page or a customer report.
 > **Goal:** find the actual problem fast, recover service, and write up

@@ -767,14 +767,14 @@ def test_create_notification_enqueues_email_when_enabled(db, monkeypatch, stub_r
         assert row.notification_id == notif.id
         assert row.org_id == "org_test123"
         # Subject is template-driven — ``camera_offline.subject.txt.j2``
-        # produces "[SourceBox Sentry] Camera offline: <name>".
-        assert row.subject.startswith("[SourceBox Sentry]")
+        # produces "[Sentinel] Camera offline: <name>".
+        assert row.subject.startswith("[Sentinel]")
         assert "Front Door" in row.subject
         # Body templates surface notification.body verbatim.
         assert "No heartbeat" in row.body_text
         # HTML wrap brings in the layout's brand header + severity bar.
         assert "<h2" in row.body_html
-        assert "SourceBox Sentry" in row.body_html
+        assert "Sentinel" in row.body_html
 
 
 def test_create_notification_does_not_enqueue_when_kill_switch_off(db, monkeypatch, stub_recipients):

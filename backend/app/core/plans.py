@@ -1,5 +1,5 @@
 """
-Plan configuration and limit enforcement for SourceBox Sentry billing tiers.
+Plan configuration and limit enforcement for Sentinel billing tiers.
 
 Plan slugs must match the keys defined in the Clerk Dashboard:
   - free_org  (Free)

@@ -108,7 +108,7 @@ class Config:
     EMAIL_FROM_ADDRESS: str = os.getenv(
         "EMAIL_FROM_ADDRESS", "notifications@sourceboxsentry.com"
     )
-    EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "SourceBox Sentry")
+    EMAIL_FROM_NAME: str = os.getenv("EMAIL_FROM_NAME", "Sentinel by SourceBox")
     EMAIL_ENABLED: bool = os.getenv("EMAIL_ENABLED", "false").lower() == "true"
     # Worker tunables.  5s tick keeps median time-to-deliver under 10s
     # without hammering SQLite; 20-row batch keeps a single tick under

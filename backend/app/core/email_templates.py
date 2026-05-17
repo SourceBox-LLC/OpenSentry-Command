@@ -140,7 +140,7 @@ def render(
 
     subject = _render_or_fallback(
         env, f"{kind}.subject.txt.j2", context,
-        fallback=f"[SourceBox Sentry] {notif_proxy.title}",
+        fallback=f"[Sentinel] {notif_proxy.title}",
     ).strip()
     # Defense in depth — strip embedded CR/LF.  ``.strip()`` only
     # trims edges, not embedded newlines.  Resend's API rejects

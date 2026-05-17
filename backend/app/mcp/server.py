@@ -1,5 +1,5 @@
 """
-SourceBox Sentry MCP Server — gives AI tools (Claude Code, etc.) direct access
+Sentinel MCP Server — gives AI tools (Claude Code, etc.) direct access
 to an organization's cameras, nodes, streams, and settings.
 
 Mounted inside the main FastAPI app at /mcp.
@@ -191,9 +191,9 @@ _rate_limiter = _RateLimiter()
 # ---------------------------------------------------------------------------
 
 mcp = FastMCP(
-    "SourceBox Sentry",
+    "Sentinel by SourceBox",
     instructions=(
-        "You are connected to a SourceBox Sentry Command Center organization. "
+        "You are connected to a Sentinel Command Center organization. "
         "You can SEE what cameras see via view_camera (returns a live JPEG "
         "snapshot), list cameras, check node status, get stream URLs, manage "
         "recording settings, and view audit logs. All operations are scoped "
@@ -266,7 +266,7 @@ class ScopeMiddleware(Middleware):
             if allowed is not None and name not in allowed:
                 raise ToolError(
                     f"Tool '{name}' is not enabled for this API key. "
-                    "Update the key's scope in the SourceBox Sentry dashboard or use a different key."
+                    "Update the key's scope in the Sentinel dashboard or use a different key."
                 )
         return await call_next(context)
 
@@ -1088,7 +1088,7 @@ def get_stream_stats(
 @mcp.tool(
     name="get_system_status",
     description=(
-        "High-level snapshot of the org's SourceBox Sentry deployment: camera count "
+        "High-level snapshot of the org's Sentinel deployment: camera count "
         "with online/offline split, node count with online/offline split, and "
         "the active plan. Good first call to orient before drilling in. For "
         "per-camera detail, use list_cameras."

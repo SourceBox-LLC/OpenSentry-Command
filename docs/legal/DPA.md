@@ -1,7 +1,7 @@
 # Data Processing Agreement (DRAFT — NOT FOR EXECUTION)
 
 > **STATUS: WORKING DRAFT.** This document is a starting-point template
-> reflecting how SourceBox Sentry actually processes customer data.
+> reflecting how Sentinel by SourceBox actually processes customer data.
 > It has **not** been reviewed by counsel and **must not be sent to
 > a customer or signed** until a qualified privacy lawyer has reviewed
 > it for the jurisdictions you intend to operate in (at minimum: US
@@ -27,14 +27,14 @@
 This Data Processing Agreement ("**DPA**") is entered into between:
 
 - **SourceBox LLC** ("**Processor**", "**we**", or "**us**"), the
-  operator of SourceBox Sentry Command Center; and
+  operator of Sentinel Command Center; and
 - The customer organization identified in the executed Order Form or
   online subscription record ("**Controller**", "**Customer**", or
   "**you**").
 
 Each a "**Party**", together the "**Parties**".
 
-This DPA forms part of and is governed by the SourceBox Sentry Terms
+This DPA forms part of and is governed by the Sentinel Terms
 of Service ("**Agreement**"). In the event of conflict between this
 DPA and the Agreement with respect to processing of Personal Data,
 this DPA controls.

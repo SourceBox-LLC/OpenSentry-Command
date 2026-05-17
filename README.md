@@ -154,7 +154,7 @@ The scripts detect which clients you already have and merge an `opensentry` entr
 | `RESEND_API_KEY` | No | | Resend transactional API key (`re_…`) |
 | `RESEND_WEBHOOK_SECRET` | No | | Svix signing secret for the bounce/complaint webhook (`whsec_…`) |
 | `EMAIL_FROM_ADDRESS` | No | `notifications@sourceboxsentry.com` | Sender address (must be on a verified Resend domain) |
-| `EMAIL_FROM_NAME` | No | `SourceBox Sentry` | Display name in the From header |
+| `EMAIL_FROM_NAME` | No | `Sentinel by SourceBox` | Display name in the From header |
 | `EMAIL_WORKER_INTERVAL_SECONDS` | No | `5` | Outbox-drain tick interval |
 | `EMAIL_WORKER_BATCH_SIZE` | No | `20` | Max rows drained per tick (kept under Resend's 10 req/sec default) |
 | `EMAIL_MAX_ATTEMPTS` | No | `3` | Retries before a row is marked `failed` permanently |
@@ -547,7 +547,7 @@ This project is **not currently accepting external code contributions**. Bug rep
 ---
 
 <p align="center">
-  <a href="https://opensentry-command.fly.dev">SourceBox Sentry Command Center</a>
+  <a href="https://opensentry-command.fly.dev">Sentinel Command Center</a>
   &middot;
   <a href="https://github.com/SourceBox-LLC/OpenSentry-CloudNode">CloudNode</a>
   &middot;

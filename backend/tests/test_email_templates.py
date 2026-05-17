@@ -105,7 +105,7 @@ def test_render_camera_offline_produces_three_strings():
     )
 
     assert isinstance(subject, str) and subject.strip()
-    assert "SourceBox Sentry" in subject
+    assert "Sentinel" in subject
     assert "Front Door" in subject
     assert isinstance(body_text, str)
     assert "Front Door went offline" in body_text
@@ -114,7 +114,7 @@ def test_render_camera_offline_produces_three_strings():
     assert isinstance(body_html, str)
     # Layout wrap brings in brand header.
     assert "<!DOCTYPE html>" in body_html
-    assert "SourceBox Sentry" in body_html
+    assert "Sentinel" in body_html
     # Severity bar coloured for warning.
     assert "#f59e0b" in body_html  # severity="warning"
 

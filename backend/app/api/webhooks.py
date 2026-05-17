@@ -334,9 +334,9 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
                 create_notification(
                     org_id=org_id,
                     kind="welcome",
-                    title=f"Welcome to SourceBox Sentry, {org_name}",
+                    title=f"Welcome to Sentinel, {org_name}",
                     body=(
-                        "Your SourceBox Sentry workspace is ready.  "
+                        "Your Sentinel workspace is ready.  "
                         "Three steps to your first live feed: install "
                         "CloudNode on the host where your cameras live, "
                         "wait ~30 seconds for it to register, then add "

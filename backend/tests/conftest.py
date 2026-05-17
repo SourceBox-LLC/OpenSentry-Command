@@ -1,5 +1,5 @@
 """
-Shared test fixtures for SourceBox Sentry backend tests.
+Shared test fixtures for Sentinel backend tests.
 
 Sets up an in-memory SQLite database and a FastAPI test client
 with Clerk auth bypassed (mocked).

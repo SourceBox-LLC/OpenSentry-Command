@@ -216,7 +216,7 @@ async def lifespan(app):
     # in app/core/sentinel_dispatch.py.
     sentinel_reaper_task = asyncio.create_task(_sentinel_reaper_loop())
     print(
-        f"[App] SourceBox Sentry Command Center started "
+        f"[App] Sentinel Command Center started "
         f"(log retention: {LOG_RETENTION_DAYS}d, "
         f"email: {'on' if settings.EMAIL_ENABLED else 'off'})"
     )
@@ -234,8 +234,8 @@ async def lifespan(app):
 
 
 app = FastAPI(
-    title="SourceBox Sentry Command Center API",
-    description="FastAPI backend with Clerk authentication for SourceBox Sentry Command Center",
+    title="Sentinel Command Center API",
+    description="FastAPI backend with Clerk authentication for Sentinel Command Center",
     version="2.1.0",
     lifespan=lifespan,
     # Move FastAPI's auto docs off /docs so the React DocsPage can own that path.
